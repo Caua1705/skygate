@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkyGate — Planeje sua rota</title>
+  <meta name="description" content="Navegação inteligente no aeroporto. Planeje sua rota antes de chegar." />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans:    ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+            heading: ['Plus Jakarta Sans', 'ui-sans-serif', 'system-ui'],
+            mono:    ['Space Mono', 'monospace'],
+          },
+          colors: {
+            navy: {
+              50: '#f0f4f8', 100: '#d9e2ec', 200: '#bcccdc', 300: '#9fb3c8',
+              400: '#829ab1', 500: '#627d98', 600: '#486581', 700: '#334e68',
+              800: '#243b53', 900: '#102a43', 950: '#0a192f',
+            },
+            teal: {
+              50: '#f0fdfa', 100: '#ccfbf1', 200: '#99f6e4', 300: '#5eead4',
+              400: '#2dd4bf', 500: '#14b8a6', 600: '#0d9488', 700: '#0f766e',
+            },
+            gold: {
+              100: '#fef3c7', 200: '#fde68a', 300: '#fcd34d',
+              400: '#fbbf24', 500: '#f59e0b', 600: '#d97706',
+            },
+          },
+          boxShadow: {
+            soft: '0 2px 12px rgba(0,0,0,0.06)',
+            card: '0 1px 4px rgba(0,0,0,0.04), 0 4px 20px rgba(0,0,0,0.06)',
+          },
+          keyframes: {
+            'fade-up': {
+              '0%':   { opacity: '0', transform: 'translateY(10px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            },
+            'route-dash': {
+              '0%':   { strokeDashoffset: '20' },
+              '100%': { strokeDashoffset: '0' },
+            },
+          },
+          animation: {
+            'fade-up':    'fade-up 0.4s ease-out forwards',
+            'route-dash': 'route-dash 1.4s linear infinite',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    /* ── Glass header ─────────────────────────────────────── */
+    .glass {
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    /* ── Route SVG dash animation ─────────────────────────── */
+    .route-line {
+      stroke-dasharray: 5 4;
+      animation: route-dash 1.4s linear infinite;
+    }
+
+    /* ── Styled select: hide native arrow, add custom ─────── */
+    .sg-select {
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
+    /* ── Input / select focus state ───────────────────────── */
+    .sg-field:focus {
+      outline: none;
+      border-color: #14b8a6;
+      box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.12);
+    }
+
+    /* ── Journey chip states ──────────────────────────────── */
+    .chip {
+      transition: all 0.18s ease;
+    }
+    .chip[aria-pressed="true"] {
+      background: #f0fdfa;
+      border-color: #14b8a6;
+      color: #0f766e;
+    }
+    .chip[aria-pressed="true"] .chip-icon {
+      color: #0d9488;
+    }
+    .chip[aria-pressed="true"] .chip-label {
+      color: #0f766e;
+      font-weight: 700;
+    }
+    .chip[aria-pressed="false"] .chip-icon {
+      color: #94a3b8;
+    }
+    .chip[aria-pressed="false"] .chip-label {
+      color: #64748b;
+    }
+
+    /* ── Boarding time: optional state ───────────────────── */
+    #boarding-group {
+      transition: opacity 0.25s ease;
+    }
+    #boarding-group.is-optional {
+      opacity: 0.42;
+    }
+    #boarding-group.is-optional #boarding-input {
+      pointer-events: none;
+    }
+
+    /* ── Load animations (staggered) ─────────────────────── */
+    .anim-1 { opacity: 0; animation: fade-up 0.35s ease-out 0.05s forwards; }
+    .anim-2 { opacity: 0; animation: fade-up 0.35s ease-out 0.14s forwards; }
+    .anim-3 { opacity: 0; animation: fade-up 0.35s ease-out 0.24s forwards; }
+
+    /* ── Ambient glow ─────────────────────────────────────── */
+    @keyframes fade-up {
+      0%   { opacity: 0; transform: translateY(10px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes route-dash {
+      0%   { stroke-dashoffset: 20; }
+      100% { stroke-dashoffset: 0; }
+    }
+    @keyframes ambient-pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.45; }
+    }
+    .ambient { animation: ambient-pulse 8s ease-in-out infinite; }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-navy-950 font-sans antialiased">
+
+  <!-- Ambient glows -->
+  <div class="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
+    <div class="ambient absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full bg-teal-300/[.04] blur-[140px]"></div>
+    <div class="ambient absolute -bottom-24 -right-24 w-[400px] h-[400px] rounded-full bg-navy-400/[.03] blur-[120px]" style="animation-delay:3s"></div>
+  </div>
+
+  <!-- ════════════════════════════════════════
+       HEADER
+  ════════════════════════════════════════ -->
+  <header class="fixed top-0 left-0 right-0 z-50 glass border-b border-slate-200/80 px-4 sm:px-6 h-14 flex items-center justify-between shadow-soft">
+
+    <a href="/" aria-label="SkyGate — página inicial">
+      <img src="assets/logo.jpeg" alt="SkyGate" class="h-7 w-auto object-contain block" />
+    </a>
+
+    <div class="flex items-center gap-2">
+      <button
+        aria-label="Selecionar idioma: Português"
+        class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white text-[11px] font-bold uppercase tracking-widest text-slate-600 hover:border-teal-400 hover:text-teal-700 hover:bg-teal-50 transition-all"
+      >
+        <iconify-icon icon="solar:global-linear" class="text-sm"></iconify-icon>
+        PT
+      </button>
+      <button
+        aria-label="Ajuda"
+        class="w-8 h-8 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-500 font-bold text-sm hover:border-teal-400 hover:text-teal-600 hover:bg-teal-50 transition-all"
+      >?</button>
+    </div>
+
+  </header>
+
+  <!-- ════════════════════════════════════════
+       MAIN
+  ════════════════════════════════════════ -->
+  <main class="relative z-10 pt-14 min-h-screen">
+    <div class="max-w-[860px] mx-auto px-4 sm:px-6 py-6 sm:py-8">
+
+      <!-- ── Context area ── -->
+      <div class="mb-5 anim-1">
+        <div class="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white border border-slate-200 shadow-soft text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-3">
+          <span class="relative flex h-1.5 w-1.5">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-teal-500"></span>
+          </span>
+          Demo · Aeroporto de Fortaleza
+        </div>
+        <h1 class="font-heading text-xl sm:text-2xl font-bold text-navy-950 tracking-tight leading-tight">
+          Planeje sua rota
+        </h1>
+        <p class="text-sm text-slate-500 mt-1 font-normal leading-snug">
+          Escolha sua jornada, origem, destino e horário de embarque.
+        </p>
+      </div>
+
+      <!-- ── Two-column grid (desktop) ── -->
+      <div class="lg:grid lg:grid-cols-[1fr_360px] lg:gap-5 lg:items-start">
+
+        <!-- ════ LEFT: Route planner card ════ -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden mb-4 lg:mb-0 anim-2">
+
+          <!-- Journey type selector -->
+          <div class="px-4 sm:px-5 pt-4 sm:pt-5 pb-4 border-b border-slate-100">
+            <p class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">
+              Qual é sua jornada?
+            </p>
+            <div class="grid grid-cols-3 gap-2" role="group" aria-label="Tipo de jornada">
+
+              <button
+                class="chip flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border border-slate-200 active:scale-[.97]"
+                data-journey="embarque"
+                aria-pressed="false"
+              >
+                <iconify-icon icon="solar:plain-2-linear" class="chip-icon text-xl"></iconify-icon>
+                <span class="chip-label text-[11px] font-semibold leading-tight text-center">Embarque</span>
+              </button>
+
+              <button
+                class="chip flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border active:scale-[.97]"
+                data-journey="conexao"
+                aria-pressed="true"
+              >
+                <iconify-icon icon="solar:routing-3-linear" class="chip-icon text-xl"></iconify-icon>
+                <span class="chip-label text-[11px] font-semibold leading-tight text-center">Conexão</span>
+              </button>
+
+              <button
+                class="chip flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border border-slate-200 active:scale-[.97]"
+                data-journey="chegada"
+                aria-pressed="false"
+              >
+                <iconify-icon icon="solar:bag-4-linear" class="chip-icon text-xl"></iconify-icon>
+                <span class="chip-label text-[11px] font-semibold leading-tight text-center">Chegada final</span>
+              </button>
+
+            </div>
+          </div>
+
+          <!-- Inputs -->
+          <div class="px-4 sm:px-5 pt-4 pb-4 sm:pb-5 space-y-4">
+
+            <!-- Origin -->
+            <div>
+              <label for="origin-select" class="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+                Onde você está agora?
+              </label>
+              <div class="relative">
+                <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-slate-400" aria-hidden="true">
+                  <iconify-icon icon="solar:map-point-linear" class="text-base"></iconify-icon>
+                </span>
+                <select
+                  id="origin-select"
+                  class="sg-select sg-field w-full bg-white border border-slate-200 rounded-xl pl-9 py-3 pr-9 text-sm text-navy-950 font-medium transition-all cursor-pointer"
+                >
+                  <option value="desembarque-int" selected>Desembarque Internacional</option>
+                  <option value="desembarque-dom">Desembarque Doméstico</option>
+                  <option value="checkin">Check-in</option>
+                  <option value="raio-x">Raio-X / Segurança</option>
+                  <option value="praca">Praça de Alimentação</option>
+                  <option value="portao-6">Portão 6</option>
+                </select>
+                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400" aria-hidden="true">
+                  <iconify-icon icon="solar:alt-arrow-down-linear" class="text-sm"></iconify-icon>
+                </span>
+              </div>
+            </div>
+
+            <!-- Destination -->
+            <div>
+              <label for="destination-select" class="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+                Para onde você quer ir?
+              </label>
+              <div class="relative">
+                <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-slate-400" aria-hidden="true">
+                  <iconify-icon icon="solar:routing-2-linear" class="text-base"></iconify-icon>
+                </span>
+                <select
+                  id="destination-select"
+                  class="sg-select sg-field w-full bg-white border border-slate-200 rounded-xl pl-9 py-3 pr-9 text-sm text-navy-950 font-medium transition-all cursor-pointer"
+                >
+                  <option value="portao-12" selected>Portão 12</option>
+                  <option value="bagagem">Bagagem / Esteira</option>
+                  <option value="saida">Saída / Desembarque</option>
+                  <option value="banheiro">Banheiro</option>
+                  <option value="cafe">Café</option>
+                  <option value="farmacia">Farmácia</option>
+                </select>
+                <span class="pointer-events-none absolute inset-y-0 right-3 flex items-center text-slate-400" aria-hidden="true">
+                  <iconify-icon icon="solar:alt-arrow-down-linear" class="text-sm"></iconify-icon>
+                </span>
+              </div>
+            </div>
+
+            <!-- Boarding time -->
+            <div id="boarding-group">
+              <label for="boarding-input" class="block text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+                Horário de embarque
+              </label>
+              <div class="relative">
+                <span class="pointer-events-none absolute inset-y-0 left-3.5 flex items-center text-slate-400" aria-hidden="true">
+                  <iconify-icon icon="solar:clock-circle-linear" class="text-base"></iconify-icon>
+                </span>
+                <input
+                  type="time"
+                  id="boarding-input"
+                  value="14:30"
+                  class="sg-field w-full bg-white border border-slate-200 rounded-xl pl-9 pr-4 py-3 text-sm text-navy-950 font-mono font-medium transition-all"
+                />
+              </div>
+              <p id="boarding-helper" class="text-[11px] text-slate-400 mt-1.5 leading-snug">
+                Opcional para chegada final.
+              </p>
+            </div>
+
+            <!-- Primary CTA — inside the card, part of form flow -->
+            <button
+              id="calculate-route-btn"
+              class="w-full min-h-[48px] bg-navy-950 text-white rounded-xl font-heading font-semibold text-sm flex items-center justify-center gap-2.5 transition-all shadow-[0_4px_14px_rgba(10,25,47,0.18)] hover:bg-navy-900 hover:shadow-[0_0_0_4px_rgba(20,184,166,0.13),_0_4px_18px_rgba(10,25,47,0.24)] active:scale-[.98] group"
+            >
+              Calcular minha rota
+              <iconify-icon
+                icon="solar:arrow-right-linear"
+                class="text-teal-400 text-base group-hover:translate-x-0.5 transition-transform"
+              ></iconify-icon>
+            </button>
+
+          </div>
+        </div>
+        <!-- end left card -->
+
+        <!-- ════ RIGHT: Result preview card ════ -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden anim-3">
+
+          <!-- Header -->
+          <div class="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 border-b border-slate-100 flex items-center justify-between">
+            <span class="text-[10px] font-mono font-bold uppercase tracking-widest text-slate-400">
+              Prévia da rota
+            </span>
+            <span class="inline-flex items-center gap-1.5 text-[10px] font-bold text-teal-600 bg-teal-50 border border-teal-100 px-2 py-0.5 rounded-full">
+              <span class="w-1.5 h-1.5 rounded-full bg-teal-500 inline-block" style="animation: ambient-pulse 2s ease-in-out infinite;"></span>
+              Exemplo
+            </span>
+          </div>
+
+          <div class="px-4 sm:px-5 py-4 sm:py-5 space-y-4">
+
+            <!-- Route visualization -->
+            <div class="flex items-stretch gap-3">
+
+              <!-- SVG line + dots -->
+              <div class="flex flex-col items-center pt-0.5 shrink-0">
+                <!-- Origin dot -->
+                <div class="w-2.5 h-2.5 rounded-full bg-navy-950 shadow-sm shrink-0"></div>
+
+                <!-- Animated teal route line -->
+                <div class="relative flex-1 flex justify-center my-1" style="min-height:36px">
+                  <svg
+                    width="2"
+                    height="100%"
+                    style="position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);width:2px;height:100%;min-height:36px"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <line x1="1" y1="0" x2="1" y2="100%" stroke="#e2e8f0" stroke-width="2" stroke-linecap="round"/>
+                    <line x1="1" y1="0" x2="1" y2="100%" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" class="route-line"/>
+                  </svg>
+                </div>
+
+                <!-- Destination dot -->
+                <div class="w-2.5 h-2.5 rounded-full bg-teal-500 shadow-sm shadow-teal-300/40 shrink-0"></div>
+              </div>
+
+              <!-- Labels + gold direction detail -->
+              <div class="flex flex-col justify-between flex-1 min-w-0">
+                <div>
+                  <p class="text-xs font-semibold text-navy-950 leading-tight">Desembarque Internacional</p>
+                  <p class="text-[11px] text-slate-400 mt-0.5">Origem</p>
+                </div>
+                <div>
+                  <p class="text-xs font-semibold text-teal-600 leading-tight flex items-center gap-1">
+                    Portão 12
+                    <!-- Gold direction arrow -->
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden="true">
+                      <path d="M4 0L8 8H0L4 0Z" fill="#f59e0b"/>
+                    </svg>
+                  </p>
+                  <p class="text-[11px] text-slate-400 mt-0.5">Destino</p>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Metrics -->
+            <div class="grid grid-cols-3 gap-2">
+
+              <div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
+                <div class="font-heading font-bold text-navy-950 text-xl leading-none">9</div>
+                <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-1.5 leading-tight">min até<br/>portão</div>
+              </div>
+
+              <div class="bg-teal-50 rounded-xl p-3 border border-teal-100 text-center">
+                <div class="font-heading font-bold text-teal-700 text-xl leading-none">24</div>
+                <div class="text-[9px] font-bold text-teal-500 uppercase tracking-wide mt-1.5 leading-tight">min<br/>livres</div>
+              </div>
+
+              <div class="bg-slate-50 rounded-xl p-3 border border-slate-100 text-center">
+                <div class="font-heading font-bold text-navy-950 text-xl leading-none">3</div>
+                <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wide mt-1.5 leading-tight">serviços<br/>no caminho</div>
+              </div>
+
+            </div>
+
+            <!-- Services -->
+            <div class="flex flex-wrap gap-2">
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-50 border border-orange-100 text-[11px] font-medium text-orange-700">
+                <iconify-icon icon="solar:cup-hot-linear" class="text-orange-500 text-sm"></iconify-icon>
+                Café
+              </span>
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-50 border border-teal-100 text-[11px] font-medium text-teal-700">
+                <iconify-icon icon="solar:pills-3-linear" class="text-teal-500 text-sm"></iconify-icon>
+                Farmácia
+              </span>
+              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-[11px] font-medium text-slate-600">
+                <iconify-icon icon="solar:bath-linear" class="text-slate-400 text-sm"></iconify-icon>
+                Banheiro
+              </span>
+            </div>
+
+            <!-- Status message -->
+            <div class="flex items-start gap-2.5 bg-teal-50 border border-teal-100 rounded-xl px-3 py-2.5">
+              <iconify-icon icon="solar:check-circle-bold" class="text-teal-500 text-base shrink-0 mt-px"></iconify-icon>
+              <p class="text-[12px] text-teal-800 leading-snug font-medium">
+                Você tem margem para uma parada rápida no caminho.
+              </p>
+            </div>
+
+          </div>
+        </div>
+        <!-- end right card -->
+
+      </div>
+      <!-- end grid -->
+
+    </div>
+  </main>
+
+  <!-- ════════════════════════════════════════
+       JS
+  ════════════════════════════════════════ -->
+  <script>
+    // ── Journey chip selection ──────────────────────────────
+    const chips         = document.querySelectorAll('.chip');
+    const boardingGroup = document.getElementById('boarding-group');
+    const boardingInput = document.getElementById('boarding-input');
+    const boardingHelper = document.getElementById('boarding-helper');
+
+    chips.forEach(chip => {
+      chip.addEventListener('click', () => {
+        // Deselect all
+        chips.forEach(c => c.setAttribute('aria-pressed', 'false'));
+        // Select clicked
+        chip.setAttribute('aria-pressed', 'true');
+
+        // Boarding time: dim when "Chegada final"
+        if (chip.dataset.journey === 'chegada') {
+          boardingGroup.classList.add('is-optional');
+          boardingInput.disabled = true;
+          boardingHelper.textContent = 'Não necessário para chegada final.';
+        } else {
+          boardingGroup.classList.remove('is-optional');
+          boardingInput.disabled = false;
+          boardingHelper.textContent = 'Opcional para chegada final.';
+        }
+      });
+    });
+
+    // ── Calculate route (hook point for future logic) ───────
+    document.getElementById('calculate-route-btn').addEventListener('click', () => {
+      // Route calculation will be wired here
+    });
+  </script>
+
+</body>
+</html>

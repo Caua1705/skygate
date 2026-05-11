@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SkyGate — Design System 2</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans:    ['Inter','ui-sans-serif','system-ui','sans-serif'],
+            heading: ['Plus Jakarta Sans','ui-sans-serif','system-ui'],
+            mono:    ['Space Mono','monospace'],
+          },
+          colors: {
+            navy: {
+              50:'#f0f4f8',100:'#d9e2ec',200:'#bcccdc',300:'#9fb3c8',
+              400:'#829ab1',500:'#627d98',600:'#486581',700:'#334e68',
+              800:'#243b53',900:'#102a43',950:'#0a192f',
+            },
+            teal: {
+              50:'#f0fdfa',100:'#ccfbf1',200:'#99f6e4',300:'#5eead4',
+              400:'#2dd4bf',500:'#14b8a6',600:'#0d9488',700:'#0f766e',
+              800:'#115e59',900:'#134e4a',
+            },
+            gold: {
+              100:'#fef3c7',200:'#fde68a',300:'#fcd34d',
+              400:'#fbbf24',500:'#f59e0b',600:'#d97706',
+            },
+          },
+          boxShadow: {
+            soft:    '0 10px 40px -10px rgba(0,0,0,0.06)',
+            glow:    '0 0 24px rgba(20,184,166,0.18)',
+            'glow-lg':'0 0 48px rgba(20,184,166,0.22)',
+            'gold':  '0 0 20px rgba(245,158,11,0.15)',
+          },
+          keyframes: {
+            'reveal-up':{
+              '0%':{clipPath:'inset(100% 0 0 0)',transform:'translateY(28px)',opacity:'0'},
+              '100%':{clipPath:'inset(0 0 0 0)',transform:'translateY(0)',opacity:'1'},
+            },
+            'beam-h':{
+              '0%':{left:'-220px',opacity:'0'},'10%':{opacity:'1'},
+              '90%':{opacity:'1'},'100%':{left:'100%',opacity:'0'},
+            },
+            'beam-v':{
+              '0%':{top:'-220px',opacity:'0'},'10%':{opacity:'1'},
+              '90%':{opacity:'1'},'100%':{top:'100%',opacity:'0'},
+            },
+            'pulse-glow':{
+              '0%,100%':{opacity:'1',transform:'scale(1)'},
+              '50%':{opacity:'.55',transform:'scale(1.08)'},
+            },
+            'float':{
+              '0%,100%':{transform:'translateY(0)'},
+              '50%':{transform:'translateY(-10px)'},
+            },
+            'route-dash':{
+              '0%':{strokeDashoffset:'20'},'100%':{strokeDashoffset:'0'},
+            },
+            'fade-in':{
+              '0%':{opacity:'0',transform:'translateY(16px)'},
+              '100%':{opacity:'1',transform:'translateY(0)'},
+            },
+            'bar-grow':{
+              '0%':{width:'0%'},'100%':{width:'var(--bar-w)'},
+            },
+            'spin-slow':{
+              '0%':{transform:'rotate(0deg)'},'100%':{transform:'rotate(360deg)'},
+            },
+          },
+          animation: {
+            'reveal-up':   'reveal-up 0.9s cubic-bezier(0.16,1,0.3,1) forwards',
+            'beam-h':      'beam-h 8s infinite',
+            'beam-v':      'beam-v 7s infinite',
+            'pulse-glow':  'pulse-glow 4s ease-in-out infinite',
+            'float':       'float 6s ease-in-out infinite',
+            'route-dash':  'route-dash 1.2s linear infinite',
+            'fade-in':     'fade-in 0.7s ease-out forwards',
+            'spin-slow':   'spin-slow 18s linear infinite',
+          },
+        },
+      },
+    };
+  </script>
+
+  <style>
+    /* ─── Utilities ──────────────────────────────────────────── */
+    .ds-section {
+      padding: 7rem 0;
+      border-bottom: 1px solid #f1f5f9;
+      position: relative;
+      overflow: hidden;
+      background: #ffffff;
+    }
+    .ds-label {
+      font-family: 'Space Mono', monospace;
+      font-size: .7rem;
+      text-transform: uppercase;
+      letter-spacing: .16em;
+      color: #94a3b8;
+      margin-bottom: 1.5rem;
+      display: block;
+    }
+
+    /* ─── Delays ────────────────────────────────────────────── */
+    .d-100{animation-delay:.1s} .d-200{animation-delay:.2s}
+    .d-300{animation-delay:.3s} .d-400{animation-delay:.4s}
+    .d-500{animation-delay:.5s} .d-600{animation-delay:.6s}
+    .d-700{animation-delay:.7s} .d-900{animation-delay:.9s}
+    .td-100{transition-delay:.1s} .td-200{transition-delay:.2s}
+    .td-300{transition-delay:.3s} .td-400{transition-delay:.4s}
+
+    /* ─── Transparent stroke text ────────────────────────────── */
+    .text-stroke {
+      color: transparent;
+      -webkit-text-stroke: 1.5px rgba(10,25,47,.14);
+      background-clip: text;
+      -webkit-background-clip: text;
+      transition: -webkit-text-stroke .4s ease;
+    }
+    .text-stroke:hover {
+      -webkit-text-stroke: 1.5px rgba(20,184,166,.35);
+    }
+
+    /* ─── Glass ─────────────────────────────────────────────── */
+    .glass {
+      background: rgba(255,255,255,.75);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,.9);
+    }
+    .glass-dark {
+      background: rgba(10,25,47,.82);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,.08);
+    }
+
+    /* ─── Grid / Beams ──────────────────────────────────────── */
+    .bg-grid {
+      background-image:
+        linear-gradient(to right, rgba(0,0,0,.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0,0,0,.03) 1px, transparent 1px);
+      background-size: 64px 64px;
+    }
+    .grid-line-v {
+      position:absolute; top:0; bottom:0;
+      width:1px; background:rgba(0,0,0,.04); z-index:0;
+    }
+    .grid-line-h {
+      position:absolute; left:0; right:0;
+      height:1px; background:rgba(0,0,0,.04); z-index:0;
+    }
+    .beam-h {
+      position:absolute; height:1px; width:220px;
+      background:linear-gradient(90deg,transparent,rgba(20,184,166,.55),transparent);
+      opacity:0; z-index:10;
+    }
+    .beam-v {
+      position:absolute; width:1px; height:220px;
+      background:linear-gradient(180deg,transparent,rgba(20,184,166,.55),transparent);
+      opacity:0; z-index:10;
+    }
+
+    /* ─── Route line SVG ──────────────────────────────────── */
+    .route-line { stroke-dasharray:6 5; animation:route-dash 1.2s linear infinite; }
+
+    /* ─── Scroll reveal ─────────────────────────────────────── */
+    .sr {
+      opacity:0; transform:translateY(28px);
+      transition: opacity .9s cubic-bezier(.16,1,.3,1), transform .9s cubic-bezier(.16,1,.3,1);
+    }
+    .sr.visible { opacity:1; transform:translateY(0); }
+
+    /* ─── Button effects ────────────────────────────────────── */
+    .btn-primary {
+      background:#0a192f; color:#fff;
+      padding:.9rem 1.75rem; border-radius:.75rem;
+      font-family:'Plus Jakarta Sans',sans-serif;
+      font-weight:600; font-size:.875rem;
+      display:inline-flex; align-items:center; gap:.6rem;
+      transition: background .2s, box-shadow .2s, transform .15s;
+      box-shadow: 0 4px 18px rgba(10,25,47,.18);
+    }
+    .btn-primary:hover {
+      background:#102a43;
+      box-shadow:0 0 0 4px rgba(20,184,166,.12), 0 6px 24px rgba(10,25,47,.22);
+      transform:translateY(-1px);
+    }
+    .btn-primary:active { transform:scale(.98); }
+
+    .btn-secondary {
+      background:#fff; color:#0a192f;
+      border:1.5px solid #e2e8f0;
+      padding:.9rem 1.75rem; border-radius:.75rem;
+      font-family:'Plus Jakarta Sans',sans-serif;
+      font-weight:600; font-size:.875rem;
+      display:inline-flex; align-items:center; gap:.6rem;
+      transition: border-color .2s, box-shadow .2s, transform .15s;
+      box-shadow: 0 2px 8px rgba(0,0,0,.05);
+    }
+    .btn-secondary:hover {
+      border-color:#14b8a6;
+      box-shadow:0 0 0 3px rgba(20,184,166,.1);
+      transform:translateY(-1px);
+    }
+    .btn-secondary:active { transform:scale(.98); }
+
+    .btn-accent {
+      background:#14b8a6; color:#fff;
+      padding:.75rem 1.5rem; border-radius:999px;
+      font-family:'Plus Jakarta Sans',sans-serif;
+      font-weight:600; font-size:.875rem;
+      display:inline-flex; align-items:center; gap:.5rem;
+      transition: background .2s, box-shadow .2s, transform .15s;
+      box-shadow: 0 0 20px rgba(20,184,166,.25);
+    }
+    .btn-accent:hover {
+      background:#0d9488;
+      box-shadow:0 0 32px rgba(20,184,166,.4);
+      transform:translateY(-1px);
+    }
+
+    /* ─── Swatch ────────────────────────────────────────────── */
+    .swatch { width:100%; height:72px; border-radius:10px; border:1px solid rgba(0,0,0,.05); margin-bottom:.5rem; }
+
+    /* ─── Tooltip ──────────────────────────────────────────── */
+    .tooltip-wrap { position:relative; display:inline-flex; }
+    .tooltip-box {
+      position:absolute; bottom:calc(100% + 8px); left:50%;
+      transform:translateX(-50%) translateY(4px);
+      background:#0a192f; color:#fff;
+      font-size:.7rem; font-family:'Space Mono',monospace;
+      padding:.35rem .75rem; border-radius:.5rem;
+      white-space:nowrap; opacity:0; pointer-events:none;
+      transition:opacity .2s, transform .2s;
+    }
+    .tooltip-box::after {
+      content:''; position:absolute; top:100%; left:50%;
+      transform:translateX(-50%);
+      border:5px solid transparent; border-top-color:#0a192f;
+    }
+    .tooltip-wrap:hover .tooltip-box { opacity:1; transform:translateX(-50%) translateY(0); }
+
+    /* ─── Modal ─────────────────────────────────────────────── */
+    #modal-demo { display:none; }
+    #modal-demo.open { display:flex; }
+
+    /* ─── Bottom sheet ──────────────────────────────────────── */
+    .bottom-sheet {
+      transform:translateY(60px); opacity:0;
+      transition:transform .4s cubic-bezier(.16,1,.3,1), opacity .4s ease;
+    }
+    .bottom-sheet.open { transform:translateY(0); opacity:1; }
+
+    /* ─── Stepper ───────────────────────────────────────────── */
+    .step-line { flex:1; height:2px; background:#e2e8f0; position:relative; overflow:hidden; }
+    .step-line::after {
+      content:''; position:absolute; top:0; left:0;
+      height:100%; width:0; background:#14b8a6;
+      transition:width 1.2s ease;
+    }
+    .step-line.active::after { width:100%; }
+
+    /* ─── Bar chart ─────────────────────────────────────────── */
+    .bar {
+      height:100%; background:linear-gradient(to top,#14b8a6,#2dd4bf);
+      border-radius:4px 4px 0 0;
+      transition:height 1s cubic-bezier(.16,1,.3,1);
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-navy-950 font-sans antialiased selection:bg-teal-100 selection:text-teal-900 overflow-x-hidden">
+
+<!-- ═══════════════════════════════════════════════════════════
+     AMBIENT GLOWS (fixed)
+════════════════════════════════════════════════════════════ -->
+<div class="fixed inset-0 pointer-events-none z-0 overflow-hidden" aria-hidden="true">
+  <div class="absolute -top-[18%] -left-[8%] w-[48%] h-[48%] rounded-full bg-teal-400/[.04] blur-[130px] animate-pulse-glow"></div>
+  <div class="absolute top-[55%] -right-[8%] w-[38%] h-[38%] rounded-full bg-navy-400/[.04] blur-[110px] animate-pulse-glow d-700"></div>
+  <div class="absolute top-[30%] left-[40%] w-[28%] h-[28%] rounded-full bg-gold-300/[.03] blur-[90px] animate-pulse-glow d-400"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     NAVBAR
+════════════════════════════════════════════════════════════ -->
+<nav class="fixed top-0 left-0 right-0 z-[100] glass border-b border-slate-200/60 px-5 lg:px-10 h-[60px] flex items-center justify-between shadow-sm">
+  <div class="flex items-center gap-2.5">
+    <div class="w-8 h-8 rounded-lg bg-navy-950 flex items-center justify-center shadow-glow">
+      <iconify-icon icon="solar:routing-3-bold-duotone" class="text-teal-400 text-lg"></iconify-icon>
+    </div>
+    <span class="font-heading font-bold text-navy-950 text-lg tracking-tight">Sky<span class="text-teal-500">Gate</span></span>
+    <span class="hidden sm:inline-block text-slate-400 font-mono text-[10px] ml-1 border border-slate-200 px-2 py-0.5 rounded-full">DS v2</span>
+  </div>
+  <div class="hidden md:flex gap-7 text-[11px] font-semibold uppercase tracking-widest text-slate-500">
+    <a href="#hero"       class="hover:text-teal-600 transition-colors">Hero</a>
+    <a href="#typography" class="hover:text-teal-600 transition-colors">Tipo</a>
+    <a href="#colors"     class="hover:text-teal-600 transition-colors">Cores</a>
+    <a href="#components" class="hover:text-teal-600 transition-colors">UI</a>
+    <a href="#icons"      class="hover:text-teal-600 transition-colors">Ícones</a>
+    <a href="#motion"     class="hover:text-teal-600 transition-colors">Motion</a>
+  </div>
+  <button class="md:hidden text-navy-950">
+    <iconify-icon icon="solar:hamburger-menu-linear" class="text-2xl"></iconify-icon>
+  </button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════
+     01 · HERO
+════════════════════════════════════════════════════════════ -->
+<section id="hero" class="relative min-h-[100svh] flex flex-col lg:flex-row items-center pt-[60px] overflow-hidden bg-white border-b border-slate-200">
+
+  <!-- Grid lines -->
+  <div class="absolute inset-0 pointer-events-none z-0" aria-hidden="true">
+    <div class="grid-line-v" style="left:6%">
+      <div class="beam-v" style="animation:beam-v 7s infinite 1.5s"></div>
+    </div>
+    <div class="grid-line-v" style="left:28%"></div>
+    <div class="grid-line-v" style="left:62%">
+      <div class="beam-v" style="animation:beam-v 9s infinite 4s"></div>
+    </div>
+    <div class="grid-line-v" style="right:6%"></div>
+    <div class="grid-line-h" style="top:35%">
+      <div class="beam-h" style="animation:beam-h 8s infinite 2s"></div>
+    </div>
+    <div class="grid-line-h" style="bottom:18%"></div>
+    <!-- subtle dot grid -->
+    <div class="absolute inset-0 bg-grid opacity-60"></div>
+  </div>
+
+  <div class="container mx-auto px-5 lg:px-10 flex flex-col lg:flex-row items-center justify-between gap-14 py-20 relative z-10 w-full">
+
+    <!-- LEFT: copy -->
+    <div class="w-full lg:w-[52%] flex flex-col items-start text-left">
+
+      <!-- Badge -->
+      <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100/90 border border-slate-200 text-[10px] font-bold uppercase tracking-widest text-slate-600 mb-8 animate-reveal-up backdrop-blur-sm">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span>
+        </span>
+        Demo · Aeroporto de Fortaleza
+      </div>
+
+      <!-- Headline -->
+      <h1 class="font-heading font-bold text-navy-950 tracking-tighter leading-[1.04] mb-6 text-[2.6rem] sm:text-[3.4rem] lg:text-[4rem] xl:text-[4.5rem]">
+        <span class="block animate-reveal-up d-100">Planeje sua rota</span>
+        <span class="block animate-reveal-up d-200">no aeroporto</span>
+        <span class="block text-stroke animate-reveal-up d-300" style="font-size:1.12em; line-height:.98; margin-top:-.04em">antes de chegar.</span>
+      </h1>
+
+      <!-- Subtitle -->
+      <p class="text-lg text-slate-500 font-light leading-relaxed max-w-xl mb-10 animate-reveal-up d-400 border-l-2 border-teal-400 pl-4">
+        O <strong class="font-semibold text-navy-950">SkyGate</strong> calcula seu caminho, estima seu tempo livre e mostra lojas e serviços úteis no trajeto até o destino.
+      </p>
+
+      <!-- CTAs -->
+      <div class="flex flex-col sm:flex-row gap-3 animate-reveal-up d-500 w-full sm:w-auto">
+        <button class="btn-primary w-full sm:w-auto justify-center">
+          Planejar minha rota
+          <iconify-icon icon="solar:arrow-right-linear" class="text-teal-400 text-base group-hover:translate-x-1 transition-transform"></iconify-icon>
+        </button>
+        <button class="btn-secondary w-full sm:w-auto justify-center">
+          <div class="w-6 h-6 rounded-full bg-teal-50 flex items-center justify-center text-teal-600 text-xs">
+            <iconify-icon icon="solar:play-bold"></iconify-icon>
+          </div>
+          Ver exemplo de conexão
+        </button>
+      </div>
+
+      <!-- Social proof -->
+      <div class="flex items-center gap-3 mt-10 animate-reveal-up d-600">
+        <div class="flex -space-x-2">
+          <div class="w-8 h-8 rounded-full bg-teal-100 border-2 border-white flex items-center justify-center text-teal-600 text-xs font-bold">A</div>
+          <div class="w-8 h-8 rounded-full bg-navy-100 border-2 border-white flex items-center justify-center text-navy-700 text-xs font-bold">B</div>
+          <div class="w-8 h-8 rounded-full bg-gold-100 border-2 border-white flex items-center justify-center text-gold-600 text-xs font-bold">C</div>
+        </div>
+        <span class="text-xs text-slate-500 font-medium">+2.4k passageiros usaram hoje</span>
+        <span class="flex items-center gap-1 text-gold-500 text-xs font-bold ml-1">
+          <iconify-icon icon="solar:star-bold" class="text-sm"></iconify-icon>4.9
+        </span>
+      </div>
+    </div>
+
+    <!-- RIGHT: App preview -->
+    <div class="w-full lg:w-[48%] relative animate-reveal-up d-700">
+
+      <!-- Glow -->
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] h-[110%] bg-gradient-to-tr from-teal-300/15 via-transparent to-navy-300/5 blur-[80px] rounded-full pointer-events-none"></div>
+
+      <!-- Main card -->
+      <div class="relative glass rounded-3xl p-3 shadow-2xl border border-white animate-float max-w-[360px] mx-auto lg:ml-auto lg:mr-0 z-10">
+        <div class="bg-slate-50/80 rounded-2xl overflow-hidden border border-slate-100 shadow-inner">
+
+          <!-- App header -->
+          <div class="bg-navy-950 px-5 py-4 text-white flex justify-between items-center relative overflow-hidden">
+            <div class="absolute inset-0 opacity-[.03]" style="background-image:radial-gradient(white 1px,transparent 1px);background-size:10px 10px"></div>
+            <div class="relative z-10">
+              <span class="text-[9px] text-teal-400 uppercase tracking-widest font-bold flex items-center gap-1 mb-1.5">
+                <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-ping inline-block"></span> Rota Ativa
+              </span>
+              <div class="flex items-center gap-2 font-heading font-semibold text-sm">
+                Desembarque Int'l
+                <iconify-icon icon="solar:alt-arrow-right-linear" class="text-slate-400"></iconify-icon>
+                Portão 12
+              </div>
+            </div>
+            <div class="relative z-10 text-right">
+              <span class="text-[9px] text-slate-400 uppercase tracking-widest font-bold block mb-1.5">Embarque</span>
+              <span class="font-mono text-gold-400 font-bold text-base bg-white/10 px-2 py-0.5 rounded">14:30</span>
+            </div>
+          </div>
+
+          <!-- Metrics -->
+          <div class="grid grid-cols-2 gap-3 p-4 pb-0">
+            <div class="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-sm text-center">
+              <div class="text-[9px] font-bold uppercase tracking-widest text-slate-400 flex items-center justify-center gap-1 mb-1">
+                <iconify-icon icon="solar:routing-2-linear" class="text-slate-400"></iconify-icon>Caminhada
+              </div>
+              <div class="font-heading font-bold text-2xl text-navy-950">12<span class="text-xs font-medium text-slate-400 ml-0.5">min</span></div>
+            </div>
+            <div class="bg-teal-50 p-3.5 rounded-2xl border border-teal-100 shadow-sm text-center relative overflow-hidden group cursor-default">
+              <div class="absolute inset-0 bg-gradient-to-br from-teal-400/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+              <div class="text-[9px] font-bold uppercase tracking-widest text-teal-700 flex items-center justify-center gap-1 mb-1 relative z-10">
+                <iconify-icon icon="solar:clock-circle-linear" class="text-teal-600"></iconify-icon>Tempo Livre
+              </div>
+              <div class="font-heading font-bold text-2xl text-teal-700 relative z-10">1h 45<span class="text-xs font-medium text-teal-500/80 ml-0.5">m</span></div>
+            </div>
+          </div>
+
+          <!-- Route timeline -->
+          <div class="p-4 flex-1">
+            <div class="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+              <div class="text-[9px] font-bold uppercase tracking-widest text-slate-400 mb-4 flex justify-between items-center">
+                No seu caminho
+                <iconify-icon icon="solar:map-arrow-up-linear" class="text-slate-300 text-base"></iconify-icon>
+              </div>
+              <div class="relative pl-5 space-y-5">
+                <!-- SVG line -->
+                <svg class="absolute left-[9px] top-3 w-px h-[calc(100%-1.5rem)]" preserveAspectRatio="none">
+                  <line x1="1" y1="0" x2="1" y2="100%" stroke="#e2e8f0" stroke-width="2" stroke-linecap="round"/>
+                  <line x1="1" y1="0" x2="1" y2="55%" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" class="route-line"/>
+                </svg>
+                <!-- Stop 1 -->
+                <div class="relative z-10 flex items-center gap-3 -ml-1.5 p-1.5 rounded-xl hover:bg-slate-50 transition-colors group cursor-pointer">
+                  <div class="w-3.5 h-3.5 rounded-full bg-white border-2 border-slate-200 absolute -left-4 group-hover:border-teal-400 transition-colors flex items-center justify-center">
+                    <div class="w-1.5 h-1.5 rounded-full bg-slate-300 group-hover:bg-teal-400 transition-colors"></div>
+                  </div>
+                  <div class="w-9 h-9 rounded-xl bg-orange-50 text-orange-500 flex items-center justify-center shrink-0">
+                    <iconify-icon icon="solar:cup-hot-bold-duotone" class="text-lg"></iconify-icon>
+                  </div>
+                  <div>
+                    <div class="font-semibold text-navy-950 text-sm leading-tight">Delta Café</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">3 min de você</div>
+                  </div>
+                </div>
+                <!-- Stop 2 (active) -->
+                <div class="relative z-10 flex items-center gap-3 -ml-1.5 p-1.5 rounded-xl bg-teal-50/60 border border-teal-100/70">
+                  <div class="w-3.5 h-3.5 rounded-full bg-white border-[2.5px] border-teal-500 absolute -left-4 shadow-[0_0_8px_rgba(20,184,166,0.4)] flex items-center justify-center">
+                    <div class="w-1.5 h-1.5 rounded-full bg-teal-500"></div>
+                  </div>
+                  <div class="w-9 h-9 rounded-xl bg-teal-100 text-teal-600 flex items-center justify-center shrink-0">
+                    <iconify-icon icon="solar:pills-3-bold-duotone" class="text-lg"></iconify-icon>
+                  </div>
+                  <div>
+                    <div class="font-semibold text-navy-950 text-sm leading-tight">Farmácia Pague Menos</div>
+                    <div class="text-[11px] text-teal-600 font-semibold mt-0.5 flex items-center gap-1">
+                      <iconify-icon icon="solar:map-point-bold"></iconify-icon> Você está aqui
+                    </div>
+                  </div>
+                </div>
+                <!-- Stop 3 (dim) -->
+                <div class="relative z-10 flex items-center gap-3 -ml-1.5 p-1.5 opacity-45">
+                  <div class="w-3.5 h-3.5 rounded-full bg-white border-2 border-slate-200 absolute -left-4"></div>
+                  <div class="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center shrink-0">
+                    <iconify-icon icon="solar:shop-2-bold-duotone" class="text-lg"></iconify-icon>
+                  </div>
+                  <div>
+                    <div class="font-semibold text-navy-950 text-sm leading-tight">Dufry Duty Free</div>
+                    <div class="text-[11px] text-slate-500 mt-0.5">8 min de você</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Floating status chip -->
+      <div class="absolute -right-4 top-1/4 hidden md:flex items-center gap-3 glass rounded-xl px-3 py-2.5 shadow-lg border border-white/80 animate-float d-300 z-20">
+        <div class="w-8 h-8 rounded-full bg-gold-100 text-gold-600 flex items-center justify-center">
+          <iconify-icon icon="solar:star-bold" class="text-sm"></iconify-icon>
+        </div>
+        <div>
+          <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Status</div>
+          <div class="text-sm font-semibold text-navy-950">No Horário</div>
+        </div>
+      </div>
+
+      <!-- Floating gate chip -->
+      <div class="absolute -left-4 bottom-1/4 hidden md:flex items-center gap-2 glass rounded-xl px-3 py-2 shadow-md border border-white/80 animate-float d-500 z-20">
+        <iconify-icon icon="solar:plain-2-bold-duotone" class="text-navy-950 text-xl"></iconify-icon>
+        <div>
+          <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Portão</div>
+          <div class="text-sm font-bold text-navy-950">12 · T2</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     02 · TYPOGRAPHY
+════════════════════════════════════════════════════════════ -->
+<section id="typography" class="ds-section">
+  <div class="absolute inset-0 bg-grid opacity-25 pointer-events-none"></div>
+  <div class="container mx-auto px-5 lg:px-10 relative z-10">
+    <span class="ds-label sr">02 / Tipografia</span>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-12">
+      <!-- Sidebar info -->
+      <div class="lg:col-span-4 sr">
+        <h2 class="font-heading text-2xl font-bold text-navy-950 mb-4">Clareza & Confiança</h2>
+        <p class="text-slate-500 font-light leading-relaxed mb-8 text-sm">Tipografia baseada em legibilidade máxima. O passageiro ansioso precisa encontrar informações imediatamente, sem fricção.</p>
+
+        <div class="space-y-4">
+          <!-- Family card -->
+          <div class="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+            <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Font Families</div>
+            <div class="space-y-4">
+              <div>
+                <div class="font-heading font-bold text-navy-950 text-lg">Plus Jakarta Sans</div>
+                <div class="font-mono text-[10px] text-slate-400">Display & Headings · Primary</div>
+                <div class="font-mono text-[10px] text-slate-400">weights: 400 500 600 700 800</div>
+              </div>
+              <div>
+                <div class="font-sans font-medium text-navy-950 text-lg">Inter</div>
+                <div class="font-mono text-[10px] text-slate-400">UI Body · Fallback</div>
+                <div class="font-mono text-[10px] text-slate-400">weights: 300 400 500 600 700</div>
+              </div>
+              <div>
+                <div class="font-mono font-medium text-navy-950 text-lg">Space Mono</div>
+                <div class="font-mono text-[10px] text-slate-400">Data · Time · Labels</div>
+                <div class="font-mono text-[10px] text-slate-400">weights: 400 700</div>
+              </div>
+            </div>
+          </div>
+          <!-- Loading -->
+          <div class="bg-slate-50 rounded-2xl p-5 border border-slate-100">
+            <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-3">Loading Strategy</div>
+            <ul class="space-y-2 text-sm text-slate-600">
+              <li class="flex items-center gap-2"><iconify-icon icon="solar:check-circle-bold" class="text-teal-500 text-base shrink-0"></iconify-icon>CDN — Google Fonts</li>
+              <li class="flex items-center gap-2"><iconify-icon icon="solar:check-circle-bold" class="text-teal-500 text-base shrink-0"></iconify-icon>Preconnect habilitado</li>
+              <li class="flex items-center gap-2"><iconify-icon icon="solar:check-circle-bold" class="text-teal-500 text-base shrink-0"></iconify-icon>display=swap</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scale -->
+      <div class="lg:col-span-8 sr td-200">
+        <div class="border-t border-slate-100 flex flex-col">
+
+          <!-- H1 -->
+          <div class="flex flex-col md:flex-row md:items-end justify-between py-6 border-b border-slate-100 gap-3 group hover:bg-slate-50 transition-colors px-4 -mx-4 rounded-xl">
+            <div class="w-28 shrink-0">
+              <div class="text-sm font-bold text-slate-800">Heading 1</div>
+              <div class="font-mono text-[10px] text-slate-400 mt-0.5">Jakarta · 800</div>
+            </div>
+            <div class="flex-1 overflow-hidden">
+              <h1 class="font-heading font-bold text-navy-950 tracking-tighter truncate" style="font-size:clamp(2.5rem,6vw,3.75rem);line-height:1.04">Seu Caminho</h1>
+            </div>
+            <div class="w-28 text-right hidden md:block">
+              <div class="font-mono text-xs text-slate-500">60px / 1.04</div>
+              <div class="font-mono text-[10px] text-slate-400">ls: -0.02em</div>
+            </div>
+          </div>
+
+          <!-- H2 -->
+          <div class="flex flex-col md:flex-row md:items-end justify-between py-6 border-b border-slate-100 gap-3 group hover:bg-slate-50 transition-colors px-4 -mx-4 rounded-xl">
+            <div class="w-28 shrink-0">
+              <div class="text-sm font-bold text-slate-800">Heading 2</div>
+              <div class="font-mono text-[10px] text-slate-400 mt-0.5">Jakarta · 700</div>
+            </div>
+            <div class="flex-1 overflow-hidden">
+              <h2 class="font-heading font-bold text-navy-950 tracking-tight truncate" style="font-size:clamp(2rem,5vw,3rem);line-height:1.08">Escolha a rota</h2>
+            </div>
+            <div class="w-28 text-right hidden md:block">
+              <div class="font-mono text-xs text-slate-500">48px / 1.08</div>
+              <div class="font-mono text-[10px] text-slate-400">ls: -0.01em</div>
+            </div>
+          </div>
+
+          <!-- H3 -->
+          <div class="flex flex-col md:flex-row md:items-end justify-between py-6 border-b border-slate-100 gap-3 group hover:bg-slate-50 transition-colors px-4 -mx-4 rounded-xl">
+            <div class="w-28 shrink-0">
+              <div class="text-sm font-bold text-slate-800">Heading 3</div>
+              <div class="font-mono text-[10px] text-slate-400 mt-0.5">Jakarta · 600</div>
+            </div>
+            <div class="flex-1 overflow-hidden">
+              <h3 class="font-heading font-semibold text-navy-950 tracking-tight truncate text-3xl">Lojas Próximas</h3>
+            </div>
+            <div class="w-28 text-right hidden md:block">
+              <div class="font-mono text-xs text-slate-500">30px / 1.2</div>
+              <div class="font-mono text-[10px] text-slate-400">ls: normal</div>
+            </div>
+          </div>
+
+          <!-- H4 -->
+          <div class="flex flex-col md:flex-row md:items-end justify-between py-6 border-b border-slate-100 gap-3 group hover:bg-slate-50 transition-colors px-4 -mx-4 rounded-xl">
+            <div class="w-28 shrink-0">
+              <div class="text-sm font-bold text-slate-800">Heading 4</div>
+              <div class="font-mono text-[10px] text-slate-400 mt-0.5">Jakarta · 600</div>
+            </div>
+            <div class="flex-1"><h4 class="font-heading font-semibold text-navy-950 text-xl tracking-tight">Delta Café · Terminal 2</h4></div>
+            <div class="w-28 text-right hidden md:block">
+              <div class="font-mono text-xs text-slate-500">20px / 1.25</div>
+            </div>
+          </div>
+
+          <!-- H5 -->
+          <div class="flex flex-col md:flex-row md:items-end justify-between py-6 border-b border-slate-100 gap-3 group hover:bg-slate-50 transition-colors px-4 -mx-4 rounded-xl">
+            <div class="w-28 shrink-0">
+              <div class="text-sm font-bold text-slate-800">Heading 5</div>
+              <div class="font-mono text-[10px] text-slate-400 mt-0.5">Inter · 600</div>
+            </div>
+            <div class="flex-1"><h5 class="font-semibold text-navy-950 text-base tracking-tight">Portão 12 · Embarque às 14:30</h5></div>
+            <div class="w-28 text-right hidden md:block">
+              <div class="font-mono text-xs text-slate-500">16px / 1.4</div>
+            </div>
+          </div>
+
+          <!-- H6 -->
+          <div class="flex flex-col md:flex-row md:items-end justify-between py-6 border-b border-slate-100 gap-3 group hover:bg-slate-50 transition-colors px-4 -mx-4 rounded-xl">
+            <div class="w-28 shrink-0">
+              <div class="text-sm font-bold text-slate-800">Heading 6</div>
+              <div class="font-mono text-[10px] text-slate-400 mt-0.5">Inter · 600</div>
+            </div>
+            <div class="flex-1"><h6 class="font-semibold text-navy-950 text-sm tracking-tight uppercase">Tempo Estimado</h6></div>
+            <div class="w-28 text-right hidden md:block">
+              <div class="font-mono text-xs text-slate-500">14px / 1.4</div>
+            </div>
+          </div>
+
+          <!-- Body LG -->
+          <div class="flex flex-col md:flex-row md:items-center justify-between py-6 border-b border-slate-100 gap-3 group hover:bg-slate-50 transition-colors px-4 -mx-4 rounded-xl">
+            <div class="w-28 shrink-0">
+              <div class="text-sm font-bold text-slate-800">Body LG</div>
+              <div class="font-mono text-[10px] text-slate-400 mt-0.5">Inter · 300</div>
+            </div>
+            <div class="flex-1"><p class="text-lg font-light text-slate-500 leading-relaxed">Orientação precisa para passageiros em qualquer momento da jornada.</p></div>
+            <div class="w-28 text-right hidden md:block">
+              <div class="font-mono text-xs text-slate-500">18px / 1.625</div>
+            </div>
+          </div>
+
+          <!-- Body -->
+          <div class="flex flex-col md:flex-row md:items-center justify-between py-6 border-b border-slate-100 gap-3 group hover:bg-slate-50 transition-colors px-4 -mx-4 rounded-xl">
+            <div class="w-28 shrink-0">
+              <div class="text-sm font-bold text-slate-800">Body</div>
+              <div class="font-mono text-[10px] text-slate-400 mt-0.5">Inter · 400</div>
+            </div>
+            <div class="flex-1"><p class="text-base text-slate-500 leading-relaxed">Tempo estimado até o portão considerando caminhada normal.</p></div>
+            <div class="w-28 text-right hidden md:block">
+              <div class="font-mono text-xs text-slate-500">16px / 1.5</div>
+            </div>
+          </div>
+
+          <!-- Body SM -->
+          <div class="flex flex-col md:flex-row md:items-center justify-between py-6 border-b border-slate-100 gap-3 group hover:bg-slate-50 transition-colors px-4 -mx-4 rounded-xl">
+            <div class="w-28 shrink-0">
+              <div class="text-sm font-bold text-slate-800">Body SM</div>
+              <div class="font-mono text-[10px] text-slate-400 mt-0.5">Inter · 400</div>
+            </div>
+            <div class="flex-1"><p class="text-sm text-slate-500 leading-relaxed">A 3 minutos de você · Terminal 2 · Piso 1</p></div>
+            <div class="w-28 text-right hidden md:block">
+              <div class="font-mono text-xs text-slate-500">14px / 1.5</div>
+            </div>
+          </div>
+
+          <!-- Caption -->
+          <div class="flex flex-col md:flex-row md:items-center justify-between py-6 border-b border-slate-100 gap-3 px-4 -mx-4">
+            <div class="w-28 shrink-0">
+              <div class="text-sm font-bold text-slate-800">Caption</div>
+              <div class="font-mono text-[10px] text-slate-400 mt-0.5">Inter · 400</div>
+            </div>
+            <div class="flex-1"><span class="text-xs text-slate-400">Dados atualizados em tempo real pelo app</span></div>
+            <div class="w-28 text-right hidden md:block">
+              <div class="font-mono text-xs text-slate-500">12px / 1.4</div>
+            </div>
+          </div>
+
+          <!-- Label -->
+          <div class="flex flex-col md:flex-row md:items-center justify-between py-6 border-b border-slate-100 gap-3 px-4 -mx-4">
+            <div class="w-28 shrink-0">
+              <div class="text-sm font-bold text-slate-800">Label</div>
+              <div class="font-mono text-[10px] text-slate-400 mt-0.5">Inter · 700</div>
+            </div>
+            <div class="flex-1"><span class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Tempo Livre Restante</span></div>
+            <div class="w-28 text-right hidden md:block">
+              <div class="font-mono text-xs text-slate-500">10px · uppercase</div>
+            </div>
+          </div>
+
+          <!-- Mono data -->
+          <div class="flex flex-col md:flex-row md:items-center justify-between py-6 gap-3 px-4 -mx-4">
+            <div class="w-28 shrink-0">
+              <div class="text-sm font-bold text-slate-800">Mono Data</div>
+              <div class="font-mono text-[10px] text-slate-400 mt-0.5">Space Mono · 700</div>
+            </div>
+            <div class="flex-1"><span class="font-mono font-bold text-3xl text-navy-950">14:30</span></div>
+            <div class="w-28 text-right hidden md:block">
+              <div class="font-mono text-xs text-slate-500">30px / 1.0</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     03 · COLORS
+════════════════════════════════════════════════════════════ -->
+<section id="colors" class="ds-section bg-slate-50">
+  <div class="container mx-auto px-5 lg:px-10 relative z-10">
+    <span class="ds-label sr">03 / Sistema de Cores</span>
+
+    <div class="mb-10 sr">
+      <h2 class="font-heading text-2xl font-bold text-navy-950 mb-2">Paleta Semântica</h2>
+      <p class="text-slate-500 font-light text-sm max-w-2xl">Branco predominante como superfície. Navy para hierarquia e autoridade. Teal para ações e rotas. Dourado apenas em momentos premium. Contraste AA/AAA.</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+
+      <!-- Navy (Primary) -->
+      <div class="sr">
+        <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Primary · Navy</div>
+        <div class="swatch bg-navy-950 flex items-end p-3 shadow-md rounded-xl mb-3">
+          <span class="text-white/40 font-mono text-[10px]">Brand · Text · Dark BG</span>
+        </div>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between"><span class="font-bold text-slate-800">Navy 950</span><span class="font-mono text-slate-500">#0a192f</span></div>
+          <div class="flex justify-between text-slate-400"><span>RGB</span><span class="font-mono">10, 25, 47</span></div>
+          <div class="flex justify-between text-slate-400"><span>HSL</span><span class="font-mono">213° 65% 11%</span></div>
+          <div class="flex justify-between text-slate-400"><span>Role</span><span>text · bg-dark · border</span></div>
+          <div class="flex justify-between text-slate-400"><span>Contrast</span><span class="text-teal-600 font-bold">AAA ✓</span></div>
+        </div>
+        <div class="mt-3 grid grid-cols-5 gap-1">
+          <div class="h-8 rounded-lg bg-navy-100" title="navy-100"></div>
+          <div class="h-8 rounded-lg bg-navy-300" title="navy-300"></div>
+          <div class="h-8 rounded-lg bg-navy-500" title="navy-500"></div>
+          <div class="h-8 rounded-lg bg-navy-700" title="navy-700"></div>
+          <div class="h-8 rounded-lg bg-navy-950" title="navy-950"></div>
+        </div>
+      </div>
+
+      <!-- Teal (Accent) -->
+      <div class="sr td-100">
+        <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Accent · Teal</div>
+        <div class="swatch bg-gradient-to-tr from-teal-600 to-teal-400 flex items-end p-3 shadow-md shadow-teal-300/20 rounded-xl mb-3">
+          <span class="text-white/80 font-mono text-[10px]">Action · Route · Success</span>
+        </div>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between"><span class="font-bold text-slate-800">Teal 500</span><span class="font-mono text-slate-500">#14b8a6</span></div>
+          <div class="flex justify-between text-slate-400"><span>RGB</span><span class="font-mono">20, 184, 166</span></div>
+          <div class="flex justify-between text-slate-400"><span>HSL</span><span class="font-mono">174° 80% 40%</span></div>
+          <div class="flex justify-between text-slate-400"><span>Role</span><span>accent · route · hover</span></div>
+          <div class="flex justify-between text-slate-400"><span>Contrast</span><span class="text-teal-600 font-bold">AA ✓</span></div>
+        </div>
+        <div class="mt-3 grid grid-cols-5 gap-1">
+          <div class="h-8 rounded-lg bg-teal-50" title="teal-50"></div>
+          <div class="h-8 rounded-lg bg-teal-200" title="teal-200"></div>
+          <div class="h-8 rounded-lg bg-teal-400" title="teal-400"></div>
+          <div class="h-8 rounded-lg bg-teal-600" title="teal-600"></div>
+          <div class="h-8 rounded-lg bg-teal-800" title="teal-800"></div>
+        </div>
+      </div>
+
+      <!-- Gold (Highlight) -->
+      <div class="sr td-200">
+        <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Highlight · Gold</div>
+        <div class="swatch bg-gradient-to-br from-gold-400 to-gold-500 flex items-end p-3 shadow-md shadow-gold-300/20 rounded-xl mb-3">
+          <span class="text-white/80 font-mono text-[10px]">Premium · Time · Positive</span>
+        </div>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between"><span class="font-bold text-slate-800">Gold 500</span><span class="font-mono text-slate-500">#f59e0b</span></div>
+          <div class="flex justify-between text-slate-400"><span>RGB</span><span class="font-mono">245, 158, 11</span></div>
+          <div class="flex justify-between text-slate-400"><span>HSL</span><span class="font-mono">38° 92% 50%</span></div>
+          <div class="flex justify-between text-slate-400"><span>Role</span><span>decorative · time · ratings</span></div>
+          <div class="flex justify-between text-slate-400 text-[10px]"><span>⚠ Uso moderado</span><span>AA ✓ sobre branco</span></div>
+        </div>
+        <div class="mt-3 grid grid-cols-5 gap-1">
+          <div class="h-8 rounded-lg bg-gold-100" title="gold-100"></div>
+          <div class="h-8 rounded-lg bg-gold-200" title="gold-200"></div>
+          <div class="h-8 rounded-lg bg-gold-400" title="gold-400"></div>
+          <div class="h-8 rounded-lg bg-gold-500" title="gold-500"></div>
+          <div class="h-8 rounded-lg bg-gold-600" title="gold-600"></div>
+        </div>
+      </div>
+
+      <!-- Neutral -->
+      <div class="sr td-300">
+        <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4">Neutral · Slate</div>
+        <div class="swatch bg-white border border-slate-200 flex items-end p-3 rounded-xl mb-3">
+          <span class="text-slate-400 font-mono text-[10px]">Surfaces · Borders</span>
+        </div>
+        <div class="space-y-1 text-xs">
+          <div class="flex justify-between"><span class="font-bold text-slate-800">White / Slate 50</span><span class="font-mono text-slate-500">#ffffff</span></div>
+          <div class="flex justify-between text-slate-400"><span>Slate 100</span><span class="font-mono">#f1f5f9</span></div>
+          <div class="flex justify-between text-slate-400"><span>Slate 200</span><span class="font-mono">#e2e8f0</span></div>
+          <div class="flex justify-between text-slate-400"><span>Slate 500</span><span class="font-mono">#64748b</span></div>
+          <div class="flex justify-between text-slate-400"><span>Role</span><span>bg · card · border · body</span></div>
+        </div>
+        <div class="mt-3 grid grid-cols-5 gap-1">
+          <div class="h-8 rounded-lg bg-white border border-slate-200"></div>
+          <div class="h-8 rounded-lg bg-slate-100"></div>
+          <div class="h-8 rounded-lg bg-slate-300"></div>
+          <div class="h-8 rounded-lg bg-slate-500"></div>
+          <div class="h-8 rounded-lg bg-slate-800"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Semantic usage table -->
+    <div class="sr mt-10 bg-white rounded-2xl border border-slate-100 shadow-soft overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-100">
+        <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Regras de Uso Contextual</div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-100 bg-slate-50">
+              <th class="text-left px-6 py-3 font-bold text-slate-700 text-xs">Contexto</th>
+              <th class="text-left px-6 py-3 font-bold text-slate-700 text-xs">Primary (Navy)</th>
+              <th class="text-left px-6 py-3 font-bold text-slate-700 text-xs">Accent (Teal)</th>
+              <th class="text-left px-6 py-3 font-bold text-slate-700 text-xs">Gold</th>
+              <th class="text-left px-6 py-3 font-bold text-slate-700 text-xs">Neutral</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-50">
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="px-6 py-3 font-mono text-[11px] text-slate-500">text</td>
+              <td class="px-6 py-3 text-xs">Headlines, labels fortes</td>
+              <td class="px-6 py-3 text-xs">Links, ativo</td>
+              <td class="px-6 py-3 text-xs">Tempo livre, estrelas</td>
+              <td class="px-6 py-3 text-xs">Body, descrições</td>
+            </tr>
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="px-6 py-3 font-mono text-[11px] text-slate-500">background</td>
+              <td class="px-6 py-3 text-xs">App header, navs dark</td>
+              <td class="px-6 py-3 text-xs">Chips, highlights</td>
+              <td class="px-6 py-3 text-xs">Badge premium</td>
+              <td class="px-6 py-3 text-xs">Superfícies, cards</td>
+            </tr>
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="px-6 py-3 font-mono text-[11px] text-slate-500">border</td>
+              <td class="px-6 py-3 text-xs">Input focus (navy sutil)</td>
+              <td class="px-6 py-3 text-xs">Selecionado, ativo</td>
+              <td class="px-6 py-3 text-xs">—</td>
+              <td class="px-6 py-3 text-xs">Cards, separadores</td>
+            </tr>
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="px-6 py-3 font-mono text-[11px] text-slate-500">hover</td>
+              <td class="px-6 py-3 text-xs">navy-900</td>
+              <td class="px-6 py-3 text-xs">teal-600</td>
+              <td class="px-6 py-3 text-xs">gold-600</td>
+              <td class="px-6 py-3 text-xs">slate-100</td>
+            </tr>
+            <tr class="hover:bg-slate-50 transition-colors">
+              <td class="px-6 py-3 font-mono text-[11px] text-slate-500">disabled</td>
+              <td class="px-6 py-3 text-xs" colspan="4">opacity-40 · cursor-not-allowed · pointer-events-none</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     04 · UI COMPONENTS
+════════════════════════════════════════════════════════════ -->
+<section id="components" class="ds-section bg-white">
+  <div class="container mx-auto px-5 lg:px-10 relative z-10">
+    <span class="ds-label sr">04 / UI Components</span>
+
+    <!-- ── 4.1 Buttons ── -->
+    <div class="mb-16 sr">
+      <h3 class="font-heading text-xl font-bold text-navy-950 mb-6 border-b border-slate-100 pb-3">Botões & Ações</h3>
+      <div class="flex flex-wrap gap-4 items-center">
+        <button class="btn-primary">
+          Planejar minha rota
+          <iconify-icon icon="solar:arrow-right-linear" class="text-teal-400 text-base"></iconify-icon>
+        </button>
+        <button class="btn-secondary">
+          <div class="w-6 h-6 rounded-full bg-teal-50 text-teal-600 flex items-center justify-center text-xs">
+            <iconify-icon icon="solar:play-bold"></iconify-icon>
+          </div>
+          Ver exemplo
+        </button>
+        <button class="btn-accent">
+          <iconify-icon icon="solar:map-point-bold" class="text-base"></iconify-icon>
+          Ver no Mapa
+        </button>
+        <button class="bg-white text-navy-950 border border-slate-200 px-5 py-2.5 rounded-full font-semibold text-sm hover:border-teal-400 hover:shadow-[0_0_0_3px_rgba(20,184,166,.1)] transition-all">
+          Cancelar
+        </button>
+        <button class="opacity-40 cursor-not-allowed bg-navy-950 text-white px-6 py-3 rounded-xl font-semibold text-sm" disabled>
+          Indisponível
+        </button>
+      </div>
+    </div>
+
+    <!-- ── 4.2 Inputs ── -->
+    <div class="mb-16 sr">
+      <h3 class="font-heading text-xl font-bold text-navy-950 mb-6 border-b border-slate-100 pb-3">Inputs & Seleção</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl">
+
+        <!-- Search input -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Destino</label>
+          <div class="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 transition-all">
+            <iconify-icon icon="solar:magnifer-linear" class="text-slate-400 text-lg shrink-0"></iconify-icon>
+            <input type="text" placeholder="Para onde quer ir?" class="w-full bg-transparent border-none outline-none text-sm text-navy-950 placeholder-slate-400 font-sans" />
+          </div>
+        </div>
+
+        <!-- Time input -->
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[10px] font-bold uppercase tracking-widest text-slate-400">Horário de Embarque</label>
+          <div class="bg-white border border-slate-200 rounded-xl p-3 flex items-center gap-3 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 transition-all">
+            <iconify-icon icon="solar:clock-circle-linear" class="text-slate-400 text-lg shrink-0"></iconify-icon>
+            <input type="time" value="14:30" class="w-full bg-transparent border-none outline-none text-sm text-navy-950 font-mono" />
+          </div>
+        </div>
+
+        <!-- Journey selector -->
+        <div class="md:col-span-2 space-y-2">
+          <label class="text-[10px] font-bold uppercase tracking-widest text-slate-400 block mb-3">Tipo de Jornada</label>
+          <button class="w-full text-left bg-white border-2 border-teal-500 rounded-2xl p-4 shadow-sm flex items-start gap-4 relative overflow-hidden group hover:shadow-md transition-all">
+            <div class="absolute top-0 right-0 w-16 h-16 bg-teal-50 rounded-bl-full -z-10 group-hover:scale-125 transition-transform duration-300"></div>
+            <div class="w-5 h-5 rounded-full border-[5px] border-teal-500 mt-0.5 shrink-0"></div>
+            <div>
+              <div class="font-semibold text-navy-950">Embarque em Fortaleza</div>
+              <div class="text-xs text-slate-500 mt-0.5">Vou pegar um voo saindo daqui.</div>
+            </div>
+          </button>
+          <button class="w-full text-left bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-start gap-4 hover:border-slate-300 hover:bg-slate-50 transition-all">
+            <div class="w-5 h-5 rounded-full border-2 border-slate-300 mt-0.5 shrink-0"></div>
+            <div>
+              <div class="font-semibold text-navy-950">Conexão em Fortaleza</div>
+              <div class="text-xs text-slate-500 mt-0.5">Estou de passagem para outro destino.</div>
+            </div>
+          </button>
+          <button class="w-full text-left bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-start gap-4 hover:border-slate-300 hover:bg-slate-50 transition-all">
+            <div class="w-5 h-5 rounded-full border-2 border-slate-300 mt-0.5 shrink-0"></div>
+            <div>
+              <div class="font-semibold text-navy-950">Chegada Final</div>
+              <div class="text-xs text-slate-500 mt-0.5">Desembarquei e quero sair do aeroporto.</div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 4.3 Cards ── -->
+    <div class="mb-16 sr">
+      <h3 class="font-heading text-xl font-bold text-navy-950 mb-6 border-b border-slate-100 pb-3">Cards</h3>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+
+        <!-- Metric card -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-soft hover:shadow-md transition-all group cursor-default">
+          <div class="flex justify-between items-start mb-4">
+            <div class="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <iconify-icon icon="solar:walking-round-bold-duotone" class="text-xl"></iconify-icon>
+            </div>
+            <span class="bg-slate-100 text-slate-500 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-widest">Normal</span>
+          </div>
+          <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Caminhada Estimada</div>
+          <div class="font-heading text-3xl font-bold text-navy-950">12<span class="text-base font-medium text-slate-400 ml-1">min</span></div>
+          <div class="mt-3 h-1 bg-slate-100 rounded-full overflow-hidden">
+            <div class="h-full bg-teal-400 rounded-full" style="width:35%"></div>
+          </div>
+        </div>
+
+        <!-- Free time card (gold accent) -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-soft hover:shadow-gold transition-all group cursor-default relative overflow-hidden">
+          <div class="absolute -right-6 -top-6 w-20 h-20 bg-gold-100/50 rounded-full blur-xl"></div>
+          <div class="flex justify-between items-start mb-4 relative z-10">
+            <div class="w-10 h-10 rounded-xl bg-gold-100 text-gold-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <iconify-icon icon="solar:clock-circle-bold-duotone" class="text-xl"></iconify-icon>
+            </div>
+            <span class="bg-gold-100 text-gold-700 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-widest">Premium</span>
+          </div>
+          <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1 relative z-10">Tempo Livre</div>
+          <div class="font-heading text-3xl font-bold text-navy-950 relative z-10">1h 45<span class="text-base font-medium text-slate-400 ml-1">min</span></div>
+        </div>
+
+        <!-- Status / Flight card (dark) -->
+        <div class="bg-navy-950 rounded-2xl p-5 shadow-lg relative overflow-hidden flex flex-col justify-between min-h-[140px]">
+          <div class="absolute -right-4 -top-4 w-24 h-24 bg-teal-400/10 rounded-full blur-2xl"></div>
+          <div class="flex items-center justify-between mb-3 relative z-10">
+            <span class="text-[9px] text-teal-400 uppercase tracking-widest font-bold">Voo LA3390</span>
+            <div class="flex gap-1">
+              <span class="w-1.5 h-1.5 rounded-full bg-teal-400 animate-ping"></span>
+              <span class="w-1.5 h-1.5 rounded-full bg-white/20"></span>
+            </div>
+          </div>
+          <div class="relative z-10">
+            <div class="font-heading text-xl font-bold text-white mb-1">Embarque às 14:30</div>
+            <p class="text-sm text-slate-400">Portão 12 · Terminal 2</p>
+          </div>
+        </div>
+
+        <!-- Store card -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-4 shadow-soft hover:shadow-md transition-all group cursor-pointer flex gap-4 items-center">
+          <div class="w-14 h-14 rounded-xl bg-orange-50 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
+            <iconify-icon icon="solar:cup-hot-bold-duotone" class="text-orange-500 text-2xl"></iconify-icon>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-bold text-navy-950 text-sm leading-tight">Delta Café</div>
+            <div class="text-xs text-slate-500 mt-0.5">Cafeteria · T2 Piso 1</div>
+            <div class="flex items-center gap-2 mt-1.5">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded">No Caminho</span>
+              <span class="text-[10px] text-slate-400 font-mono">+3 min</span>
+            </div>
+          </div>
+          <iconify-icon icon="solar:alt-arrow-right-linear" class="text-slate-300 text-lg shrink-0"></iconify-icon>
+        </div>
+
+        <!-- Route Preview card -->
+        <div class="bg-white rounded-2xl border border-slate-200 p-5 shadow-soft hover:shadow-md transition-all sm:col-span-2 lg:col-span-2">
+          <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-4 flex justify-between">
+            Route Preview Card
+            <span class="text-teal-500">Ativo</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="flex flex-col items-center">
+              <div class="w-3 h-3 rounded-full bg-navy-950"></div>
+              <div class="w-0.5 h-10 bg-gradient-to-b from-navy-950 to-teal-500 my-1 relative">
+                <div class="absolute inset-0 animate-pulse bg-gradient-to-b from-navy-950 to-teal-500"></div>
+              </div>
+              <div class="w-3 h-3 rounded-full border-2 border-teal-500 bg-white"></div>
+            </div>
+            <div class="flex-1">
+              <div class="text-sm font-semibold text-navy-950">Desembarque Internacional</div>
+              <div class="text-xs text-slate-400 mt-0.5 mb-4">Sua origem atual</div>
+              <div class="text-sm font-semibold text-teal-600">Portão 12 · Embarque</div>
+              <div class="text-xs text-slate-400 mt-0.5">Destino · 12 min de caminhada</div>
+            </div>
+            <div class="text-right">
+              <div class="font-mono font-bold text-2xl text-navy-950">12</div>
+              <div class="text-[10px] text-slate-400 uppercase tracking-wide">min</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 4.4 Badges & Chips ── -->
+    <div class="mb-16 sr">
+      <h3 class="font-heading text-xl font-bold text-navy-950 mb-6 border-b border-slate-100 pb-3">Badges & Status</h3>
+      <div class="flex flex-wrap gap-3 items-center">
+        <!-- Live badge -->
+        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-teal-50 border border-teal-100 text-teal-700 text-[10px] font-bold uppercase tracking-widest">
+          <span class="relative flex h-2 w-2">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-teal-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-2 w-2 bg-teal-500"></span>
+          </span>
+          Rota Ativa
+        </div>
+        <!-- Status -->
+        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gold-100 border border-gold-200 text-gold-700 text-[10px] font-bold uppercase tracking-widest">
+          <iconify-icon icon="solar:star-bold" class="text-gold-500 text-sm"></iconify-icon>
+          No Horário
+        </div>
+        <!-- Feature chip -->
+        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold uppercase tracking-widest hover:border-teal-400 hover:text-teal-700 hover:bg-teal-50 transition-all cursor-pointer">
+          <iconify-icon icon="solar:routing-3-linear" class="text-sm"></iconify-icon>
+          Embarque
+        </div>
+        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-500 text-white text-[10px] font-bold uppercase tracking-widest">
+          <iconify-icon icon="solar:check-circle-bold" class="text-sm"></iconify-icon>
+          Selecionado
+        </div>
+        <!-- Mono tag -->
+        <div class="font-mono text-[10px] text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded">
+          PORTÃO 12
+        </div>
+        <!-- Error -->
+        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-50 border border-red-100 text-red-600 text-[10px] font-bold uppercase tracking-widest">
+          <iconify-icon icon="solar:danger-triangle-bold" class="text-sm"></iconify-icon>
+          Atenção
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 4.5 Navbar ── -->
+    <div class="mb-16 sr">
+      <h3 class="font-heading text-xl font-bold text-navy-950 mb-6 border-b border-slate-100 pb-3">Navbar</h3>
+      <div class="glass rounded-2xl p-4 flex items-center justify-between border border-slate-200/60 shadow-soft max-w-2xl">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-navy-950 flex items-center justify-center">
+            <iconify-icon icon="solar:routing-3-bold-duotone" class="text-teal-400 text-sm"></iconify-icon>
+          </div>
+          <span class="font-heading font-bold text-navy-950">Sky<span class="text-teal-500">Gate</span></span>
+        </div>
+        <div class="hidden sm:flex gap-5 text-[11px] font-semibold uppercase tracking-widest text-slate-500">
+          <a href="#" class="hover:text-teal-600 transition-colors">Rota</a>
+          <a href="#" class="hover:text-teal-600 transition-colors">Mapa</a>
+          <a href="#" class="hover:text-teal-600 transition-colors">Ajuda</a>
+        </div>
+        <button class="btn-accent py-2 px-4 text-xs rounded-xl">
+          Começar
+        </button>
+      </div>
+    </div>
+
+    <!-- ── 4.6 Timeline / Stepper ── -->
+    <div class="mb-16 sr">
+      <h3 class="font-heading text-xl font-bold text-navy-950 mb-6 border-b border-slate-100 pb-3">Timeline · Stepper</h3>
+      <div class="max-w-xl">
+        <div class="flex items-center gap-0">
+          <!-- Step 1 done -->
+          <div class="flex flex-col items-center">
+            <div class="w-9 h-9 rounded-full bg-teal-500 text-white flex items-center justify-center shadow-glow text-sm">
+              <iconify-icon icon="solar:check-circle-bold"></iconify-icon>
+            </div>
+            <div class="text-[10px] font-bold text-teal-600 mt-1.5 whitespace-nowrap">Jornada</div>
+          </div>
+          <div class="step-line active mx-2"></div>
+          <!-- Step 2 active -->
+          <div class="flex flex-col items-center">
+            <div class="w-9 h-9 rounded-full border-2 border-teal-500 bg-white flex items-center justify-center text-teal-600 text-sm font-bold shadow-md">2</div>
+            <div class="text-[10px] font-bold text-teal-600 mt-1.5 whitespace-nowrap">Destino</div>
+          </div>
+          <div class="step-line mx-2"></div>
+          <!-- Step 3 -->
+          <div class="flex flex-col items-center">
+            <div class="w-9 h-9 rounded-full border-2 border-slate-200 bg-white flex items-center justify-center text-slate-400 text-sm font-bold">3</div>
+            <div class="text-[10px] font-bold text-slate-400 mt-1.5 whitespace-nowrap">Rota</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 4.7 Tooltip ── -->
+    <div class="mb-16 sr">
+      <h3 class="font-heading text-xl font-bold text-navy-950 mb-6 border-b border-slate-100 pb-3">Tooltip</h3>
+      <div class="flex gap-6 flex-wrap items-end">
+        <div class="tooltip-wrap">
+          <button class="btn-secondary text-sm">
+            <iconify-icon icon="solar:info-circle-linear" class="text-slate-400 text-base"></iconify-icon>
+            Hover aqui
+          </button>
+          <div class="tooltip-box">Tempo estimado com caminhada normal</div>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center cursor-pointer hover:bg-slate-200 transition-colors">
+            <iconify-icon icon="solar:question-circle-linear" class="text-slate-500 text-lg"></iconify-icon>
+          </div>
+          <div class="tooltip-box">Ajuda contextual aqui</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 4.8 Modal ── -->
+    <div class="mb-8 sr">
+      <h3 class="font-heading text-xl font-bold text-navy-950 mb-6 border-b border-slate-100 pb-3">Modal</h3>
+      <button onclick="document.getElementById('modal-demo').classList.add('open')" class="btn-primary">
+        Abrir Modal
+        <iconify-icon icon="solar:maximize-square-2-linear" class="text-teal-400 text-base"></iconify-icon>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- MODAL -->
+<div id="modal-demo" class="fixed inset-0 z-[200] bg-navy-950/50 backdrop-blur-sm items-center justify-center p-4" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 relative animate-fade-in">
+    <button onclick="document.getElementById('modal-demo').classList.remove('open')" class="absolute top-4 right-4 w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors">
+      <iconify-icon icon="solar:close-circle-linear" class="text-slate-500 text-lg"></iconify-icon>
+    </button>
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-10 h-10 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center">
+        <iconify-icon icon="solar:routing-3-bold-duotone" class="text-xl"></iconify-icon>
+      </div>
+      <div>
+        <h3 class="font-heading font-bold text-navy-950 text-lg">Confirmar Rota</h3>
+        <div class="text-xs text-slate-500">Desembarque Internacional → Portão 12</div>
+      </div>
+    </div>
+    <div class="bg-slate-50 rounded-2xl p-4 mb-5 grid grid-cols-2 gap-3">
+      <div class="text-center">
+        <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Caminhada</div>
+        <div class="font-heading font-bold text-xl text-navy-950">12 min</div>
+      </div>
+      <div class="text-center">
+        <div class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Tempo Livre</div>
+        <div class="font-heading font-bold text-xl text-teal-600">1h 45m</div>
+      </div>
+    </div>
+    <div class="flex gap-3">
+      <button onclick="document.getElementById('modal-demo').classList.remove('open')" class="btn-secondary flex-1 justify-center">Cancelar</button>
+      <button class="btn-primary flex-1 justify-center">Confirmar Rota</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     05 · ICONS
+════════════════════════════════════════════════════════════ -->
+<section id="icons" class="ds-section bg-slate-50">
+  <div class="container mx-auto px-5 lg:px-10 relative z-10">
+    <span class="ds-label sr">05 / Iconografia · Solar Icons</span>
+
+    <div class="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-4 sr">
+      <!-- Rota -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:routing-3-bold-duotone" class="text-3xl text-navy-950 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">rota</span>
+      </div>
+      <!-- Localização -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:map-point-bold-duotone" class="text-3xl text-navy-950 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">local</span>
+      </div>
+      <!-- Portão -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:plain-2-bold-duotone" class="text-3xl text-navy-950 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">portão</span>
+      </div>
+      <!-- Relógio -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:clock-circle-bold-duotone" class="text-3xl text-navy-950 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">tempo</span>
+      </div>
+      <!-- Tempo livre -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-gold-400 hover:shadow-gold transition-all group cursor-default">
+        <iconify-icon icon="solar:hourglass-bold-duotone" class="text-3xl text-gold-500 group-hover:text-gold-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">livre</span>
+      </div>
+      <!-- Café -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:cup-hot-bold-duotone" class="text-3xl text-navy-950 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">café</span>
+      </div>
+      <!-- Farmácia -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:pills-3-bold-duotone" class="text-3xl text-navy-950 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">farmácia</span>
+      </div>
+      <!-- Banheiro -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:bath-bold-duotone" class="text-3xl text-navy-950 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">banheiro</span>
+      </div>
+      <!-- Loja -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:shop-2-bold-duotone" class="text-3xl text-navy-950 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">loja</span>
+      </div>
+      <!-- Idioma -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:global-bold-duotone" class="text-3xl text-navy-950 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">idioma</span>
+      </div>
+      <!-- Ajuda -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:question-circle-bold-duotone" class="text-3xl text-navy-950 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">ajuda</span>
+      </div>
+      <!-- Alerta -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-red-300 transition-all group cursor-default">
+        <iconify-icon icon="solar:danger-triangle-bold-duotone" class="text-3xl text-red-400 group-hover:text-red-500 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">alerta</span>
+      </div>
+      <!-- Check -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:check-circle-bold-duotone" class="text-3xl text-teal-500 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">check</span>
+      </div>
+      <!-- Arrow right -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:arrow-right-bold-duotone" class="text-3xl text-navy-950 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">direção</span>
+      </div>
+      <!-- Walking -->
+      <div class="flex flex-col items-center p-4 bg-white rounded-xl border border-slate-100 shadow-sm hover:border-teal-400 hover:shadow-glow transition-all group cursor-default">
+        <iconify-icon icon="solar:walking-round-bold-duotone" class="text-3xl text-navy-950 group-hover:text-teal-600 transition-colors mb-2"></iconify-icon>
+        <span class="font-mono text-[9px] text-slate-400 text-center leading-tight">caminhada</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     06 · MOTION
+════════════════════════════════════════════════════════════ -->
+<section id="motion" class="ds-section bg-white border-b-0">
+  <div class="container mx-auto px-5 lg:px-10 relative z-10">
+    <span class="ds-label sr">06 / Motion & Interações</span>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+      <!-- reveal-up -->
+      <div class="sr bg-slate-50 rounded-2xl p-6 border border-slate-100">
+        <div class="text-xs font-bold text-slate-700 mb-3">Reveal Up</div>
+        <div class="bg-white rounded-xl p-4 overflow-hidden">
+          <div class="animate-reveal-up font-heading font-bold text-navy-950 text-lg">SkyGate</div>
+          <div class="text-[10px] font-mono text-slate-400 mt-2">clip-path · translateY · 0.9s cubic</div>
+        </div>
+      </div>
+
+      <!-- float -->
+      <div class="sr td-100 bg-slate-50 rounded-2xl p-6 border border-slate-100">
+        <div class="text-xs font-bold text-slate-700 mb-3">Float</div>
+        <div class="bg-white rounded-xl p-4 flex items-center justify-center h-24">
+          <div class="animate-float glass rounded-xl px-4 py-2 border border-white shadow-md text-sm font-semibold text-navy-950">
+            Status card
+          </div>
+        </div>
+        <div class="text-[10px] font-mono text-slate-400 mt-2">translateY 0→-10px · 6s ease-in-out</div>
+      </div>
+
+      <!-- beam -->
+      <div class="sr td-200 bg-slate-50 rounded-2xl p-6 border border-slate-100">
+        <div class="text-xs font-bold text-slate-700 mb-3">Beam</div>
+        <div class="bg-navy-950 rounded-xl h-24 relative overflow-hidden flex items-center justify-center">
+          <div class="beam-h" style="animation:beam-h 2.5s infinite; top:50%"></div>
+          <span class="text-white/30 font-mono text-xs">background beam</span>
+        </div>
+        <div class="text-[10px] font-mono text-slate-400 mt-2">gradient → sweep · 8s loop</div>
+      </div>
+
+      <!-- pulse glow -->
+      <div class="sr td-100 bg-slate-50 rounded-2xl p-6 border border-slate-100">
+        <div class="text-xs font-bold text-slate-700 mb-3">Pulse Glow</div>
+        <div class="bg-white rounded-xl p-4 flex items-center justify-center h-24">
+          <div class="w-16 h-16 rounded-full bg-teal-400/20 animate-pulse-glow flex items-center justify-center">
+            <div class="w-8 h-8 rounded-full bg-teal-500 shadow-glow"></div>
+          </div>
+        </div>
+        <div class="text-[10px] font-mono text-slate-400 mt-2">scale · opacity · 4s ease-in-out</div>
+      </div>
+
+      <!-- route dash -->
+      <div class="sr td-200 bg-slate-50 rounded-2xl p-6 border border-slate-100">
+        <div class="text-xs font-bold text-slate-700 mb-3">Route Dash</div>
+        <div class="bg-white rounded-xl p-4 flex items-center justify-center h-24">
+          <svg width="120" height="40" viewBox="0 0 120 40">
+            <line x1="10" y1="20" x2="110" y2="20" stroke="#e2e8f0" stroke-width="2"/>
+            <line x1="10" y1="20" x2="110" y2="20" stroke="#14b8a6" stroke-width="2" stroke-linecap="round" class="route-line"/>
+            <circle cx="10" cy="20" r="5" fill="#0a192f"/>
+            <circle cx="110" cy="20" r="5" fill="#14b8a6" class="animate-pulse-glow"/>
+          </svg>
+        </div>
+        <div class="text-[10px] font-mono text-slate-400 mt-2">strokeDashoffset · 1.2s linear loop</div>
+      </div>
+
+      <!-- bar grow -->
+      <div class="sr td-300 bg-slate-50 rounded-2xl p-6 border border-slate-100">
+        <div class="text-xs font-bold text-slate-700 mb-3">Progress / Bar</div>
+        <div class="bg-white rounded-xl p-4">
+          <div class="space-y-3">
+            <div>
+              <div class="flex justify-between text-[10px] text-slate-400 mb-1"><span>Caminhada</span><span>35%</span></div>
+              <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full bg-teal-400 rounded-full transition-all duration-1000" style="width:35%"></div>
+              </div>
+            </div>
+            <div>
+              <div class="flex justify-between text-[10px] text-slate-400 mb-1"><span>Tempo Livre</span><span>78%</span></div>
+              <div class="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div class="h-full bg-gold-400 rounded-full transition-all duration-1000" style="width:78%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="text-[10px] font-mono text-slate-400 mt-2">width 0→N% · 1s cubic-bezier</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════
+     FOOTER
+════════════════════════════════════════════════════════════ -->
+<footer class="py-12 bg-white text-center border-t border-slate-200">
+  <div class="flex items-center justify-center gap-2 mb-3">
+    <div class="w-7 h-7 rounded-lg bg-navy-950 flex items-center justify-center">
+      <iconify-icon icon="solar:routing-3-bold-duotone" class="text-teal-400 text-sm"></iconify-icon>
+    </div>
+    <span class="font-heading font-bold text-navy-950">Sky<span class="text-teal-500">Gate</span></span>
+  </div>
+  <p class="text-slate-400 text-xs font-light">Design System v2 · Aeroporto de Fortaleza · MVP</p>
+</footer>
+
+<!-- ═══════════════════════════════════════════════════════════
+     JS
+════════════════════════════════════════════════════════════ -->
+<script>
+  // Scroll reveal
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        io.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.sr').forEach(el => io.observe(el));
+
+  // Activate step line on scroll
+  const stepIO = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.querySelectorAll('.step-line').forEach(l => l.classList.add('active'));
+      }
+    });
+  }, { threshold: 0.5 });
+  document.querySelectorAll('.step-line').forEach(el => stepIO.observe(el.parentElement));
+
+  // Keyboard close modal
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.getElementById('modal-demo').classList.remove('open');
+  });
+</script>
+</body>
+</html>
