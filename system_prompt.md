@@ -1,416 +1,386 @@
-# TASK — Create the SkyGate User App Start Screen
+# TASK — Refine SkyGate Route Result Experience
 
-Create or update only the main `index.html` file.
+Update only `index.html`.
 
-This is NOT a landing page.
-This is NOT a marketing hero.
-This is the first functional screen of the SkyGate demo app that the user will actually use.
+The current SkyGate app screen is already visually good and functional.  
+Now refine the result experience after the user clicks `Calcular minha rota`.
 
-## Reference files
+The goal is to make the MVP feel more interactive, professional and closer to a real airport navigation app.
 
-Design system:
-`assets/design_system.html`
+This is NOT a landing page.  
+This is the functional user app screen.
 
-SkyGate logo:
-`assets/logo.jpeg`
+Use:
 
-Target file:
-`index.html`
-
----
-
-# Product context
-
-SkyGate is a mobile-first airport navigation web app.
-
-The user can use it before arriving at the airport or while already inside the terminal.
-
-The app helps the passenger:
-
-- choose the journey type;
-- choose where they are;
-- choose where they want to go;
-- enter boarding time when applicable;
-- calculate estimated walking time;
-- see free time before boarding;
-- discover shops, cafés, pharmacies, restrooms and services on the way.
-
-The main pain is reducing anxiety, confusion and fear of missing the flight.
+- `assets/design_system.html` as the visual reference
+- `assets/logo.jpeg` as the SkyGate logo
+- existing styles, colors, classes and animations whenever possible
 
 ---
 
-# Main goal
+# Current Problem
 
-Create a professional, premium, mobile-first app screen for a Fraport manager to test.
+After the user clicks `Calcular minha rota`, the app currently shows too much information at once:
 
-The screen must immediately show the actual route planning form.
+- route summary
+- map
+- step-by-step instructions
+- services list
 
-Do not create a big marketing headline.
-Do not create a landing page.
-Do not create sections like benefits, about, pricing, testimonials or dashboard.
+This makes the screen feel less interactive and a bit heavy.
 
-The screen should feel like:
+The result should feel more like a real app:
 
-> travel app + Google Maps + premium SaaS + mobile route planner
-
----
-
-# Mandatory rules
-
-- Follow `assets/design_system.html`.
-- Reuse existing CSS classes, tokens, animations and visual patterns whenever possible.
-- Use `assets/logo.jpeg` without distortion.
-- Create only the first app screen in `index.html`.
-- No login.
-- No account creation.
-- No dashboard.
-- No backend.
-- No extra landing page sections.
-- No institutional navbar.
-- Mobile is the priority.
-- Desktop must also look professional.
-- Keep the interface calm, clear, premium and trustworthy.
+- first show the route summary and map;
+- let the user interact with the map;
+- let the user open service details by tapping service icons;
+- let the user start the guide manually;
+- reveal step-by-step instructions only when needed.
 
 ---
 
-# Correct screen structure
+# Main UX Goal
 
-## 1. Compact app header
+Use progressive disclosure.
 
-Create a product-style header.
+After calculation, do NOT show everything at once.
 
-It must contain:
+Show the most important information first:
 
-- SkyGate logo on the left;
-- language selector on the right: `PT`;
-- small help icon `?`.
+1. route summary;
+2. visual map;
+3. services as clickable markers on the map;
+4. primary action: `Iniciar guia`.
 
-Do not include:
-
-- Home
-- Sobre
-- Preços
-- Blog
-- Login
-- Criar conta
+Then reveal extra details only after interaction.
 
 ---
 
-## 2. Small context area
+# Required Result Flow
 
-Use a small badge:
+## State 1 — Before calculation
 
-`Demo · Aeroporto de Fortaleza`
+Keep the current form:
 
-Use a short title:
+- journey type selector;
+- origin select;
+- destination select;
+- boarding time input;
+- button `Calcular minha rota`.
 
-`Planeje sua rota`
-
-Use short helper text:
-
-`Escolha sua jornada, origem, destino e horário de embarque.`
-
-This should be short and functional, not a big marketing hero.
+Do not show route result before the user clicks the button.
 
 ---
 
-## 3. Main route planner card
+## State 2 — After clicking `Calcular minha rota`
 
-This is the most important element on the screen.
+Show the result area with:
 
-Create a premium card with the route planning inputs.
+### 1. Route summary card
 
-### Journey type selector
+Show:
 
-Label:
+- `Rota calculada`
+- `Raio-X / Segurança → Portão 12`
+- `9 min até o portão`
+- `24 min livres`
+- `3 serviços no caminho`
+- status message:
+  `Você tem margem para uma parada rápida no caminho.`
 
-`Qual é sua jornada?`
-
-Options:
-
-- `Embarque`
-- `Conexão`
-- `Chegada final`
-
-Use large touch-friendly segmented cards/buttons.
-
-Default selected option:
-
-`Conexão`
+Keep this card compact.
 
 ---
 
-### Origin input
+### 2. Interactive schematic map
 
-Label:
+Show a visual schematic airport map.
 
-`Onde você está agora?`
+The map must not feel like a static image.
 
-Use a select/dropdown style input.
+It should include:
 
-Example options:
+- light airport floor background;
+- corridor shapes/grid;
+- animated teal/cyan route line;
+- origin marker;
+- destination marker;
+- service markers along the route:
+  - Café
+  - Farmácia
+  - Banheiro
+- soft glow on active route;
+- labels that are readable on mobile.
 
-- `Desembarque Internacional`
-- `Desembarque Doméstico`
-- `Check-in`
-- `Raio-X`
-- `Praça de Alimentação`
-- `Portão 6`
+Service markers must be clickable.
 
-Default value:
-
-`Desembarque Internacional`
-
----
-
-### Destination input
-
-Label:
-
-`Para onde você quer ir?`
-
-Use a select/dropdown style input.
-
-Example options:
-
-- `Portão 12`
-- `Bagagem`
-- `Saída`
-- `Banheiro`
-- `Café`
-- `Farmácia`
-
-Default value:
-
-`Portão 12`
+When the user taps/clicks a service marker, open a bottom sheet or floating detail card.
 
 ---
 
-### Boarding time input
+# Service Marker Interaction
 
-Label:
-
-`Horário de embarque`
-
-Input value:
-
-`14:30`
-
-Helper text:
-
-`Opcional para chegada final.`
-
----
-
-### Primary action
-
-Button text:
-
-`Calcular minha rota`
-
-This must be the main CTA.
-
-Button requirements:
-
-- full width on mobile;
-- minimum height 48px;
-- strong contrast;
-- easy to tap;
-- visually dominant.
-
-Use id:
-
-`id="calculate-route-btn"`
-
----
-
-## 4. Compact result preview card
-
-Below the form, show a compact preview/result card.
+When clicking `Café`, show a mobile-friendly bottom sheet/card:
 
 Title:
+`Café`
 
-`Prévia da rota`
+Content:
+`No caminho até o portão`
 
-Route:
+Extra info:
+`+1 min de desvio`
 
-`Desembarque Internacional → Portão 12`
+Description:
+`Boa opção se você tiver mais de 15 minutos livres.`
 
-Metrics:
-
-- `9 min` — até o portão
-- `24 min` — livres antes do embarque
-- `3` — serviços no caminho
-
-Services:
-
-`Café • Farmácia • Banheiro`
-
-Status message:
-
-`Você tem margem para uma parada rápida no caminho.`
-
-Add a small route visualization:
-
-- origin dot;
-- teal/cyan route line;
-- destination dot;
-- small gold direction detail.
+Button:
+`Adicionar parada`
 
 ---
 
-# Mobile layout
+When clicking `Farmácia`, show:
+
+Title:
+`Farmácia`
+
+Content:
+`No caminho até o portão`
+
+Extra info:
+`0 min de desvio`
+
+Description:
+`Útil para compras rápidas antes do embarque.`
+
+Button:
+`Adicionar parada`
+
+---
+
+When clicking `Banheiro`, show:
+
+Title:
+`Banheiro`
+
+Content:
+`No caminho até o portão`
+
+Extra info:
+`0 min de desvio`
+
+Description:
+`Localizado antes da chegada ao Portão 12.`
+
+Button:
+`Ver no mapa`
+
+---
+
+# Services List Behavior
+
+Do NOT show the full services list immediately as a big section.
+
+Instead:
+
+- show services primarily as clickable markers on the map;
+- optionally show a compact row of chips below the map:
+  - `Café`
+  - `Farmácia`
+  - `Banheiro`
+
+The detailed service card should appear only after clicking a marker or chip.
+
+---
+
+# Step-by-Step Behavior
+
+Do NOT show the full “Passo a passo” section immediately.
+
+Instead, show a button after the map:
+
+`Iniciar guia`
+
+When the user clicks `Iniciar guia`, reveal the step-by-step guide.
+
+The guide should work like a simulated navigation mode.
+
+Show one step at a time, not all steps at once.
+
+## Guide steps
+
+Step 1:
+
+Title:
+`Saia do raio-x / segurança`
+
+Description:
+`Siga pelo corredor principal.`
+
+Time:
+`1 min`
+
+---
+
+Step 2:
+
+Title:
+`Passe pela área de serviços`
+
+Description:
+`Café, farmácia e banheiro estão no caminho.`
+
+Time:
+`5 min`
+
+---
+
+Step 3:
+
+Title:
+`Continue até o Portão 12`
+
+Description:
+`Tempo estimado restante: 6 min.`
+
+Time:
+`6 min`
+
+---
+
+# Guide Interaction
+
+When the guide starts:
+
+Show:
+
+- current step number;
+- title;
+- description;
+- estimated time;
+- button `Próxima etapa`.
+
+When clicking `Próxima etapa`, advance to the next step.
+
+When the guide reaches the final step, show:
+
+`Você chegou próximo ao Portão 12.`
+
+Button:
+`Finalizar guia`
+
+This is a simulated guide because the MVP does not have real-time indoor location yet.
+
+Do not pretend there is live GPS tracking.
+
+---
+
+# Map Interaction
+
+The map should visually react when the guide step changes.
+
+For example:
+
+- highlight the current segment of the route;
+- slightly pulse the current marker;
+- keep the animation subtle.
+
+Do not make it look like a game.
+
+It should feel like a premium navigation interface.
+
+---
+
+# Mobile UX Rules
 
 Mobile is the priority.
 
-The mobile order must be:
+On mobile:
 
-1. compact header;
-2. badge;
-3. short title;
-4. helper text;
-5. route planner card;
-6. calculate route button;
-7. compact result preview card.
-
-The route planner card must appear immediately.
-The user should not feel like they are reading a landing page.
-
-Mobile UX rules:
-
-- large touch targets;
-- short labels;
+- route summary appears first after calculation;
+- map appears immediately after summary;
+- `Iniciar guia` button appears under the map;
+- bottom sheet must be easy to close;
+- service details must not cover the entire screen permanently;
+- buttons must be at least 48px high;
 - no horizontal overflow;
-- no tiny text;
-- enough spacing between inputs;
-- button above the preview card;
-- form visible early on the screen.
+- no tiny labels.
+
+The result should feel interactive but still calm.
 
 ---
 
-# Desktop layout
+# Desktop UX Rules
 
-Desktop can use two columns.
+On desktop:
 
-Left column:
+- form can stay on the left;
+- result/map can appear on the right;
+- bottom sheet can become a floating detail card;
+- guide can appear below or beside the map.
 
-- badge;
-- short title;
-- helper text;
-- route planner card.
-
-Right column:
-
-- compact result preview card;
-- route visualization;
-- small metrics.
-
-Do not make the left side a marketing section.
-The form is the main content.
+Keep the layout clean.
 
 ---
 
-# UX principles
+# Visual Direction
 
-Apply these UX principles:
+Keep the existing SkyGate visual identity:
 
-## Hick’s Law
-
-Do not overload the user with too many choices at once.
-
-Keep only:
-
-- journey type;
-- origin;
-- destination;
-- boarding time;
-- calculate button.
-
-## Fitts’s Law
-
-Make all important touch targets large and easy to tap.
-
-## Visual hierarchy
-
-The hierarchy must be:
-
-1. route planning form;
-2. calculate route button;
-3. route preview;
-4. supporting context.
-
-## Cognitive load reduction
-
-The interface must reduce anxiety.
-
-Avoid:
-
-- huge marketing headlines;
-- too much text;
-- too many icons;
-- excessive cards;
-- exaggerated animations;
-- visual clutter.
-
----
-
-# Visual direction
-
-Use the SkyGate identity:
-
-- deep navy for main text and primary button;
-- teal/cyan for route, active states and highlights;
-- soft gold only for positive details;
+- deep navy for primary text/buttons;
+- teal/cyan for route line, active states and service markers;
+- soft gold only for positive highlights and direction details;
 - white/off-white/light gray background;
 - rounded cards;
 - subtle shadows;
-- clean spacing;
-- premium but functional appearance.
+- premium but functional UI.
+
+Avoid:
+
+- excessive neon;
+- dark cyberpunk map;
+- fake 3D map that looks unrelated;
+- too much animation;
+- too many cards visible at once;
+- landing page sections.
 
 ---
 
-# Icons
+# JavaScript Requirements
 
-Use subtle icons for:
+Use vanilla JavaScript.
 
-- route;
-- location;
-- gate;
-- clock;
-- language;
-- help;
-- café;
-- pharmacy;
-- restroom.
+Required behaviors:
 
-Do not overuse icons.
-
----
-
-# Animations
-
-Use subtle, professional animations:
-
-- soft entrance animation;
-- card reveal;
-- premium button hover;
-- route line animation;
-- subtle glow on active route elements;
-- selected chip microinteraction.
-
-Avoid flashy animations.
+1. clicking `Calcular minha rota` shows the result section;
+2. result section scrolls into view smoothly;
+3. clicking service markers opens service detail bottom sheet/card;
+4. clicking close hides service detail;
+5. clicking `Iniciar guia` starts the simulated guide;
+6. clicking `Próxima etapa` advances guide steps;
+7. clicking `Finalizar guia` closes/resets guide state;
+8. selected journey type still updates active state;
+9. if journey is `Chegada final`, boarding time should look optional/less emphasized.
 
 ---
 
-# Expected result
+# Expected Final Experience
 
-The Fraport manager must instantly understand:
+The Fraport manager should be able to:
 
-1. this is the user app screen;
-2. the user chooses journey, origin, destination and boarding time;
-3. SkyGate calculates route, time, free time and useful services;
-4. the product looks professional and testable.
+1. fill the route form;
+2. click `Calcular minha rota`;
+3. see a clean route summary;
+4. see a visual interactive airport map;
+5. tap services on the route;
+6. open service details;
+7. start a simulated step-by-step guide;
+8. understand clearly how SkyGate would work in a real airport.
 
-Create only `index.html` with this first functional app screen.
-Follow `assets/design_system.html`.
-Use `assets/logo.jpeg`.
+The result should feel like a real MVP, not a static mockup.
+
+Edit only `index.html`.
+Do not create backend.
+Do not create login.
+Do not create dashboard.
+Do not create landing page sections.
