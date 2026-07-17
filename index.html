@@ -1,29 +1,21 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="description" content="SkyGate — Navegação indoor inteligente para o Aeroporto de Fortaleza." />
-  <meta name="theme-color" content="#0a192f" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description" content="SkyGate — Navegação indoor no Aeroporto Internacional de Fortaleza">
   <title>SkyGate — Navegação Indoor</title>
-
-  <link rel="icon" type="image/jpeg" href="assets/logo.jpeg" />
-
-  <!-- Google Fonts -->
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
-
-  <!-- Iconify -->
-  <script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
-
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
+  <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js" defer></script>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div id="app" aria-label="SkyGate — Navegação Indoor do Aeroporto de Fortaleza"></div>
+  <div id="app" role="main"></div>
+  <div id="nav-live" role="status" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+  <div id="floor-live" role="status" aria-live="polite" aria-atomic="true" class="sr-only"></div>
   <script type="module" src="app.js"></script>
 </body>
 </html>
