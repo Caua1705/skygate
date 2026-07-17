@@ -1,0 +1,1910 @@
+/**
+ * SkyGate — Frontend Controller
+ * Navegação indoor para o Aeroporto de Fortaleza.
+ *
+ * Organização:
+ *  1. Constants & Config
+ *  2. State
+ *  3. Data Normalization
+ *  4. Node & Floor Helpers
+ *  5. Search Helpers
+ *  6. SVG Map Rendering
+ *  7. Component: AppHeader
+ *  8. Component: FloorSwitcher
+ *  9. Component: BottomSheet / Planner
+ * 10. Component: LocationSearch
+ * 11. Component: RoutePreferences
+ * 12. Component: RouteSummary
+ * 13. Component: NavigationSteps
+ * 14. Component: LoadingState / ErrorState
+ * 15. Component: SearchOverlay
+ * 16. Main Render
+ * 17. Events
+ * 18. Init
+ */
+
+import { calculateRoute, getAirportMap, getAirports, SkyGateApiError } from './api.js';
+
+/* ============================================================
+   1. CONSTANTS & CONFIG
+   ============================================================ */
+
+const FORTALEZA_SLUG = 'fortaleza';
+const MAX_SEARCH_RESULTS = 40;
+const SEARCH_DEBOUNCE_MS = 200;
+
+/** Labels reais dos pisos do Aeroporto de Fortaleza */
+const FLOOR_LABELS = {
+  '0': 'Térreo',
+  '1': 'Piso 1',
+  '2': 'Piso 2',
+  '3': 'Piso 3',
+};
+
+/** Tipos de nó que são visíveis ao usuário como POI */
+const VISIBLE_POI_TYPES = new Set([
+  'gate', 'entrance', 'exit', 'checkin',
+  'restroom', 'restaurant', 'shop', 'lounge',
+  'pharmacy', 'atm', 'currency_exchange',
+  'medical', 'car_rental', 'transport_service',
+  'service', 'service_area',
+  'elevator', 'stairs', 'escalator',
+]);
+
+/** Tipos que NÃO são exibidos como POI (apenas usados para cálculo de rota) */
+const HIDDEN_INTERNAL_TYPES = new Set([
+  'corridor', 'waypoint', 'transition', 'junction',
+  'intersection', 'connection', 'bridge', 'link',
+]);
+
+/** Metadados visuais por tipo de nó */
+const NODE_TYPE_META = {
+  gate:              { label: 'Portão',            icon: 'solar:routing-2-bold',        color: '#1e3a5f', group: 'PORTÕES' },
+  entrance:          { label: 'Entrada',            icon: 'solar:door-bold',              color: '#1e3a5f', group: 'ACESSOS' },
+  exit:              { label: 'Saída',              icon: 'solar:exit-bold',              color: '#1e3a5f', group: 'ACESSOS' },
+  checkin:           { label: 'Check-in',           icon: 'solar:case-round-bold',        color: '#1e3a5f', group: 'SERVIÇOS' },
+  restroom:          { label: 'Sanitário',          icon: 'solar:bath-bold',              color: '#475569', group: 'SANITÁRIOS' },
+  restaurant:        { label: 'Alimentação',        icon: 'solar:cup-hot-bold',           color: '#0d9488', group: 'ALIMENTAÇÃO' },
+  shop:              { label: 'Loja',               icon: 'solar:bag-4-bold',             color: '#0d9488', group: 'LOJAS' },
+  lounge:            { label: 'Sala VIP',           icon: 'solar:sofa-bold',              color: '#0d9488', group: 'SERVIÇOS' },
+  pharmacy:          { label: 'Farmácia',           icon: 'solar:pills-3-bold',           color: '#16a34a', group: 'SERVIÇOS' },
+  atm:               { label: 'Caixa Eletrônico',  icon: 'solar:card-bold',              color: '#475569', group: 'SERVIÇOS' },
+  currency_exchange: { label: 'Câmbio',             icon: 'solar:dollar-minimalistic-bold', color: '#475569', group: 'SERVIÇOS' },
+  medical:           { label: 'Atend. Médico',     icon: 'solar:medical-kit-bold',       color: '#dc2626', group: 'SERVIÇOS' },
+  car_rental:        { label: 'Aluguel de Carros', icon: 'solar:wheel-bold',             color: '#475569', group: 'SERVIÇOS' },
+  transport_service: { label: 'Transporte',         icon: 'solar:bus-bold',               color: '#475569', group: 'SERVIÇOS' },
+  service:           { label: 'Serviço',            icon: 'solar:info-circle-bold',       color: '#475569', group: 'SERVIÇOS' },
+  service_area:      { label: 'Área de Serviços',  icon: 'solar:info-circle-bold',       color: '#475569', group: 'SERVIÇOS' },
+  elevator:          { label: 'Elevador',           icon: 'solar:sort-vertical-bold',     color: '#d97706', group: 'ACESSOS' },
+  stairs:            { label: 'Escada',             icon: 'solar:stairs-bold',            color: '#d97706', group: 'ACESSOS' },
+  escalator:         { label: 'Escada Rolante',     icon: 'solar:sort-vertical-bold',     color: '#d97706', group: 'ACESSOS' },
+};
+
+/* ============================================================
+   2. STATE
+   ============================================================ */
+
+const state = {
+  // Data
+  airport: null,
+  map: null,
+  floors: [],
+  nodes: [],
+
+  // UI
+  selectedFloorId: '',
+  loading: '', // 'airports' | 'map' | 'route' | ''
+  error: '',
+
+  // Route planning
+  originCode: '',
+  destinationCode: '',
+  routeMode: 'fastest', // 'fastest' | 'accessible'
+  route: null,
+
+  // Navigation mode (step-by-step)
+  navMode: false,
+  activeStepIndex: 0,
+
+  // Search
+  searchOpenFor: '', // 'origin' | 'destination' | ''
+  searchQuery: '',
+
+  // Map pan/zoom
+  mapTransform: { x: 0, y: 0, scale: 1 },
+};
+
+/* ============================================================
+   3. DATA NORMALIZATION
+   ============================================================ */
+
+function asArray(value) {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.items))    return value.items;
+  if (Array.isArray(value?.data))     return value.data;
+  if (Array.isArray(value?.airports)) return value.airports;
+  if (Array.isArray(value?.nodes))    return value.nodes;
+  return [];
+}
+
+function firstDefined(...values) {
+  return values.find(v => v !== undefined && v !== null && v !== '');
+}
+
+function normalizeMap(map) {
+  const rawNodes = asArray(map?.nodes ?? map?.points ?? map?.data?.nodes);
+
+  // Derive floor IDs from nodes
+  const floorIdsFromNodes = [...new Set(rawNodes.map(n => String(n?.floor ?? '')).filter(Boolean))].sort();
+
+  const nodes = rawNodes.map((raw, i) => {
+    const code    = String(firstDefined(raw?.node_code, raw?.code, raw?.id, `node-${i}`));
+    const floorId = String(firstDefined(raw?.floor, raw?.floor_id, raw?.level, '0'));
+    const type    = String(firstDefined(raw?.type, raw?.category, raw?.kind, 'waypoint')).toLowerCase();
+    const name    = firstDefined(raw?.display_name, raw?.name, raw?.label, raw?.title, code);
+
+    return {
+      code,
+      floorId,
+      type,
+      name,
+      searchText: normalizeSearchText(`${name} ${getNodeTypeMeta(type).label}`),
+      isPoiVisible: VISIBLE_POI_TYPES.has(type) && !HIDDEN_INTERNAL_TYPES.has(type),
+      x: Number(firstDefined(raw?.x, raw?.position_x, 0)),
+      y: Number(firstDefined(raw?.y, raw?.position_y, 0)),
+    };
+  });
+
+  // Build floors list
+  const floorIds = floorIdsFromNodes.length
+    ? floorIdsFromNodes
+    : [...new Set(nodes.map(n => n.floorId))].sort();
+
+  const floors = floorIds.map(id => ({
+    id,
+    name: FLOOR_LABELS[id] ?? `Piso ${id}`,
+  }));
+
+  return { floors, nodes };
+}
+
+function normalizeRoute(rawRoute) {
+  const rawFloorSegments = rawRoute?.floor_segments ?? rawRoute?.floorSegments;
+  const floorSegments = Array.isArray(rawFloorSegments)
+    ? rawFloorSegments.map(normalizeFloorSegment).filter(Boolean)
+    : [];
+
+  // Fallback: derive segments from path node codes if backend didn't send floor_segments
+  let segments = floorSegments;
+  if (!segments.length) {
+    const pathCodes = extractNodeCodes(rawRoute);
+    segments = buildSegmentsFromPath(pathCodes);
+  }
+
+  const steps = asArray(rawRoute?.steps ?? rawRoute?.instructions ?? rawRoute?.directions)
+    .map((s, i) => normalizeStep(s, i));
+
+  const estimatedMinutes = Number(
+    firstDefined(
+      rawRoute?.total_estimated_time_minutes,
+      rawRoute?.estimated_time_minutes,
+      0
+    )
+  );
+
+  const path = extractNodeCodes(rawRoute);
+
+  return {
+    raw: rawRoute,
+    estimatedMinutes: Number.isFinite(estimatedMinutes) ? estimatedMinutes : 0,
+    path,            // all node codes in order
+    floorSegments: segments,
+    steps,
+    servicesOnPath: asArray(rawRoute?.services_on_path ?? rawRoute?.servicesOnPath),
+    warnings: asArray(rawRoute?.warnings),
+  };
+}
+
+function normalizeFloorSegment(seg) {
+  if (!seg || typeof seg !== 'object') return null;
+
+  // Transition segment
+  if (seg.transition && typeof seg.transition === 'object') {
+    return {
+      type: 'transition',
+      transitionType: String(firstDefined(seg.transition.type, 'transition')),
+      fromFloor: String(firstDefined(seg.transition.from_floor, seg.transition.fromFloor, '')),
+      toFloor:   String(firstDefined(seg.transition.to_floor,   seg.transition.toFloor,   '')),
+    };
+  }
+
+  // Floor segment
+  const floorId = String(firstDefined(seg?.floor, seg?.floor_id, seg?.level, ''));
+  if (!floorId) return null;
+
+  return {
+    type: 'floor',
+    floorId,
+    nodeCodes: extractNodeCodes(seg),
+  };
+}
+
+function normalizeStep(step, index) {
+  if (typeof step === 'string') {
+    return { index, text: step, floorId: '', isTransition: false };
+  }
+  const text = firstDefined(step?.instruction, step?.text, step?.title, step?.description, 'Siga para o próximo ponto');
+  const floorId = String(firstDefined(step?.floor, step?.floor_id, step?.level, ''));
+  const isTransition = !!(step?.transition || step?.transition_type || /elev|escad|suba|desça/i.test(text));
+  return { index, text: String(text), floorId, isTransition };
+}
+
+function extractNodeCodes(source) {
+  const candidates = firstDefined(
+    source?.node_codes, source?.nodeCodes,
+    source?.path_node_codes, source?.pathNodeCodes,
+    source?.path, source?.nodes,
+    []
+  );
+  return asArray(candidates).map(item => {
+    if (typeof item === 'string' || typeof item === 'number') return String(item);
+    return String(firstDefined(item?.code, item?.node_code, ''));
+  }).filter(Boolean);
+}
+
+function buildSegmentsFromPath(nodeCodes) {
+  const groups = [];
+  nodeCodes.forEach(code => {
+    const node = findNode(code);
+    const floorId = node?.floorId ?? state.selectedFloorId;
+    const last = groups[groups.length - 1];
+    if (!last || last.floorId !== floorId) {
+      groups.push({ type: 'floor', floorId, nodeCodes: [] });
+    }
+    groups[groups.length - 1].nodeCodes.push(code);
+  });
+  return groups;
+}
+
+/* ============================================================
+   4. NODE & FLOOR HELPERS
+   ============================================================ */
+
+function findNode(code) {
+  return state.nodes.find(n => n.code === code) ?? null;
+}
+
+function getAirportSlug(airport) {
+  return firstDefined(airport?.slug, airport?.code, airport?.id, FORTALEZA_SLUG);
+}
+
+function getFloorLabel(floorId) {
+  if (!floorId && floorId !== 0) return 'Piso atual';
+  const id = String(floorId);
+  return FLOOR_LABELS[id] ?? state.floors.find(f => f.id === id)?.name ?? `Piso ${id}`;
+}
+
+function getNodeTypeMeta(type) {
+  return NODE_TYPE_META[String(type ?? '').toLowerCase()] ?? {
+    label: 'Ponto do aeroporto',
+    icon: 'solar:map-point-bold',
+    color: '#94a3b8',
+    group: 'OUTROS',
+  };
+}
+
+function normalizeSearchText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function formatMinutes(minutes) {
+  const val = Math.max(1, Math.round(Number(minutes) || 0));
+  return `${val}`;
+}
+
+function getModeLabel(mode) {
+  return mode === 'accessible' ? 'Acessível' : 'Mais rápida';
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+}
+
+/* ============================================================
+   5. SEARCH HELPERS
+   ============================================================ */
+
+function filterNodes(query, exceptCode = '') {
+  const term = normalizeSearchText(query);
+  return state.nodes
+    .filter(n => n.isPoiVisible)
+    .filter(n => n.code !== exceptCode)
+    .filter(n => !term || n.searchText.includes(term))
+    .slice(0, MAX_SEARCH_RESULTS);
+}
+
+/** Group results by category for display */
+function groupByCategory(nodes) {
+  const groups = new Map();
+  nodes.forEach(node => {
+    const meta = getNodeTypeMeta(node.type);
+    const group = meta.group ?? 'OUTROS';
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push(node);
+  });
+  return groups;
+}
+
+/* ============================================================
+   6. SVG MAP RENDERING
+   ============================================================ */
+
+const SVG_PAD = 32;
+
+/** Get bounding box of all nodes on a floor */
+function getFloorBounds(floorId) {
+  const floorNodes = state.nodes.filter(n => n.floorId === floorId);
+  if (!floorNodes.length) return { minX: 0, maxX: 100, minY: 0, maxY: 100 };
+  const xs = floorNodes.map(n => n.x);
+  const ys = floorNodes.map(n => n.y);
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+  };
+}
+
+/** Scale a node's coordinates to SVG viewport */
+function scaleNodeToSvg(node, bounds, svgW, svgH) {
+  const rangeX = bounds.maxX - bounds.minX || 1;
+  const rangeY = bounds.maxY - bounds.minY || 1;
+  return {
+    x: SVG_PAD + ((node.x - bounds.minX) / rangeX) * (svgW - SVG_PAD * 2),
+    y: SVG_PAD + ((node.y - bounds.minY) / rangeY) * (svgH - SVG_PAD * 2),
+  };
+}
+
+function getRouteCodesForFloor(floorId) {
+  const seg = state.route?.floorSegments?.find(s => s.type === 'floor' && s.floorId === floorId);
+  if (seg?.nodeCodes?.length) return seg.nodeCodes;
+  // fallback: filter the full path
+  return (state.route?.path ?? []).filter(code => findNode(code)?.floorId === floorId);
+}
+
+function renderSvgMap(floorId) {
+  const floorNodes = state.nodes.filter(n => n.floorId === floorId);
+  if (!floorNodes.length) {
+    return `<svg viewBox="0 0 400 280" class="sg-map-svg" aria-label="Mapa sem pontos neste piso"></svg>`;
+  }
+
+  const svgW = 400;
+  const svgH = 280;
+  const bounds = getFloorBounds(floorId);
+  const scale = n => scaleNodeToSvg(n, bounds, svgW, svgH);
+
+  const routeCodes = getRouteCodesForFloor(floorId);
+  const routeCodeSet = new Set(routeCodes);
+
+  const routePoints = routeCodes.map(code => {
+    const n = findNode(code);
+    if (!n || n.floorId !== floorId) return null;
+    return scale(n);
+  }).filter(Boolean);
+
+  // Active step node (navigation mode)
+  let activeStepNode = null;
+  if (state.navMode && state.route?.steps?.[state.activeStepIndex]) {
+    const step = state.route.steps[state.activeStepIndex];
+    // try to find node from step context
+    const stepCode = state.route?.path?.[state.activeStepIndex];
+    if (stepCode) activeStepNode = findNode(stepCode);
+  }
+
+  const polylinePath = routePoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+  // Separate POI nodes from internal corridor nodes for display
+  const poiNodes    = floorNodes.filter(n => n.isPoiVisible);
+  const internalNodes = floorNodes.filter(n => !n.isPoiVisible && routeCodeSet.has(n.code));
+
+  return `<svg
+    viewBox="0 0 ${svgW} ${svgH}"
+    class="sg-map-svg"
+    role="img"
+    aria-label="Mapa do ${getFloorLabel(floorId)} — Aeroporto de Fortaleza"
+    style="overflow: visible"
+  >
+    <defs>
+      <filter id="node-glow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="3" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="route-shadow" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="#0d9488" flood-opacity="0.5"/>
+      </filter>
+      <marker id="arrow-teal" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+        <circle cx="3" cy="3" r="2" fill="#14b8a6"/>
+      </marker>
+    </defs>
+
+    <!-- Map background -->
+    <rect width="${svgW}" height="${svgH}" rx="0" fill="#f0f4f8"/>
+
+    <!-- Floor zones (subtle visual areas) -->
+    ${renderFloorZones(floorId, svgW, svgH)}
+
+    <!-- Route shadow (glow) -->
+    ${polylinePath ? `
+      <polyline
+        points="${polylinePath}"
+        fill="none"
+        stroke="#0d9488"
+        stroke-width="10"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        opacity="0.12"
+      />
+    ` : ''}
+
+    <!-- Route line -->
+    ${polylinePath ? `
+      <polyline
+        points="${polylinePath}"
+        fill="none"
+        stroke="#e2e8f0"
+        stroke-width="5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      />
+      <polyline
+        points="${polylinePath}"
+        fill="none"
+        stroke="${state.routeMode === 'accessible' ? '#0d9488' : '#14b8a6'}"
+        stroke-width="3.5"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="sg-route-line"
+        filter="url(#route-shadow)"
+      />
+    ` : ''}
+
+    <!-- Internal route nodes (corridors/waypoints on route — small dots) -->
+    ${internalNodes.map(node => {
+      const p = scale(node);
+      return `<circle
+        cx="${p.x.toFixed(1)}"
+        cy="${p.y.toFixed(1)}"
+        r="2"
+        fill="#94a3b8"
+        opacity="0.5"
+      />`;
+    }).join('')}
+
+    <!-- POI Nodes -->
+    ${poiNodes.map(node => renderMapNode(node, scale, routeCodeSet)).join('')}
+
+    <!-- Origin marker -->
+    ${state.originCode ? (() => {
+      const origin = findNode(state.originCode);
+      if (!origin || origin.floorId !== floorId) return '';
+      const p = scale(origin);
+      return `
+        <g>
+          <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="14" fill="#0a192f" opacity="0.12"/>
+          <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="#0a192f" stroke="#ffffff" stroke-width="2.5"/>
+          <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#ffffff"/>
+          <text x="${p.x.toFixed(1)}" y="${(p.y + 24).toFixed(1)}" text-anchor="middle" font-size="9" fill="#0a192f" font-family="Inter,sans-serif" font-weight="800" paint-order="stroke" stroke="#f0f4f8" stroke-width="3">ORIGEM</text>
+        </g>`;
+    })() : ''}
+
+    <!-- Destination marker -->
+    ${state.destinationCode ? (() => {
+      const dest = findNode(state.destinationCode);
+      if (!dest || dest.floorId !== floorId) return '';
+      const p = scale(dest);
+      return `
+        <g>
+          <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="14" fill="#0d9488" opacity="0.15"/>
+          <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="#0d9488" stroke="#ffffff" stroke-width="2.5"/>
+          <text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" dy="0.35em" text-anchor="middle" font-size="9" fill="#ffffff" font-family="Inter,sans-serif" font-weight="800">★</text>
+          <text x="${p.x.toFixed(1)}" y="${(p.y + 24).toFixed(1)}" text-anchor="middle" font-size="9" fill="#0d9488" font-family="Inter,sans-serif" font-weight="800" paint-order="stroke" stroke="#f0f4f8" stroke-width="3">DESTINO</text>
+        </g>`;
+    })() : ''}
+  </svg>`;
+}
+
+function renderFloorZones(floorId, svgW, svgH) {
+  // Subtle visual regions to make the map feel like a real floorplan
+  const palette = [
+    'rgba(226,232,240,0.4)',
+    'rgba(203,213,225,0.3)',
+    'rgba(186,230,253,0.2)',
+  ];
+  const floorNodes = state.nodes.filter(n => n.floorId === floorId);
+  if (floorNodes.length < 3) return '';
+
+  // Calculate a few "zone" rectangles from node clusters
+  const bounds = getFloorBounds(floorId);
+  const scale = n => scaleNodeToSvg(n, bounds, svgW, svgH);
+
+  // Group nodes into rough zones by x quadrant
+  const zones = [];
+  const step = (bounds.maxX - bounds.minX) / 3 || 1;
+  for (let i = 0; i < 3; i++) {
+    const zoneNodes = floorNodes.filter(n => {
+      const nx = n.x - bounds.minX;
+      return nx >= i * step && nx < (i + 1) * step;
+    });
+    if (zoneNodes.length >= 2) {
+      const xs = zoneNodes.map(n => scale(n).x);
+      const ys = zoneNodes.map(n => scale(n).y);
+      const minX = Math.min(...xs) - 16;
+      const maxX = Math.max(...xs) + 16;
+      const minY = Math.min(...ys) - 16;
+      const maxY = Math.max(...ys) + 16;
+      zones.push({ minX, maxX, minY, maxY, color: palette[i % palette.length] });
+    }
+  }
+
+  return zones.map(z => `
+    <rect
+      x="${z.minX.toFixed(1)}" y="${z.minY.toFixed(1)}"
+      width="${(z.maxX - z.minX).toFixed(1)}"
+      height="${(z.maxY - z.minY).toFixed(1)}"
+      rx="12" fill="${z.color}"
+    />
+  `).join('');
+}
+
+function renderMapNode(node, scale, routeCodeSet) {
+  const p = scale(node);
+  const isOrigin = node.code === state.originCode;
+  const isDestination = node.code === state.destinationCode;
+  const onRoute = routeCodeSet.has(node.code);
+  const meta = getNodeTypeMeta(node.type);
+
+  // Don't render small markers for origin/destination (handled separately)
+  if (isOrigin || isDestination) return '';
+
+  const radius = onRoute ? 5 : 4;
+  const fill = onRoute ? meta.color : '#cbd5e1';
+  const stroke = onRoute ? '#ffffff' : '#e2e8f0';
+  const showLabel = onRoute || node.type === 'gate';
+
+  return `
+    <g class="sg-map-node" role="img" aria-label="${escapeHtml(node.name)}">
+      ${onRoute ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${radius + 4}" fill="${fill}" opacity="0.15"/>` : ''}
+      <circle
+        cx="${p.x.toFixed(1)}"
+        cy="${p.y.toFixed(1)}"
+        r="${radius}"
+        fill="${fill}"
+        stroke="${stroke}"
+        stroke-width="1.5"
+      />
+      ${showLabel ? `
+        <text
+          x="${p.x.toFixed(1)}"
+          y="${(p.y - radius - 4).toFixed(1)}"
+          text-anchor="middle"
+          font-size="7.5"
+          fill="${onRoute ? '#0a192f' : '#94a3b8'}"
+          font-family="Inter,sans-serif"
+          font-weight="700"
+          paint-order="stroke"
+          stroke="#f0f4f8"
+          stroke-width="2.5"
+        >${escapeHtml(node.name.length > 18 ? node.name.slice(0, 16) + '…' : node.name)}</text>
+      ` : ''}
+    </g>
+  `;
+}
+
+/* ============================================================
+   7. COMPONENT: AppHeader
+   ============================================================ */
+
+function renderHeader() {
+  const statusClass = state.error ? 'error'
+    : state.loading ? 'loading'
+    : 'ok';
+
+  const locationText = state.airport
+    ? (() => {
+        const city = state.airport?.city;
+        return city ? `Aeroporto de ${city}` : (state.airport?.name ?? 'Aeroporto de Fortaleza');
+      })()
+    : state.loading === 'airports' ? 'Carregando…'
+    : 'Aeroporto de Fortaleza';
+
+  return `
+    <header class="sg-header" role="banner">
+      <img src="assets/logo.jpeg" alt="SkyGate" class="sg-header__logo" />
+
+      <div class="sg-header__brand">
+        <p class="sg-header__name">SkyGate</p>
+        <p class="sg-header__location">
+          <span class="sg-header__status-dot sg-header__status-dot--${statusClass}" aria-hidden="true"></span>
+          <span class="truncate">${escapeHtml(locationText)}</span>
+        </p>
+      </div>
+
+      <div class="sg-header__actions">
+        <button
+          type="button"
+          class="sg-header__btn"
+          aria-label="Ajuda — Como usar o SkyGate"
+          id="help-btn"
+          title="Ajuda"
+        >
+          <iconify-icon icon="solar:question-circle-bold" aria-hidden="true"></iconify-icon>
+        </button>
+      </div>
+    </header>
+  `;
+}
+
+/* ============================================================
+   8. COMPONENT: FloorSwitcher
+   ============================================================ */
+
+function renderFloorSwitcher() {
+  if (state.floors.length <= 1) return '';
+
+  // Determine which floors are in the current route
+  const routeFloorIds = new Set(
+    (state.route?.floorSegments ?? [])
+      .filter(s => s.type === 'floor')
+      .map(s => s.floorId)
+  );
+
+  return `
+    <nav
+      class="sg-floor-switcher"
+      aria-label="Selecionar piso"
+      role="navigation"
+      id="floor-switcher"
+    >
+      ${state.floors.map(floor => {
+        const isActive = floor.id === state.selectedFloorId;
+        const hasRoute = routeFloorIds.has(floor.id);
+        const classes = ['sg-floor-btn', isActive ? 'is-active' : '', hasRoute && !isActive ? 'has-route' : ''].filter(Boolean).join(' ');
+
+        return `
+          <button
+            class="${classes}"
+            data-floor-id="${escapeHtml(floor.id)}"
+            aria-label="Ir para ${escapeHtml(floor.name)}"
+            aria-pressed="${isActive}"
+            id="floor-btn-${escapeHtml(floor.id)}"
+          >
+            ${escapeHtml(floor.name)}
+          </button>
+        `;
+      }).join('')}
+    </nav>
+  `;
+}
+
+/* ============================================================
+   9. COMPONENT: BottomSheet / Sidebar Content
+   ============================================================ */
+
+function renderSheetContent() {
+  // Show navigation steps if in nav mode
+  if (state.navMode && state.route) {
+    return renderNavigationMode();
+  }
+
+  // Show route summary if route is calculated
+  if (state.route) {
+    return renderRouteSummary();
+  }
+
+  // Default: planner form
+  return renderPlannerForm();
+}
+
+function renderSheet() {
+  const title = state.navMode
+    ? 'Navegação'
+    : state.route
+    ? 'Rota calculada'
+    : 'Planeje sua rota';
+
+  const showTitle = !state.navMode;
+
+  return `
+    <aside
+      class="sg-sheet"
+      aria-label="${state.navMode ? 'Navegação passo a passo' : 'Painel de planejamento'}"
+      id="main-sheet"
+      role="complementary"
+    >
+      <div class="sg-sheet__handle-area" id="sheet-handle" aria-hidden="true">
+        <div class="sg-sheet__handle"></div>
+      </div>
+
+      ${showTitle ? `
+        <div class="sg-sheet__header">
+          <h2 class="sg-sheet__title">${escapeHtml(title)}</h2>
+          ${state.route ? `
+            <button
+              type="button"
+              class="sg-action-btn sg-action-btn--secondary"
+              id="reset-route-btn"
+              aria-label="Recalcular ou mudar rota"
+              style="padding: 6px 12px; min-height: 36px; font-size: 12px;"
+            >
+              <iconify-icon icon="solar:restart-bold" aria-hidden="true"></iconify-icon>
+              Alterar
+            </button>
+          ` : ''}
+        </div>
+      ` : ''}
+
+      <div class="sg-sheet__content" id="sheet-content">
+        ${renderSheetContent()}
+      </div>
+    </aside>
+  `;
+}
+
+/* ============================================================
+   10. COMPONENT: LocationSearch (inputs)
+   ============================================================ */
+
+function renderPlannerForm() {
+  const originNode = findNode(state.originCode);
+  const destNode   = findNode(state.destinationCode);
+
+  return `
+    <div class="sg-planner" role="form" aria-label="Formulário de rota">
+
+      ${state.error ? `
+        <div class="sg-error-banner" role="alert" id="error-banner">
+          <iconify-icon icon="solar:danger-circle-bold" aria-hidden="true"></iconify-icon>
+          <span class="sg-error-banner__text">${escapeHtml(state.error)}</span>
+          <button type="button" class="sg-error-banner__dismiss" id="dismiss-error-btn" aria-label="Fechar erro">
+            <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
+          </button>
+        </div>
+      ` : ''}
+
+      <!-- Origin -->
+      <div class="sg-location-group">
+        <label id="origin-label" class="sg-location-label">
+          <iconify-icon icon="solar:map-point-bold" aria-hidden="true" style="font-size:12px;vertical-align:-1px;margin-right:3px;"></iconify-icon>
+          De onde você está?
+        </label>
+        <div class="sg-location-input ${originNode ? 'is-filled' : ''}" id="origin-input-container">
+          <span class="sg-location-input__icon" aria-hidden="true">
+            <iconify-icon icon="solar:map-point-bold"></iconify-icon>
+          </span>
+          <button
+            type="button"
+            class="sg-location-input__btn open-point-search"
+            data-kind="origin"
+            aria-labelledby="origin-label"
+            aria-haspopup="dialog"
+            aria-expanded="${state.searchOpenFor === 'origin'}"
+            id="origin-search-btn"
+          >
+            <span class="sg-location-input__text">
+              ${originNode ? escapeHtml(originNode.name) : 'Buscar local de partida…'}
+            </span>
+            ${originNode ? `<span class="sg-location-input__sub">${escapeHtml(getFloorLabel(originNode.floorId))}</span>` : ''}
+          </button>
+          ${originNode ? `
+            <button
+              type="button"
+              class="sg-location-input__clear clear-point"
+              data-kind="origin"
+              aria-label="Limpar origem"
+              id="clear-origin-btn"
+            >
+              <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
+            </button>
+          ` : ''}
+        </div>
+      </div>
+
+      <!-- Swap button -->
+      <div style="display:flex; justify-content:flex-end;">
+        <button
+          type="button"
+          class="sg-swap-btn"
+          id="swap-btn"
+          aria-label="Inverter origem e destino"
+          ${!state.originCode && !state.destinationCode ? 'disabled style="opacity:0.4;cursor:not-allowed;"' : ''}
+        >
+          <iconify-icon icon="solar:round-sort-vertical-bold" aria-hidden="true" style="font-size:14px;"></iconify-icon>
+          Inverter
+        </button>
+      </div>
+
+      <!-- Destination -->
+      <div class="sg-location-group">
+        <label id="dest-label" class="sg-location-label">
+          <iconify-icon icon="solar:routing-2-bold" aria-hidden="true" style="font-size:12px;vertical-align:-1px;margin-right:3px;"></iconify-icon>
+          Para onde deseja ir?
+        </label>
+        <div class="sg-location-input ${destNode ? 'is-filled' : ''}" id="dest-input-container">
+          <span class="sg-location-input__icon" aria-hidden="true">
+            <iconify-icon icon="solar:routing-2-bold"></iconify-icon>
+          </span>
+          <button
+            type="button"
+            class="sg-location-input__btn open-point-search"
+            data-kind="destination"
+            aria-labelledby="dest-label"
+            aria-haspopup="dialog"
+            aria-expanded="${state.searchOpenFor === 'destination'}"
+            id="destination-search-btn"
+          >
+            <span class="sg-location-input__text">
+              ${destNode ? escapeHtml(destNode.name) : 'Buscar destino…'}
+            </span>
+            ${destNode ? `<span class="sg-location-input__sub">${escapeHtml(getFloorLabel(destNode.floorId))}</span>` : ''}
+          </button>
+          ${destNode ? `
+            <button
+              type="button"
+              class="sg-location-input__clear clear-point"
+              data-kind="destination"
+              aria-label="Limpar destino"
+              id="clear-dest-btn"
+            >
+              <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
+            </button>
+          ` : ''}
+        </div>
+      </div>
+
+      ${renderRoutePreferences()}
+      ${renderCalculateButton()}
+    </div>
+  `;
+}
+
+/* ============================================================
+   11. COMPONENT: RoutePreferences
+   ============================================================ */
+
+function renderRoutePreferences() {
+  return `
+    <div class="sg-preferences">
+      <p class="sg-preferences__label">Tipo de rota</p>
+      <div class="sg-mode-grid" role="radiogroup" aria-label="Tipo de rota">
+        ${renderModeBtn('fastest',    'solar:bolt-bold',             'Mais rápida',  'Menor tempo de deslocamento')}
+        ${renderModeBtn('accessible', 'solar:accessibility-bold',    'Acessível',    'Elevadores, sem escadas')}
+      </div>
+    </div>
+  `;
+}
+
+function renderModeBtn(mode, icon, title, desc) {
+  const isActive = state.routeMode === mode;
+  return `
+    <button
+      type="button"
+      class="sg-mode-btn ${isActive ? 'is-active' : ''}"
+      data-mode="${mode}"
+      role="radio"
+      aria-checked="${isActive}"
+      id="mode-btn-${mode}"
+      aria-label="${title} — ${desc}"
+    >
+      <span class="sg-mode-btn__title">
+        <iconify-icon icon="${icon}" aria-hidden="true" style="font-size:14px;"></iconify-icon>
+        ${escapeHtml(title)}
+      </span>
+      <span class="sg-mode-btn__desc">${escapeHtml(desc)}</span>
+    </button>
+  `;
+}
+
+function renderCalculateButton() {
+  const isCalculating = state.loading === 'route';
+  const same    = state.originCode && state.originCode === state.destinationCode;
+  const missing = !state.originCode || !state.destinationCode;
+  const disabled = missing || same || !!state.loading;
+
+  const hint = same    ? 'Origem e destino devem ser diferentes.'
+    : missing && state.originCode  ? 'Selecione também o destino.'
+    : missing && state.destinationCode ? 'Selecione também a origem.'
+    : missing ? '' : '';
+
+  return `
+    <button
+      type="button"
+      class="sg-calc-btn"
+      id="calculate-route-btn"
+      ${disabled ? 'disabled' : ''}
+      aria-busy="${isCalculating}"
+      aria-disabled="${disabled}"
+      aria-label="${isCalculating ? 'Calculando rota…' : 'Calcular rota'}"
+    >
+      ${isCalculating
+        ? `<span class="sg-calc-btn__spinner" aria-hidden="true"></span> Calculando…`
+        : `<iconify-icon icon="solar:map-arrow-right-bold" aria-hidden="true" style="font-size:18px;"></iconify-icon> Calcular rota`
+      }
+    </button>
+    ${hint ? `<p class="sg-calc-hint ${same ? 'sg-calc-hint--error' : ''}" role="status">${escapeHtml(hint)}</p>` : ''}
+  `;
+}
+
+/* ============================================================
+   12. COMPONENT: RouteSummary
+   ============================================================ */
+
+function renderRouteSummary() {
+  const route = state.route;
+  if (!route) return '';
+
+  const destNode = findNode(state.destinationCode);
+  const originNode = findNode(state.originCode);
+  const timeStr  = formatMinutes(route.estimatedMinutes);
+
+  const floorIds = [...new Set(
+    route.floorSegments.filter(s => s.type === 'floor').map(s => s.floorId)
+  )];
+  const floorCount = floorIds.length || 1;
+  const transitionCount = route.floorSegments.filter(s => s.type === 'transition').length;
+
+  return `
+    <div class="sg-route-summary">
+
+      <!-- Hero row -->
+      <div class="sg-summary-hero">
+        <div>
+          ${destNode ? `<div style="font-size:13px;font-weight:700;color:var(--color-slate-400);margin-bottom:2px;">${escapeHtml(getFloorLabel(destNode.floorId))}</div>` : ''}
+          <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:22px;font-weight:800;color:var(--color-navy-950);letter-spacing:-0.02em;">${destNode ? escapeHtml(destNode.name) : 'Destino'}</div>
+        </div>
+        <span class="sg-mode-badge sg-mode-badge--${state.routeMode}">
+          <iconify-icon icon="${state.routeMode === 'accessible' ? 'solar:accessibility-bold' : 'solar:bolt-bold'}" aria-hidden="true" style="font-size:11px;"></iconify-icon>
+          ${getModeLabel(state.routeMode)}
+        </span>
+      </div>
+
+      <!-- Stats -->
+      <div class="sg-summary-stats">
+        <div class="sg-summary-stat">
+          <span class="sg-summary-stat__value">
+            <span style="font-size:32px;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;letter-spacing:-0.04em;color:var(--color-navy-950);">${timeStr}</span>
+            <span style="font-size:14px;font-weight:600;color:var(--color-slate-400);"> min</span>
+          </span>
+          <span class="sg-summary-stat__label">Tempo estimado</span>
+        </div>
+        <div style="width:1px;background:var(--color-slate-100);margin:4px 0;"></div>
+        <div class="sg-summary-stat">
+          <span class="sg-summary-stat__value">${floorCount}</span>
+          <span class="sg-summary-stat__label">${floorCount === 1 ? 'piso' : 'pisos'}</span>
+        </div>
+        ${transitionCount > 0 ? `
+          <div style="width:1px;background:var(--color-slate-100);margin:4px 0;"></div>
+          <div class="sg-summary-stat">
+            <span class="sg-summary-stat__value">${transitionCount}</span>
+            <span class="sg-summary-stat__label">${transitionCount === 1 ? 'mudança de piso' : 'mudanças de piso'}</span>
+          </div>
+        ` : ''}
+      </div>
+
+      <!-- Floor tags (clickable to switch map) -->
+      ${floorIds.length > 1 ? `
+        <div class="sg-floor-tags" aria-label="Pisos da rota">
+          ${floorIds.map(fid => `
+            <button
+              type="button"
+              class="sg-floor-tag ${fid === state.selectedFloorId ? 'is-active' : ''}"
+              data-floor-id="${escapeHtml(fid)}"
+              aria-label="Ver ${getFloorLabel(fid)} no mapa"
+              aria-pressed="${fid === state.selectedFloorId}"
+            >
+              <iconify-icon icon="solar:map-bold" aria-hidden="true" style="font-size:11px;"></iconify-icon>
+              ${escapeHtml(getFloorLabel(fid))}
+            </button>
+          `).join('')}
+        </div>
+      ` : ''}
+
+      <!-- Next step preview -->
+      ${route.steps[0] ? `
+        <div class="sg-next-step" aria-label="Primeiro passo da rota">
+          <div class="sg-next-step__num" aria-hidden="true">1</div>
+          <div class="sg-next-step__content">
+            <div class="sg-next-step__label">Próximo passo</div>
+            <div class="sg-next-step__text">${escapeHtml(route.steps[0].text)}</div>
+          </div>
+        </div>
+      ` : ''}
+
+      <!-- Action buttons -->
+      <div class="sg-summary-actions">
+        <button type="button" class="sg-action-btn sg-action-btn--primary" id="start-nav-btn" aria-label="Iniciar navegação passo a passo">
+          <iconify-icon icon="solar:play-bold" aria-hidden="true" style="font-size:15px;"></iconify-icon>
+          Iniciar navegação
+        </button>
+        <button type="button" class="sg-action-btn sg-action-btn--secondary" id="view-steps-btn" aria-label="Ver todos os passos da rota">
+          <iconify-icon icon="solar:list-check-bold" aria-hidden="true" style="font-size:14px;"></iconify-icon>
+          Ver etapas
+        </button>
+        <button type="button" class="sg-action-btn sg-action-btn--secondary" id="reset-route-inline-btn" aria-label="Alterar rota">
+          <iconify-icon icon="solar:restart-bold" aria-hidden="true" style="font-size:14px;"></iconify-icon>
+          Alterar
+        </button>
+      </div>
+
+      <!-- Steps list (collapsible) -->
+      <details id="steps-details" style="margin-top: 8px;">
+        <summary style="
+          list-style: none;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          min-height: 44px;
+          cursor: pointer;
+          font-size: 12px;
+          font-weight: 700;
+          color: var(--color-slate-500);
+          border-top: 1px solid var(--color-slate-100);
+          padding-top: 12px;
+          user-select: none;
+        ">
+          <span>Ver todos os ${route.steps.length} passos</span>
+          <iconify-icon icon="solar:alt-arrow-down-bold" style="font-size:14px; transition: transform 200ms;" aria-hidden="true"></iconify-icon>
+        </summary>
+        <div style="padding-top: 10px;">
+          ${renderAllSteps()}
+        </div>
+      </details>
+    </div>
+  `;
+}
+
+/* ============================================================
+   13. COMPONENT: NavigationSteps
+   ============================================================ */
+
+function renderNavigationMode() {
+  const route = state.route;
+  if (!route?.steps?.length) return '';
+
+  const totalSteps = route.steps.length;
+  const currentStep = route.steps[state.activeStepIndex];
+  const isFirst = state.activeStepIndex === 0;
+  const isLast  = state.activeStepIndex >= totalSteps - 1;
+
+  return `
+    <div class="sg-nav-steps" role="region" aria-label="Navegação passo a passo">
+
+      <!-- Current step display -->
+      <div class="sg-next-step" aria-live="polite" aria-atomic="true" aria-label="Instrução atual">
+        <div class="sg-next-step__num" aria-hidden="true">${state.activeStepIndex + 1}</div>
+        <div class="sg-next-step__content">
+          <div class="sg-next-step__label">Passo ${state.activeStepIndex + 1} de ${totalSteps}</div>
+          <div class="sg-next-step__text">${escapeHtml(currentStep.text)}</div>
+          ${currentStep.floorId ? `<div style="font-size:11px;color:var(--color-teal-400);margin-top:4px;font-weight:600;">${escapeHtml(getFloorLabel(currentStep.floorId))}</div>` : ''}
+        </div>
+      </div>
+
+      <!-- Controls -->
+      <div class="sg-nav-controls" role="group" aria-label="Controles de navegação">
+        <button
+          type="button"
+          class="sg-nav-ctrl"
+          id="prev-step-btn"
+          ${isFirst ? 'disabled' : ''}
+          aria-label="Passo anterior"
+          aria-disabled="${isFirst}"
+        >
+          <iconify-icon icon="solar:arrow-left-bold" aria-hidden="true" style="font-size:16px;"></iconify-icon>
+          Anterior
+        </button>
+        <button
+          type="button"
+          class="sg-nav-ctrl sg-nav-ctrl--next"
+          id="next-step-btn"
+          ${isLast ? 'disabled' : ''}
+          aria-label="${isLast ? 'Chegou ao destino' : 'Próximo passo'}"
+          aria-disabled="${isLast}"
+        >
+          ${isLast ? 'Chegou!' : 'Próximo'}
+          <iconify-icon icon="${isLast ? 'solar:check-circle-bold' : 'solar:arrow-right-bold'}" aria-hidden="true" style="font-size:16px;"></iconify-icon>
+        </button>
+      </div>
+
+      <!-- Mini steps list -->
+      <div style="margin-top: 16px;">
+        <p class="sg-section-label">Todos os passos</p>
+        <ol class="sg-steps-list" aria-label="Lista de passos">
+          ${route.steps.map((step, i) => {
+            const isDone   = i < state.activeStepIndex;
+            const isActive = i === state.activeStepIndex;
+            const classes  = ['sg-step', isActive ? 'is-active' : '', isDone ? 'is-done' : '', step.isTransition ? 'sg-step--transition' : ''].filter(Boolean).join(' ');
+            return `
+              <li class="${classes}" aria-current="${isActive ? 'step' : 'false'}">
+                <span class="sg-step__num" aria-hidden="true">
+                  ${isDone ? '<iconify-icon icon="solar:check-bold" style="font-size:11px;"></iconify-icon>' : i + 1}
+                </span>
+                <div class="sg-step__body">
+                  <span class="sg-step__text">${escapeHtml(step.text)}</span>
+                  ${step.floorId ? `<div class="sg-step__meta"><span class="sg-step__floor">${escapeHtml(getFloorLabel(step.floorId))}</span></div>` : ''}
+                </div>
+              </li>
+            `;
+          }).join('')}
+        </ol>
+      </div>
+
+      <!-- Exit nav mode -->
+      <button type="button" class="sg-recalc-btn" id="exit-nav-btn" aria-label="Sair da navegação e voltar ao resumo">
+        <iconify-icon icon="solar:arrow-left-bold" aria-hidden="true" style="font-size:13px;"></iconify-icon>
+        Voltar ao resumo
+      </button>
+    </div>
+  `;
+}
+
+function renderAllSteps() {
+  const steps = state.route?.steps ?? [];
+  if (!steps.length) return '<p style="font-size:13px;color:var(--color-slate-400);padding:8px 0;">Sem detalhes de passos disponíveis.</p>';
+
+  return `
+    <ol class="sg-steps-list" aria-label="Todos os passos da rota">
+      ${steps.map((step, i) => {
+        const classes = ['sg-step', step.isTransition ? 'sg-step--transition' : ''].filter(Boolean).join(' ');
+        return `
+          <li class="${classes}">
+            <span class="sg-step__num" aria-hidden="true">${i + 1}</span>
+            <div class="sg-step__body">
+              <span class="sg-step__text">${escapeHtml(step.text)}</span>
+              ${step.floorId ? `<div class="sg-step__meta"><span class="sg-step__floor">${escapeHtml(getFloorLabel(step.floorId))}</span></div>` : ''}
+            </div>
+          </li>
+        `;
+      }).join('')}
+    </ol>
+  `;
+}
+
+/* ============================================================
+   15. COMPONENT: SearchOverlay
+   ============================================================ */
+
+function renderSearchOverlay() {
+  const kind = state.searchOpenFor;
+  if (!kind) return '';
+
+  const isOrigin  = kind === 'origin';
+  const title     = isOrigin ? 'Selecionar origem' : 'Selecionar destino';
+  const placeholder = isOrigin ? 'Ex: Portão 18, banheiro, café…' : 'Ex: Portão 7, farmácia, câmbio…';
+  const exceptCode  = isOrigin ? state.destinationCode : state.originCode;
+
+  const results = filterNodes(state.searchQuery, exceptCode);
+  const grouped = groupByCategory(results);
+
+  return `
+    <div class="sg-search-overlay" id="search-overlay" role="dialog" aria-modal="true" aria-label="${title}">
+      <button
+        type="button"
+        class="sg-search-backdrop"
+        id="search-backdrop"
+        aria-label="Fechar busca"
+        tabindex="-1"
+      ></button>
+
+      <div class="sg-search-dialog" id="search-dialog">
+        <div class="sg-search-dialog__header">
+          <div class="sg-search-dialog__handle" aria-hidden="true"></div>
+
+          <div class="sg-search-dialog__top">
+            <h2 class="sg-search-dialog__title" id="search-dialog-title">${escapeHtml(title)}</h2>
+            <button type="button" class="sg-search-close" id="close-search-btn" aria-label="Fechar busca">
+              <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
+            </button>
+          </div>
+
+          <div class="sg-search-input-wrap">
+            <iconify-icon icon="solar:magnifer-linear" aria-hidden="true"></iconify-icon>
+            <input
+              type="search"
+              id="search-input"
+              class="sg-search-input"
+              placeholder="${escapeHtml(placeholder)}"
+              value="${escapeHtml(state.searchQuery)}"
+              autocomplete="off"
+              autocorrect="off"
+              spellcheck="false"
+              enterkeyhint="search"
+              aria-label="${escapeHtml(title)}"
+              aria-controls="search-results"
+              aria-autocomplete="list"
+              data-kind="${kind}"
+            />
+          </div>
+
+          ${renderQuickSuggestions(kind)}
+        </div>
+
+        <div id="search-results" class="sg-search-results" role="listbox" aria-label="Resultados da busca" aria-live="polite">
+          ${renderSearchResults(grouped, kind)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderQuickSuggestions(kind) {
+  const chips = kind === 'origin'
+    ? ['Entrada', 'Check-in', 'Elevador', 'Escadas']
+    : ['Portão', 'Banheiro', 'Alimentação', 'Farmácia', 'Câmbio', 'Elevador'];
+
+  return `
+    <div class="sg-quick-suggestions" aria-label="Sugestões rápidas">
+      ${chips.map(chip => `
+        <button
+          type="button"
+          class="sg-quick-chip"
+          data-kind="${kind}"
+          data-label="${escapeHtml(chip)}"
+          aria-label="Buscar por ${escapeHtml(chip)}"
+        >
+          ${escapeHtml(chip)}
+        </button>
+      `).join('')}
+    </div>
+  `;
+}
+
+function renderSearchResults(grouped, kind) {
+  if (!grouped.size) {
+    const isEmpty = !state.searchQuery;
+    return `
+      <div class="sg-search-empty" role="status">
+        <iconify-icon icon="${isEmpty ? 'solar:magnifer-linear' : 'solar:map-point-wave-linear'}" aria-hidden="true"></iconify-icon>
+        <p class="sg-search-empty__title">
+          ${isEmpty ? 'Digite para buscar' : 'Nenhum resultado'}
+        </p>
+        <p class="sg-search-empty__sub">
+          ${isEmpty
+            ? 'Ex: "Portão 18", "banheiro", "café", "farmácia"'
+            : 'Tente outro termo ou uma busca mais curta.'}
+        </p>
+      </div>
+    `;
+  }
+
+  return Array.from(grouped.entries()).map(([groupName, nodes]) => `
+    <div class="sg-results-group">
+      <p class="sg-results-group__label">${escapeHtml(groupName)}</p>
+      ${nodes.map(node => renderSearchResultItem(node, kind)).join('')}
+    </div>
+  `).join('');
+}
+
+function renderSearchResultItem(node, kind) {
+  const meta = getNodeTypeMeta(node.type);
+  return `
+    <button
+      type="button"
+      class="sg-result-item"
+      data-kind="${kind}"
+      data-code="${escapeHtml(node.code)}"
+      role="option"
+      aria-label="${escapeHtml(node.name)} — ${escapeHtml(getFloorLabel(node.floorId))}"
+      aria-selected="false"
+    >
+      <span class="sg-result-item__icon" aria-hidden="true" style="color: ${meta.color};">
+        <iconify-icon icon="${meta.icon}"></iconify-icon>
+      </span>
+      <span class="sg-result-item__body">
+        <span class="sg-result-item__name">${escapeHtml(node.name)}</span>
+        <span class="sg-result-item__meta">
+          <iconify-icon icon="solar:map-bold" style="font-size:10px;" aria-hidden="true"></iconify-icon>
+          ${escapeHtml(getFloorLabel(node.floorId))}
+        </span>
+      </span>
+      <iconify-icon icon="solar:alt-arrow-right-linear" class="sg-result-item__arrow" aria-hidden="true"></iconify-icon>
+    </button>
+  `;
+}
+
+/* ============================================================
+   16. MAIN RENDER
+   ============================================================ */
+
+const appRoot = document.getElementById('app');
+let searchDebounceTimer = null;
+
+function render() {
+  const hasError = !state.loading && state.error && !state.map;
+
+  appRoot.innerHTML = `
+    ${renderHeader()}
+
+    <div class="sg-body">
+      ${renderSheet()}
+
+      <!-- Map area -->
+      <div class="sg-map-area" id="map-area">
+
+        <!-- Loading overlay -->
+        ${state.loading === 'map' || state.loading === 'airports' ? `
+          <div class="sg-map-loading" role="status" aria-live="polite" aria-label="${state.loading === 'map' ? 'Carregando mapa…' : 'Carregando aeroporto…'}">
+            <div class="sg-map-loading__spinner" aria-hidden="true"></div>
+            <p class="sg-map-loading__text">${state.loading === 'map' ? 'Carregando mapa…' : 'Conectando ao aeroporto…'}</p>
+          </div>
+        ` : ''}
+
+        <!-- Error overlay -->
+        ${hasError ? `
+          <div class="sg-map-loading" role="alert">
+            <iconify-icon icon="solar:danger-circle-bold" style="font-size:40px;color:var(--color-red-600);margin-bottom:8px;" aria-hidden="true"></iconify-icon>
+            <p style="font-size:14px;font-weight:700;color:var(--color-navy-950);text-align:center;max-width:280px;">${escapeHtml(state.error)}</p>
+          </div>
+        ` : ''}
+
+        <!-- Map container -->
+        ${state.map && !hasError ? `
+          <div class="sg-map-container" id="map-container">
+            ${renderSvgMap(state.selectedFloorId)}
+          </div>
+        ` : ''}
+
+        <!-- Floor switcher -->
+        ${state.floors.length > 1 ? renderFloorSwitcher() : ''}
+
+        <!-- Zoom controls -->
+        ${state.map ? `
+          <div class="sg-zoom-controls" aria-label="Controles de zoom">
+            <button type="button" class="sg-zoom-btn" id="zoom-in-btn" aria-label="Aumentar zoom">
+              <iconify-icon icon="solar:add-square-bold" aria-hidden="true"></iconify-icon>
+            </button>
+            <button type="button" class="sg-zoom-btn" id="zoom-out-btn" aria-label="Diminuir zoom">
+              <iconify-icon icon="solar:minus-square-bold" aria-hidden="true"></iconify-icon>
+            </button>
+            <button type="button" class="sg-zoom-btn" id="zoom-reset-btn" aria-label="Resetar zoom" title="Resetar">
+              <iconify-icon icon="solar:full-screen-bold" aria-hidden="true"></iconify-icon>
+            </button>
+          </div>
+        ` : ''}
+
+        <!-- Route badge overlay (shows after route calculation) -->
+        ${state.route && !state.navMode ? `
+          <div class="sg-map-route-badge" aria-hidden="true">
+            <span class="sg-map-route-badge__time">${formatMinutes(state.route.estimatedMinutes)}</span>
+            <span class="sg-map-route-badge__unit">min</span>
+            <span class="sg-map-route-badge__sep"></span>
+            <span class="sg-map-route-badge__mode">${state.routeMode === 'accessible' ? 'Acessível' : 'Rápida'}</span>
+          </div>
+        ` : ''}
+      </div>
+    </div>
+
+    <!-- Search Overlay (portal-like, above everything) -->
+    ${renderSearchOverlay()}
+  `;
+
+  // Keep body scroll locked when search is open
+  document.body.style.overflow = state.searchOpenFor ? 'hidden' : '';
+
+  bindEvents();
+  applyMapTransform();
+}
+
+/* ============================================================
+   MAP PAN & ZOOM
+   ============================================================ */
+
+function applyMapTransform() {
+  const container = document.getElementById('map-container');
+  if (!container) return;
+  const { x, y, scale } = state.mapTransform;
+  const svgEl = container.querySelector('.sg-map-svg');
+  if (svgEl) {
+    svgEl.style.transform = `translate(${x}px, ${y}px) scale(${scale})`;
+    svgEl.style.transformOrigin = 'center center';
+    svgEl.style.transition = 'transform 100ms ease';
+  }
+}
+
+function zoomMap(delta, centerX = null, centerY = null) {
+  const MIN_SCALE = 0.5;
+  const MAX_SCALE = 5;
+  const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, state.mapTransform.scale + delta));
+  state.mapTransform = { ...state.mapTransform, scale: newScale };
+  applyMapTransform();
+}
+
+function resetMapTransform() {
+  state.mapTransform = { x: 0, y: 0, scale: 1 };
+  applyMapTransform();
+}
+
+/* ============================================================
+   17. EVENTS
+   ============================================================ */
+
+function bindEvents() {
+  // Floor switching
+  document.querySelectorAll('.sg-floor-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.selectedFloorId = btn.dataset.floorId;
+      state.mapTransform = { x: 0, y: 0, scale: 1 };
+      renderMapOnly();
+      updateFloorSwitcher();
+      updateMapBadge();
+    });
+  });
+
+  // Floor tags in summary
+  document.querySelectorAll('.sg-floor-tag').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.selectedFloorId = btn.dataset.floorId;
+      state.mapTransform = { x: 0, y: 0, scale: 1 };
+      renderMapOnly();
+      updateFloorSwitcher();
+    });
+  });
+
+  // Route mode toggle
+  document.querySelectorAll('.sg-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (state.routeMode === btn.dataset.mode) return;
+      state.routeMode = btn.dataset.mode;
+      state.route = null;
+      state.navMode = false;
+      render();
+    });
+  });
+
+  // Open search
+  document.querySelectorAll('.open-point-search').forEach(btn => {
+    btn.addEventListener('click', () => openSearch(btn.dataset.kind));
+  });
+
+  // Clear location
+  document.querySelectorAll('.clear-point').forEach(btn => {
+    btn.addEventListener('click', () => clearPoint(btn.dataset.kind));
+  });
+
+  // Swap origin/destination
+  document.getElementById('swap-btn')?.addEventListener('click', swapPoints);
+
+  // Calculate route
+  document.getElementById('calculate-route-btn')?.addEventListener('click', handleCalculate);
+
+  // Search overlay
+  const overlay = document.getElementById('search-overlay');
+  if (overlay) {
+    // Close on backdrop
+    document.getElementById('search-backdrop')?.addEventListener('click', closeSearch);
+    document.getElementById('close-search-btn')?.addEventListener('click', closeSearch);
+
+    // Search input
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', handleSearchInput);
+      // Auto-focus
+      requestAnimationFrame(() => searchInput.focus({ preventScroll: true }));
+    }
+
+    // Select result item
+    overlay.addEventListener('click', e => {
+      const item = e.target.closest('.sg-result-item');
+      if (item) {
+        selectPoint(item.dataset.kind, item.dataset.code);
+        return;
+      }
+      const chip = e.target.closest('.sg-quick-chip');
+      if (chip) {
+        state.searchQuery = chip.dataset.label;
+        updateSearchResults(chip.dataset.kind);
+        const input = document.getElementById('search-input');
+        if (input) { input.value = chip.dataset.label; input.focus(); }
+      }
+    });
+  }
+
+  // Route summary actions
+  document.getElementById('start-nav-btn')?.addEventListener('click', startNavigation);
+  document.getElementById('view-steps-btn')?.addEventListener('click', () => {
+    const details = document.getElementById('steps-details');
+    if (details) details.open = !details.open;
+  });
+  document.getElementById('reset-route-btn')?.addEventListener('click', resetRoute);
+  document.getElementById('reset-route-inline-btn')?.addEventListener('click', resetRoute);
+
+  // Navigation controls
+  document.getElementById('prev-step-btn')?.addEventListener('click', () => goToStep(state.activeStepIndex - 1));
+  document.getElementById('next-step-btn')?.addEventListener('click', () => goToStep(state.activeStepIndex + 1));
+  document.getElementById('exit-nav-btn')?.addEventListener('click', exitNavigation);
+
+  // Dismiss error
+  document.getElementById('dismiss-error-btn')?.addEventListener('click', () => {
+    state.error = '';
+    render();
+  });
+
+  // Zoom buttons
+  document.getElementById('zoom-in-btn')?.addEventListener('click', () => zoomMap(0.4));
+  document.getElementById('zoom-out-btn')?.addEventListener('click', () => zoomMap(-0.4));
+  document.getElementById('zoom-reset-btn')?.addEventListener('click', resetMapTransform);
+
+  // Map pan (mouse)
+  bindMapPan();
+
+  // Help button
+  document.getElementById('help-btn')?.addEventListener('click', showHelp);
+}
+
+// Keyboard: Escape to close search
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && state.searchOpenFor) {
+    e.preventDefault();
+    closeSearch();
+  }
+});
+
+/* Map pan with mouse drag */
+function bindMapPan() {
+  const container = document.getElementById('map-container');
+  if (!container) return;
+
+  let dragging = false;
+  let startX = 0, startY = 0;
+  let startTx = 0, startTy = 0;
+
+  // Mouse
+  container.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    dragging = true;
+    startX = e.clientX;
+    startY = e.clientY;
+    startTx = state.mapTransform.x;
+    startTy = state.mapTransform.y;
+    container.classList.add('is-panning');
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    state.mapTransform.x = startTx + (e.clientX - startX);
+    state.mapTransform.y = startTy + (e.clientY - startY);
+    applyMapTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    dragging = false;
+    container?.classList.remove('is-panning');
+  });
+
+  // Wheel zoom
+  container.addEventListener('wheel', e => {
+    e.preventDefault();
+    zoomMap(e.deltaY < 0 ? 0.2 : -0.2);
+  }, { passive: false });
+
+  // Touch pan
+  let lastTouchDist = null;
+  container.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      dragging = true;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      startTx = state.mapTransform.x;
+      startTy = state.mapTransform.y;
+    }
+    if (e.touches.length === 2) {
+      lastTouchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+    }
+  }, { passive: true });
+
+  container.addEventListener('touchmove', e => {
+    if (e.touches.length === 1 && dragging) {
+      state.mapTransform.x = startTx + (e.touches[0].clientX - startX);
+      state.mapTransform.y = startTy + (e.touches[0].clientY - startY);
+      applyMapTransform();
+    }
+    if (e.touches.length === 2 && lastTouchDist) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const delta = (dist - lastTouchDist) * 0.01;
+      zoomMap(delta);
+      lastTouchDist = dist;
+    }
+  }, { passive: true });
+
+  container.addEventListener('touchend', () => {
+    dragging = false;
+    lastTouchDist = null;
+  });
+}
+
+/* ============================================================
+   PARTIAL RENDERS (avoid full re-render for map updates)
+   ============================================================ */
+
+function renderMapOnly() {
+  const container = document.getElementById('map-container');
+  if (!container || !state.map) return;
+  container.innerHTML = renderSvgMap(state.selectedFloorId);
+  applyMapTransform();
+}
+
+function updateFloorSwitcher() {
+  const el = document.getElementById('floor-switcher');
+  if (!el) return;
+  el.outerHTML = renderFloorSwitcher();
+}
+
+function updateSearchResults(kind) {
+  const container = document.getElementById('search-results');
+  if (!container || state.searchOpenFor !== kind) return;
+  const exceptCode = kind === 'origin' ? state.destinationCode : state.originCode;
+  const results = filterNodes(state.searchQuery, exceptCode);
+  const grouped = groupByCategory(results);
+  container.innerHTML = renderSearchResults(grouped, kind);
+}
+
+function updateMapBadge() {
+  // handled by full render when route exists
+}
+
+/* ============================================================
+   ACTIONS
+   ============================================================ */
+
+function openSearch(kind) {
+  if (!['origin', 'destination'].includes(kind)) return;
+  clearTimeout(searchDebounceTimer);
+  state.searchOpenFor = kind;
+  state.searchQuery = '';
+  render();
+}
+
+function closeSearch() {
+  if (!state.searchOpenFor) return;
+  clearTimeout(searchDebounceTimer);
+  const prevKind = state.searchOpenFor;
+  state.searchOpenFor = '';
+  state.searchQuery = '';
+  render();
+  requestAnimationFrame(() => {
+    document.getElementById(`${prevKind}-search-btn`)?.focus({ preventScroll: true });
+  });
+}
+
+function handleSearchInput(e) {
+  const input = e.currentTarget;
+  const kind = input.dataset.kind;
+  if (kind !== state.searchOpenFor) return;
+
+  state.searchQuery = input.value;
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => updateSearchResults(kind), SEARCH_DEBOUNCE_MS);
+}
+
+function selectPoint(kind, code) {
+  const otherCode = kind === 'origin' ? state.destinationCode : state.originCode;
+  if (!code || code === otherCode) return;
+
+  if (kind === 'origin')      state.originCode = code;
+  if (kind === 'destination') state.destinationCode = code;
+
+  const node = findNode(code);
+  if (node) {
+    state.selectedFloorId = node.floorId;
+    state.mapTransform = { x: 0, y: 0, scale: 1 };
+  }
+
+  state.route = null;
+  state.navMode = false;
+  state.searchOpenFor = '';
+  state.searchQuery = '';
+  state.error = '';
+  clearTimeout(searchDebounceTimer);
+  render();
+}
+
+function clearPoint(kind) {
+  if (kind === 'origin')      state.originCode = '';
+  if (kind === 'destination') state.destinationCode = '';
+  state.route = null;
+  state.navMode = false;
+  state.error = '';
+  clearTimeout(searchDebounceTimer);
+  render();
+  requestAnimationFrame(() => {
+    document.getElementById(`${kind}-search-btn`)?.focus({ preventScroll: true });
+  });
+}
+
+function swapPoints() {
+  [state.originCode, state.destinationCode] = [state.destinationCode, state.originCode];
+  state.route = null;
+  state.navMode = false;
+  render();
+}
+
+function resetRoute() {
+  state.route = null;
+  state.navMode = false;
+  state.activeStepIndex = 0;
+  state.error = '';
+  render();
+}
+
+function startNavigation() {
+  if (!state.route?.steps?.length) return;
+  state.navMode = true;
+  state.activeStepIndex = 0;
+  goToStep(0);
+  render();
+}
+
+function exitNavigation() {
+  state.navMode = false;
+  state.activeStepIndex = 0;
+  render();
+}
+
+function goToStep(index) {
+  const steps = state.route?.steps ?? [];
+  if (index < 0 || index >= steps.length) return;
+
+  state.activeStepIndex = index;
+
+  // Auto-switch floor if the step has a floor
+  const step = steps[index];
+  if (step.floorId && step.floorId !== state.selectedFloorId) {
+    state.selectedFloorId = step.floorId;
+    state.mapTransform = { x: 0, y: 0, scale: 1 };
+  }
+
+  render();
+}
+
+function showHelp() {
+  // Non-blocking help message (no alert())
+  const existing = document.getElementById('help-toast');
+  if (existing) { existing.remove(); return; }
+
+  const toast = document.createElement('div');
+  toast.id = 'help-toast';
+  toast.setAttribute('role', 'status');
+  toast.setAttribute('aria-live', 'polite');
+  toast.style.cssText = `
+    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+    background: var(--color-navy-950); color: var(--color-white);
+    padding: 12px 20px; border-radius: 12px; font-size: 13px; font-weight: 600;
+    box-shadow: 0 8px 24px rgba(10,25,47,0.3); z-index: 100;
+    max-width: 320px; text-align: center; line-height: 1.5;
+  `;
+  toast.innerHTML = `
+    <strong>Como usar o SkyGate</strong><br>
+    1. Busque sua origem e destino<br>
+    2. Escolha o tipo de rota<br>
+    3. Toque em "Calcular rota"<br>
+    4. Inicie a navegação passo a passo
+  `;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 6000);
+}
+
+/* ============================================================
+   18. ROUTE CALCULATION
+   ============================================================ */
+
+async function handleCalculate() {
+  if (state.loading === 'route') return;
+  if (!state.originCode || !state.destinationCode) return;
+  if (state.originCode === state.destinationCode) return;
+
+  try {
+    state.loading = 'route';
+    state.error   = '';
+    state.route   = null;
+    state.navMode = false;
+    render();
+
+    const rawRoute = await calculateRoute({
+      airport_slug:     getAirportSlug(state.airport),
+      origin_code:      state.originCode,
+      destination_code: state.destinationCode,
+      route_mode:       state.routeMode,
+    });
+
+    const route = normalizeRoute(rawRoute);
+
+    // Validate
+    if (!route.path.length) {
+      throw Object.assign(new Error('Rota sem caminho.'), { kind: 'no_path' });
+    }
+    if (!route.steps.length && !route.floorSegments.length) {
+      throw Object.assign(new Error('Rota sem passos.'), { kind: 'no_steps' });
+    }
+
+    state.route = route;
+    state.activeStepIndex = 0;
+
+    // Auto-navigate to the first floor of the route
+    const firstFloor = route.floorSegments.find(s => s.type === 'floor')?.floorId
+      ?? findNode(state.originCode)?.floorId
+      ?? state.selectedFloorId;
+    state.selectedFloorId = firstFloor;
+    state.mapTransform = { x: 0, y: 0, scale: 1 };
+
+  } catch (err) {
+    console.error('[SkyGate] Route error:', err);
+    state.route   = null;
+    state.error   = getRouteErrorMessage(err);
+  } finally {
+    state.loading = '';
+    render();
+  }
+}
+
+function getRouteErrorMessage(err) {
+  if (err?.kind === 'no_path') return 'Não foi possível encontrar um caminho entre os pontos selecionados.';
+  if (err?.kind === 'no_steps') return 'Rota calculada, mas sem instruções disponíveis. Tente novamente.';
+
+  if (err instanceof SkyGateApiError) {
+    if (err.kind === 'network')  return 'Sem conexão com o servidor. Verifique sua internet e tente novamente.';
+    if (err.status === 404)      return 'Rota não encontrada para os pontos selecionados.';
+    if (err.status === 422)      return 'Não foi possível calcular a rota. Verifique origem e destino.';
+    if (err.status >= 500)       return 'Servidor temporariamente indisponível. Tente novamente em instantes.';
+  }
+
+  return 'Não foi possível calcular a rota. Tente selecionar outros pontos.';
+}
+
+/* ============================================================
+   INIT
+   ============================================================ */
+
+async function init() {
+  try {
+    state.loading = 'airports';
+    render();
+
+    const airports = asArray(await getAirports());
+    state.airport  = airports.find(a => (a.slug ?? a.code ?? '') === FORTALEZA_SLUG)
+      ?? airports.find(a => String(a.slug ?? '').toLowerCase().includes(FORTALEZA_SLUG))
+      ?? { slug: FORTALEZA_SLUG, name: 'Aeroporto Internacional de Fortaleza', city: 'Fortaleza' };
+
+    state.loading = 'map';
+    render();
+
+    const mapData = await getAirportMap(getAirportSlug(state.airport));
+    state.map = mapData;
+
+    const { floors, nodes } = normalizeMap(mapData);
+    state.floors  = floors;
+    state.nodes   = nodes;
+    state.selectedFloorId = floors[0]?.id ?? '0';
+    state.error = '';
+
+  } catch (err) {
+    console.error('[SkyGate] Init error:', err);
+    state.error = err instanceof SkyGateApiError && err.kind === 'network'
+      ? 'Sem conexão com o servidor. Verifique se o backend está rodando.'
+      : 'Não foi possível carregar os dados do aeroporto. Tente recarregar a página.';
+  } finally {
+    state.loading = '';
+    render();
+  }
+}
+
+init();

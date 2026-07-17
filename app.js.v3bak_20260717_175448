@@ -1,0 +1,1840 @@
+/**
+ * SkyGate — App Controller v2
+ *
+ * Key improvements over v1:
+ * - Compact floor control (popover) replaces 4-button strip
+ * - Per-floor pan/zoom state (no reset on switch)
+ * - SVG memoization — re-renders only when floor or route changes
+ * - Semantic step grouping (hides corridor/waypoint graph noise)
+ * - 3-state bottom sheet (collapsed / half / full)
+ * - Floating navigation instruction card in nav mode
+ * - "Return to route" control after manual floor exploration
+ * - Separated map state from form state for targeted re-renders
+ */
+
+import { calculateRoute, getAirportMap, getAirports, SkyGateApiError } from './api.js';
+
+/* ============================================================
+   1. CONSTANTS
+   ============================================================ */
+
+const FORTALEZA_SLUG   = 'fortaleza';
+const MAX_RESULTS      = 40;
+const DEBOUNCE_MS      = 200;
+const MIN_SCALE        = 0.4;
+const MAX_SCALE        = 6;
+
+const FLOOR_LABELS = { '0':'Térreo', '1':'Piso 1', '2':'Piso 2', '3':'Piso 3' };
+
+/** POI types shown to users */
+const POI_TYPES = new Set([
+  'gate','entrance','exit','checkin','restroom','restaurant','shop',
+  'lounge','pharmacy','atm','currency_exchange','medical',
+  'car_rental','transport_service','service','service_area',
+  'elevator','stairs','escalator',
+]);
+
+/** Internal graph types — never shown as POI labels */
+const INTERNAL_TYPES = new Set([
+  'corridor','waypoint','transition','junction',
+  'intersection','connection','bridge','link','node',
+]);
+
+const NODE_META = {
+  gate:              { label:'Portão',            icon:'solar:routing-2-bold',           color:'#1e3a5f', group:'PORTÕES'    },
+  entrance:          { label:'Entrada',            icon:'solar:door-bold',                color:'#1e3a5f', group:'ACESSOS'    },
+  exit:              { label:'Saída',              icon:'solar:exit-bold',                color:'#1e3a5f', group:'ACESSOS'    },
+  checkin:           { label:'Check-in',           icon:'solar:case-round-bold',          color:'#1e3a5f', group:'SERVIÇOS'   },
+  restroom:          { label:'Sanitário',          icon:'solar:bath-bold',                color:'#475569', group:'SANITÁRIOS' },
+  restaurant:        { label:'Alimentação',        icon:'solar:cup-hot-bold',             color:'#0d9488', group:'ALIMENTAÇÃO'},
+  shop:              { label:'Loja',               icon:'solar:bag-4-bold',               color:'#0d9488', group:'LOJAS'      },
+  lounge:            { label:'Sala VIP',           icon:'solar:sofa-bold',                color:'#0d9488', group:'SERVIÇOS'   },
+  pharmacy:          { label:'Farmácia',           icon:'solar:pills-3-bold',             color:'#16a34a', group:'SERVIÇOS'   },
+  atm:               { label:'Caixa Eletrônico',  icon:'solar:card-bold',                color:'#475569', group:'SERVIÇOS'   },
+  currency_exchange: { label:'Câmbio',             icon:'solar:dollar-minimalistic-bold', color:'#475569', group:'SERVIÇOS'   },
+  medical:           { label:'Atend. Médico',      icon:'solar:medical-kit-bold',         color:'#dc2626', group:'SERVIÇOS'   },
+  car_rental:        { label:'Aluguel de Carros',  icon:'solar:wheel-bold',               color:'#475569', group:'SERVIÇOS'   },
+  transport_service: { label:'Transporte',         icon:'solar:bus-bold',                 color:'#475569', group:'SERVIÇOS'   },
+  service:           { label:'Serviço',            icon:'solar:info-circle-bold',         color:'#475569', group:'SERVIÇOS'   },
+  service_area:      { label:'Área de Serviços',   icon:'solar:info-circle-bold',         color:'#475569', group:'SERVIÇOS'   },
+  elevator:          { label:'Elevador',           icon:'solar:sort-vertical-bold',       color:'#d97706', group:'ACESSOS'    },
+  stairs:            { label:'Escada',             icon:'solar:stairs-bold',              color:'#d97706', group:'ACESSOS'    },
+  escalator:         { label:'Escada Rolante',     icon:'solar:sort-vertical-bold',       color:'#d97706', group:'ACESSOS'    },
+};
+
+/* ============================================================
+   2. STATE — separated by concern
+   ============================================================ */
+
+/** Map state — changes cause only map re-render */
+const mapState = {
+  selectedFloorId: '',
+  /** Per-floor transform { x, y, scale } */
+  floorTransforms: {},
+  /** Cache: floorId → SVG string (memoized) */
+  svgCache: {},
+  /** floorId → bool: true if we last switched away from route floor manually */
+  manualFloor: false,
+};
+
+/** Route planning state */
+const planState = {
+  originCode: '',
+  destinationCode: '',
+  routeMode: 'fastest',
+};
+
+/** Navigation state */
+const navState = {
+  route: null,          // normalized route object
+  semanticSteps: [],    // grouped user-facing steps
+  activeStepIndex: 0,
+  navMode: false,
+  routeFloorIds: new Set(),
+};
+
+/** UI state */
+const uiState = {
+  loading: '',         // 'airports'|'map'|'route'|''
+  error: '',
+  searchOpenFor: '',   // 'origin'|'destination'|''
+  searchQuery: '',
+  sheetState: 'half',  // 'collapsed'|'half'|'full'|'nav'
+  floorMenuOpen: false,
+  stepsExpanded: false,
+};
+
+/** App data */
+const appData = {
+  airport: null,
+  floors: [],
+  nodes: [],
+};
+
+/* ============================================================
+   3. HELPERS
+   ============================================================ */
+
+function asArray(v) {
+  if (Array.isArray(v)) return v;
+  if (Array.isArray(v?.items))    return v.items;
+  if (Array.isArray(v?.data))     return v.data;
+  if (Array.isArray(v?.airports)) return v.airports;
+  if (Array.isArray(v?.nodes))    return v.nodes;
+  return [];
+}
+
+function first(...vals) {
+  return vals.find(v => v !== undefined && v !== null && v !== '');
+}
+
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+  ));
+}
+
+function norm(v) {
+  return String(v ?? '').normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+
+function fmtMin(m) { return String(Math.max(1, Math.round(Number(m)||0))); }
+
+function getFloorLabel(id) {
+  const s = String(id ?? '');
+  return FLOOR_LABELS[s] ?? appData.floors.find(f=>f.id===s)?.name ?? `Piso ${s}`;
+}
+
+function getNodeMeta(type) {
+  return NODE_META[String(type||'').toLowerCase()] ?? {
+    label:'Ponto', icon:'solar:map-point-bold', color:'#94a3b8', group:'OUTROS',
+  };
+}
+
+function getAirportSlug(a) {
+  return first(a?.slug, a?.code, a?.id, FORTALEZA_SLUG);
+}
+
+function findNode(code) {
+  return appData.nodes.find(n => n.code === code) ?? null;
+}
+
+function getModeLabel(m) {
+  return m === 'accessible' ? 'Acessível' : 'Mais rápida';
+}
+
+function getFloorTransform(floorId) {
+  return mapState.floorTransforms[floorId] ?? { x:0, y:0, scale:1 };
+}
+
+/* ============================================================
+   4. DATA NORMALIZATION
+   ============================================================ */
+
+function normalizeMap(raw) {
+  const rawNodes = asArray(raw?.nodes ?? raw?.points ?? raw?.data?.nodes);
+
+  const nodes = rawNodes.map((r, i) => {
+    const code   = String(first(r?.node_code, r?.code, r?.id, `n${i}`));
+    const floorId= String(first(r?.floor, r?.floor_id, r?.level, '0'));
+    const type   = String(first(r?.type, r?.category, r?.kind, 'waypoint')).toLowerCase();
+    const name   = first(r?.display_name, r?.name, r?.label, r?.title, code);
+    return {
+      code, floorId, type, name,
+      searchText: norm(`${name} ${getNodeMeta(type).label}`),
+      isPoi: POI_TYPES.has(type) && !INTERNAL_TYPES.has(type),
+      x: Number(first(r?.x, r?.position_x, 0)),
+      y: Number(first(r?.y, r?.position_y, 0)),
+    };
+  });
+
+  const floorIds = [...new Set(
+    rawNodes.map(n=>String(n?.floor??'')).filter(Boolean)
+  )].sort();
+
+  const floors = (floorIds.length ? floorIds
+    : [...new Set(nodes.map(n=>n.floorId))].sort()
+  ).map(id => ({ id, name: FLOOR_LABELS[id] ?? `Piso ${id}` }));
+
+  return { floors, nodes };
+}
+
+function normalizeRoute(raw) {
+  const rawSegs = raw?.floor_segments ?? raw?.floorSegments;
+  let segments = Array.isArray(rawSegs)
+    ? rawSegs.map(normalizeSeg).filter(Boolean)
+    : [];
+
+  const path = extractCodes(raw);
+  if (!segments.length && path.length) segments = buildSegments(path);
+
+  const rawSteps = asArray(raw?.steps ?? raw?.instructions ?? raw?.directions);
+  const steps = rawSteps.map((s, i) => normalizeStep(s, i));
+
+  const estimatedMinutes = Number(
+    first(raw?.total_estimated_time_minutes, raw?.estimated_time_minutes, 0)
+  );
+
+  return {
+    raw,
+    estimatedMinutes: Number.isFinite(estimatedMinutes) ? estimatedMinutes : 0,
+    path,
+    segments,
+    steps,
+    warnings: asArray(raw?.warnings),
+  };
+}
+
+function normalizeSeg(s) {
+  if (!s || typeof s !== 'object') return null;
+  if (s.transition && typeof s.transition === 'object') {
+    return {
+      type: 'transition',
+      transitionType: String(first(s.transition.type, 'transition')),
+      fromFloor: String(first(s.transition.from_floor, s.transition.fromFloor, '')),
+      toFloor:   String(first(s.transition.to_floor,   s.transition.toFloor,   '')),
+    };
+  }
+  const floorId = String(first(s?.floor, s?.floor_id, s?.level, ''));
+  if (!floorId) return null;
+  return { type:'floor', floorId, nodeCodes: extractCodes(s) };
+}
+
+function normalizeStep(step, index) {
+  if (typeof step === 'string') {
+    return { index, text:step, floorId:'', isTransition:false };
+  }
+  const text = String(first(step?.instruction, step?.text, step?.title, step?.description, 'Siga.'));
+  const floorId = String(first(step?.floor, step?.floor_id, step?.level, ''));
+  const isTransition = !!(step?.transition || step?.transition_type
+    || /elev|escad|suba|desc/i.test(text));
+  return { index, text, floorId, isTransition };
+}
+
+function extractCodes(src) {
+  const cands = first(
+    src?.node_codes, src?.nodeCodes,
+    src?.path_node_codes, src?.pathNodeCodes,
+    src?.path, src?.nodes, []
+  );
+  return asArray(cands).map(item => {
+    if (typeof item === 'string' || typeof item === 'number') return String(item);
+    return String(first(item?.code, item?.node_code, ''));
+  }).filter(Boolean);
+}
+
+function buildSegments(codes) {
+  const groups = [];
+  codes.forEach(code => {
+    const n = findNode(code);
+    const fid = n?.floorId ?? mapState.selectedFloorId;
+    const last = groups[groups.length-1];
+    if (!last || last.floorId !== fid)
+      groups.push({ type:'floor', floorId:fid, nodeCodes:[] });
+    groups[groups.length-1].nodeCodes.push(code);
+  });
+  return groups;
+}
+
+/* ============================================================
+   5. SEMANTIC STEP GROUPING
+   Collapses raw graph path steps into user-friendly instructions.
+   Rules:
+   - Corridor/waypoint/junction nodes → absorbed into directional text
+   - Floor transitions → explicit "Take [elevator/stairs] to [Floor]"
+   - Multiple consecutive same-type service nodes → collapsed
+   ============================================================ */
+
+function buildSemanticSteps(route) {
+  const { steps, segments, path } = route;
+  if (!steps.length && !path.length) return [];
+
+  // If backend steps are strings, try to group them semantically
+  const semantic = [];
+  let buf = [];
+
+  const flush = () => {
+    if (!buf.length) return;
+    const texts = buf.map(s => s.text).filter(Boolean);
+    if (!texts.length) { buf = []; return; }
+
+    // Check if this is a transition block
+    const isFloorChange = buf.some(s => s.isTransition);
+    if (isFloorChange) {
+      // Find transition info
+      const transText = buf.find(s => s.isTransition)?.text ?? 'Mude de piso';
+      const cleanTrans = cleanStepText(transText);
+      if (cleanTrans) semantic.push({ text:cleanTrans, isTransition:true, floorId:buf[buf.length-1]?.floorId });
+    } else {
+      // Merge same-floor walking instructions into one
+      const merged = mergeWalkingSteps(buf);
+      if (merged) semantic.push({ text:merged, isTransition:false, floorId:buf[0]?.floorId });
+    }
+    buf = [];
+  };
+
+  steps.forEach((step, i) => {
+    const isInternalNode = isGraphInternalStep(step.text);
+
+    if (step.isTransition) {
+      flush();
+      const text = cleanStepText(step.text);
+      if (text) semantic.push({ text, isTransition:true, floorId:step.floorId });
+      return;
+    }
+
+    if (isInternalNode) {
+      buf.push(step);
+      return;
+    }
+
+    // Named POI or gate reference → flush buffer, add named step
+    flush();
+    const text = cleanStepText(step.text);
+    if (text) semantic.push({ text, isTransition:false, floorId:step.floorId });
+  });
+
+  flush();
+
+  // Add destination arrival if missing
+  const destNode = findNode(planState.destinationCode);
+  if (destNode && semantic.length) {
+    const lastText = semantic[semantic.length-1]?.text ?? '';
+    if (!lastText.toLowerCase().includes(norm(destNode.name).slice(0, 6))) {
+      semantic.push({
+        text: `Chegue a ${destNode.name}.`,
+        isTransition: false,
+        floorId: destNode.floorId,
+      });
+    }
+  }
+
+  return semantic.length ? semantic : steps.map(s => ({
+    text: cleanStepText(s.text) || s.text,
+    isTransition: s.isTransition,
+    floorId: s.floorId,
+  }));
+}
+
+const INTERNAL_PATTERNS = [
+  /^v[aá] (at[eé] |para )?o (corredor|waypoint|transi[cç][aã]o|n[oó]|n[oó]do)/i,
+  /corredor\s+\w+/i,
+  /waypoint/i,
+  /transi[cç][aã]o\s+\d/i,
+  /n[oó]do\s+(interno|t[eé]cnico)/i,
+  /^siga\s+(pelo|para o)\s+(corredor|v[aá]o)/i,
+];
+
+function isGraphInternalStep(text) {
+  return INTERNAL_PATTERNS.some(re => re.test(text));
+}
+
+function cleanStepText(raw) {
+  if (!raw) return '';
+  // Remove internal node codes (snakecase patterns like p2_corredor_a)
+  let t = raw.replace(/\b[a-z][a-z0-9]*_[a-z0-9_]+\b/g, '').trim();
+  // Remove trailing punctuation artifacts
+  t = t.replace(/\s{2,}/g, ' ').replace(/^[,;\s]+|[,;\s]+$/g, '').trim();
+  // Capitalize
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+}
+
+function mergeWalkingSteps(steps) {
+  if (!steps.length) return '';
+  if (steps.length === 1) return cleanStepText(steps[0].text);
+
+  // Try to get a destination hint from last step
+  const last = cleanStepText(steps[steps.length-1].text);
+  const first_ = cleanStepText(steps[0].text);
+
+  // If first step mentions direction/area, prefer it
+  if (/embarque|desembarque|ala|pier|corredor principal/i.test(first_)) return first_;
+  if (/embarque|desembarque|ala|pier|corredor principal/i.test(last)) return last;
+  if (last && last !== first_) return last;
+  return first_;
+}
+
+/* ============================================================
+   6. SVG MAP — with memoization
+   ============================================================ */
+
+const SVG_PAD = 28;
+
+function getFloorBounds(floorId) {
+  const ns = appData.nodes.filter(n => n.floorId === floorId);
+  if (!ns.length) return { minX:0, maxX:100, minY:0, maxY:100 };
+  const xs = ns.map(n=>n.x), ys = ns.map(n=>n.y);
+  return { minX:Math.min(...xs), maxX:Math.max(...xs), minY:Math.min(...ys), maxY:Math.max(...ys) };
+}
+
+function nodeToSvg(node, bounds, W, H) {
+  const rx = bounds.maxX - bounds.minX || 1;
+  const ry = bounds.maxY - bounds.minY || 1;
+  return {
+    x: SVG_PAD + ((node.x - bounds.minX) / rx) * (W - SVG_PAD*2),
+    y: SVG_PAD + ((node.y - bounds.minY) / ry) * (H - SVG_PAD*2),
+  };
+}
+
+function getRouteCodesForFloor(floorId) {
+  const seg = navState.route?.segments?.find(s => s.type==='floor' && s.floorId===floorId);
+  if (seg?.nodeCodes?.length) return seg.nodeCodes;
+  return (navState.route?.path ?? []).filter(c => findNode(c)?.floorId === floorId);
+}
+
+/** Build cache key — changes when floor data or route changes */
+function svgCacheKey(floorId) {
+  const routeHash = navState.route ? `${planState.originCode}|${planState.destinationCode}|${planState.routeMode}` : '';
+  const activeStep = navState.navMode ? navState.activeStepIndex : -1;
+  return `${floorId}::${routeHash}::${activeStep}`;
+}
+
+function buildFloorSvg(floorId) {
+  const W = 400, H = 280;
+  const floorNodes = appData.nodes.filter(n => n.floorId === floorId);
+  if (!floorNodes.length) {
+    return `<svg viewBox="0 0 ${W} ${H}" class="sg-map-svg" role="img" aria-label="Sem pontos neste piso"></svg>`;
+  }
+
+  const bounds   = getFloorBounds(floorId);
+  const toSvg    = n => nodeToSvg(n, bounds, W, H);
+  const routeCodes   = getRouteCodesForFloor(floorId);
+  const routeSet     = new Set(routeCodes);
+  const routePoints  = routeCodes.map(c => {
+    const n = findNode(c);
+    return (n && n.floorId === floorId) ? toSvg(n) : null;
+  }).filter(Boolean);
+
+  const polyline = routePoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const poiNodes     = floorNodes.filter(n => n.isPoi);
+  const internalOnRoute = floorNodes.filter(n => !n.isPoi && routeSet.has(n.code));
+
+  // Origin / destination on this floor
+  const originNode = planState.originCode ? findNode(planState.originCode) : null;
+  const destNode   = planState.destinationCode ? findNode(planState.destinationCode) : null;
+  const showOrigin = originNode?.floorId === floorId;
+  const showDest   = destNode?.floorId === floorId;
+
+  // Route mode colors
+  const routeColor = planState.routeMode === 'accessible' ? '#0d9488' : '#14b8a6';
+
+  // Active step highlight in nav mode
+  let activeCode = null;
+  if (navState.navMode && navState.route) {
+    const stepIdx = navState.activeStepIndex;
+    activeCode = navState.route.path?.[stepIdx] ?? null;
+  }
+
+  return `<svg
+    viewBox="0 0 ${W} ${H}"
+    class="sg-map-svg"
+    role="img"
+    aria-label="Mapa: ${esc(getFloorLabel(floorId))}"
+    style="overflow:visible"
+  >
+    <defs>
+      <filter id="fg${floorId}" x="-30%" y="-30%" width="160%" height="160%">
+        <feGaussianBlur stdDeviation="2" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+
+    <!-- Map background -->
+    <rect width="${W}" height="${H}" fill="#1a2a3d"/>
+
+    <!-- Zone backgrounds from node clusters -->
+    ${buildZones(floorId, toSvg, bounds, W, H)}
+
+    <!-- Internal walkable corridor guides -->
+    ${internalOnRoute.map(n => {
+      const p = toSvg(n);
+      return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="1.5" fill="rgba(255,255,255,0.15)"/>`;
+    }).join('')}
+
+    <!-- Route background glow -->
+    ${polyline ? `<polyline points="${polyline}" fill="none" stroke="${routeColor}" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" opacity="0.15"/>` : ''}
+
+    <!-- Route track (shadow) -->
+    ${polyline ? `<polyline points="${polyline}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
+
+    <!-- Route animated line -->
+    ${polyline ? `<polyline points="${polyline}" fill="none" stroke="${routeColor}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="sg-route-line"/>` : ''}
+
+    <!-- POI nodes -->
+    ${poiNodes.map(n => renderPoiNode(n, toSvg, routeSet, activeCode)).join('')}
+
+    <!-- Origin marker -->
+    ${showOrigin ? (() => {
+      const p = toSvg(originNode);
+      return `<g aria-label="Origem: ${esc(originNode.name)}">
+        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="12" fill="#0a192f" opacity="0.2"/>
+        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="8" fill="#0a192f" stroke="#fff" stroke-width="2.5"/>
+        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="#fff"/>
+        <text x="${p.x.toFixed(1)}" y="${(p.y+22).toFixed(1)}" text-anchor="middle" font-size="8" fill="#fff" font-family="Inter,sans-serif" font-weight="800" paint-order="stroke" stroke="#1a2a3d" stroke-width="3">ORIGEM</text>
+      </g>`;
+    })() : ''}
+
+    <!-- Destination marker -->
+    ${showDest ? (() => {
+      const p = toSvg(destNode);
+      return `<g aria-label="Destino: ${esc(destNode.name)}">
+        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="13" fill="${routeColor}" opacity="0.2"/>
+        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="9" fill="${routeColor}" stroke="#fff" stroke-width="2.5"/>
+        <text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" dy="0.37em" text-anchor="middle" font-size="9" fill="#fff" font-family="Inter,sans-serif" font-weight="800">★</text>
+        <text x="${p.x.toFixed(1)}" y="${(p.y+23).toFixed(1)}" text-anchor="middle" font-size="8" fill="${routeColor}" font-family="Inter,sans-serif" font-weight="800" paint-order="stroke" stroke="#1a2a3d" stroke-width="3">DESTINO</text>
+      </g>`;
+    })() : ''}
+  </svg>`;
+}
+
+function buildZones(floorId, toSvg, bounds, W, H) {
+  const ns = appData.nodes.filter(n => n.floorId === floorId);
+  if (ns.length < 4) return '';
+  const step = (bounds.maxX - bounds.minX) / 3 || 1;
+  const zones = [];
+  for (let i = 0; i < 3; i++) {
+    const zns = ns.filter(n => {
+      const nx = n.x - bounds.minX;
+      return nx >= i*step && nx < (i+1)*step;
+    });
+    if (zns.length < 2) continue;
+    const pts = zns.map(toSvg);
+    const xs = pts.map(p=>p.x), ys = pts.map(p=>p.y);
+    zones.push({
+      x: Math.min(...xs)-14, y: Math.min(...ys)-14,
+      w: Math.max(...xs)-Math.min(...xs)+28,
+      h: Math.max(...ys)-Math.min(...ys)+28,
+      fill: ['rgba(255,255,255,0.04)','rgba(255,255,255,0.03)','rgba(100,180,255,0.04)'][i],
+    });
+  }
+  return zones.map(z =>
+    `<rect x="${z.x.toFixed(1)}" y="${z.y.toFixed(1)}" width="${z.w.toFixed(1)}" height="${z.h.toFixed(1)}" rx="10" fill="${z.fill}"/>`
+  ).join('');
+}
+
+function renderPoiNode(node, toSvg, routeSet, activeCode) {
+  // Skip origin/dest — drawn separately
+  if (node.code === planState.originCode || node.code === planState.destinationCode) return '';
+  const p       = toSvg(node);
+  const onRoute = routeSet.has(node.code);
+  const isActive= node.code === activeCode;
+  const meta    = getNodeMeta(node.type);
+  const r       = isActive ? 7 : onRoute ? 5.5 : 3.5;
+  const fill    = onRoute ? meta.color : 'rgba(255,255,255,0.18)';
+  const stroke  = onRoute ? '#fff' : 'rgba(255,255,255,0.08)';
+  // Show label only for gates and route POIs (reduce clutter)
+  const showLabel = node.type === 'gate' || (onRoute && node.isPoi);
+
+  return `<g class="sg-map-node" role="img" aria-label="${esc(node.name)}">
+    ${isActive ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r+6}" fill="${fill}" opacity="0.2"/>` : ''}
+    ${onRoute ? `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r+3}" fill="${fill}" opacity="0.12"/>` : ''}
+    <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+    ${showLabel ? `<text x="${p.x.toFixed(1)}" y="${(p.y-r-3).toFixed(1)}" text-anchor="middle" font-size="7" fill="rgba(255,255,255,${onRoute?'0.9':'0.45'})" font-family="Inter,sans-serif" font-weight="700" paint-order="stroke" stroke="#1a2a3d" stroke-width="2">${esc(node.name.length>16 ? node.name.slice(0,14)+'…' : node.name)}</text>` : ''}
+  </g>`;
+}
+
+/* Get or build SVG, with cache */
+function getFloorSvg(floorId) {
+  const key = svgCacheKey(floorId);
+  if (mapState.svgCache[floorId]?.key === key) return mapState.svgCache[floorId].svg;
+  const svg = buildFloorSvg(floorId);
+  mapState.svgCache[floorId] = { key, svg };
+  return svg;
+}
+
+/** Invalidate cache for floors whose route overlay changed */
+function invalidateRouteCache() {
+  Object.keys(mapState.svgCache).forEach(fid => {
+    delete mapState.svgCache[fid];
+  });
+}
+
+/* ============================================================
+   7. SEARCH HELPERS
+   ============================================================ */
+
+function filterNodes(q, exceptCode='') {
+  const t = norm(q);
+  return appData.nodes
+    .filter(n => n.isPoi && n.code !== exceptCode)
+    .filter(n => !t || n.searchText.includes(t))
+    .slice(0, MAX_RESULTS);
+}
+
+function groupByCategory(nodes) {
+  const map = new Map();
+  nodes.forEach(n => {
+    const g = getNodeMeta(n.type).group ?? 'OUTROS';
+    if (!map.has(g)) map.set(g, []);
+    map.get(g).push(n);
+  });
+  return map;
+}
+
+/* ============================================================
+   8. RENDERING HELPERS
+   ============================================================ */
+
+const $ = id => document.getElementById(id);
+
+function renderHeader() {
+  const statusClass = uiState.error ? 'error' : uiState.loading ? 'loading' : 'ok';
+  const locText = appData.airport
+    ? (appData.airport.city ? `Aeroporto de ${appData.airport.city}` : appData.airport.name ?? 'Fortaleza')
+    : uiState.loading === 'airports' ? 'Conectando…' : 'Aeroporto de Fortaleza';
+
+  return `<header class="sg-header" role="banner">
+    <img src="assets/logo.jpeg" alt="SkyGate" class="sg-header__logo"/>
+    <div class="sg-header__brand">
+      <p class="sg-header__name">SkyGate</p>
+      <p class="sg-header__loc">
+        <span class="sg-header__dot sg-header__dot--${statusClass}" aria-hidden="true"></span>
+        <span class="truncate">${esc(locText)}</span>
+      </p>
+    </div>
+    <div class="sg-header__actions">
+      <button type="button" class="sg-header__btn" id="help-btn" aria-label="Ajuda — Como usar o SkyGate">
+        <iconify-icon icon="solar:question-circle-bold" aria-hidden="true"></iconify-icon>
+      </button>
+    </div>
+  </header>`;
+}
+
+function renderFloorControl() {
+  if (appData.floors.length <= 1) return '';
+  const cur = appData.floors.find(f=>f.id===mapState.selectedFloorId) ?? appData.floors[0];
+  const hasRoute = navState.routeFloorIds.size > 0;
+  const isOpen = uiState.floorMenuOpen;
+
+  return `<div class="sg-floor-ctrl ${isOpen?'is-open':''}" id="floor-ctrl">
+    <button
+      type="button"
+      class="sg-floor-trigger"
+      id="floor-trigger-btn"
+      aria-haspopup="true"
+      aria-expanded="${isOpen}"
+      aria-label="Piso atual: ${esc(cur.name)}. Toque para mudar."
+    >
+      <iconify-icon icon="solar:layers-minimalistic-bold" aria-hidden="true"></iconify-icon>
+      ${esc(cur.name)}
+      ${hasRoute ? '<span class="sg-floor-trigger__route-dot" aria-hidden="true"></span>' : ''}
+      <iconify-icon icon="solar:alt-arrow-down-bold" class="sg-floor-trigger__chevron" aria-hidden="true"></iconify-icon>
+    </button>
+
+    ${isOpen ? `<div class="sg-floor-popover" role="menu" aria-label="Escolher piso">
+      ${appData.floors.map(f => {
+        const isActive = f.id === mapState.selectedFloorId;
+        const onRoute  = navState.routeFloorIds.has(f.id);
+        return `<button
+          type="button"
+          class="sg-floor-popover__item ${isActive?'is-active':''}"
+          data-floor-id="${esc(f.id)}"
+          role="menuitem"
+          aria-current="${isActive}"
+          aria-label="${esc(f.name)}${onRoute?' — na sua rota':''}"
+        >
+          <iconify-icon icon="${onRoute?'solar:map-point-bold':'solar:layers-minimalistic-linear'}" aria-hidden="true" style="font-size:14px;opacity:${onRoute?1:0.4}"></iconify-icon>
+          ${esc(f.name)}
+          ${isActive ? '<iconify-icon icon="solar:check-circle-bold" class="sg-floor-popover__check" aria-hidden="true"></iconify-icon>'
+            : onRoute ? '<span class="sg-floor-popover__badge" aria-hidden="true"></span>' : ''}
+        </button>`;
+      }).join('')}
+    </div>` : ''}
+  </div>`;
+}
+
+function renderMapControls() {
+  if (!appData.floors.length) return '';
+  return `<div class="sg-map-controls" aria-label="Controles do mapa">
+    <button type="button" class="sg-map-ctrl-btn" id="zoom-in" aria-label="Ampliar mapa">
+      <iconify-icon icon="solar:add-square-bold" aria-hidden="true"></iconify-icon>
+    </button>
+    <button type="button" class="sg-map-ctrl-btn" id="zoom-out" aria-label="Reduzir mapa">
+      <iconify-icon icon="solar:minus-square-bold" aria-hidden="true"></iconify-icon>
+    </button>
+    <button type="button" class="sg-map-ctrl-btn" id="zoom-reset" aria-label="Centralizar mapa" title="Centralizar">
+      <iconify-icon icon="solar:full-screen-bold" aria-hidden="true"></iconify-icon>
+    </button>
+  </div>`;
+}
+
+function renderReturnRouteBtn() {
+  const show = navState.route && mapState.manualFloor;
+  return `<button
+    type="button"
+    class="sg-return-route-btn ${show?'':'is-hidden'}"
+    id="return-route-btn"
+    aria-label="Voltar para o piso da rota"
+    aria-hidden="${!show}"
+    tabindex="${show?0:-1}"
+  >
+    <iconify-icon icon="solar:routing-2-bold" aria-hidden="true" style="font-size:14px;"></iconify-icon>
+    Voltar à rota
+  </button>`;
+}
+
+/** Navigation floating instruction card */
+function renderNavInstruction() {
+  if (!navState.navMode || !navState.route) return '';
+  const steps = navState.semanticSteps;
+  if (!steps.length) return '';
+  const total = steps.length;
+  const cur   = steps[navState.activeStepIndex];
+  const isFirst = navState.activeStepIndex === 0;
+  const isLast  = navState.activeStepIndex >= total - 1;
+  const numClass = cur?.isTransition ? 'sg-nav-instruction__step-num--transition' : '';
+  const curFloor = cur?.floorId ? getFloorLabel(cur.floorId) : '';
+
+  return `<div class="sg-nav-instruction" role="region" aria-label="Instrução atual" aria-live="polite" aria-atomic="true">
+    <div class="sg-nav-instruction__step-num ${numClass}" aria-hidden="true">${navState.activeStepIndex+1}</div>
+    <div class="sg-nav-instruction__body">
+      <div class="sg-nav-instruction__meta">${esc(getFloorLabel(mapState.selectedFloorId))} · Passo ${navState.activeStepIndex+1} de ${total}</div>
+      <div class="sg-nav-instruction__text">${esc(cur?.text ?? '')}</div>
+      ${curFloor ? `<div class="sg-nav-instruction__floor">${esc(curFloor)}</div>` : ''}
+    </div>
+    <div class="sg-nav-instruction__controls">
+      <button type="button" class="sg-nav-ctrl-mini" id="nav-prev" ${isFirst?'disabled':''} aria-label="Instrução anterior" aria-disabled="${isFirst}">
+        <iconify-icon icon="solar:arrow-up-bold" aria-hidden="true"></iconify-icon>
+      </button>
+      <button type="button" class="sg-nav-ctrl-mini" id="nav-next" ${isLast?'disabled':''} aria-label="${isLast?'Chegou ao destino':'Próxima instrução'}" aria-disabled="${isLast}">
+        <iconify-icon icon="${isLast?'solar:check-circle-bold':'solar:arrow-down-bold'}" aria-hidden="true"></iconify-icon>
+      </button>
+      <button type="button" class="sg-nav-overview-btn" id="nav-exit" aria-label="Sair da navegação">
+        <iconify-icon icon="solar:map-bold" aria-hidden="true" style="font-size:12px;"></iconify-icon>
+        Visão geral
+      </button>
+    </div>
+  </div>`;
+}
+
+/* Bottom sheet contents */
+
+function renderCollapsedSheet() {
+  const route = navState.route;
+  if (!route) {
+    // No route — show call to action
+    const hasOrigin = !!planState.originCode;
+    const hasDest   = !!planState.destinationCode;
+    return `<div class="sg-sheet-collapsed">
+      <div class="sg-route-input sg-route-input--mini" style="flex:1;border:none;background:var(--slate-100);border-radius:10px;">
+        <div style="padding:8px 12px;">
+          <div style="font-size:11px;font-weight:700;color:var(--slate-400);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Planejamento de rota</div>
+          <div style="font-size:13px;font-weight:600;color:${(hasOrigin&&hasDest)?'var(--navy-950)':'var(--slate-400)'};">
+            ${hasOrigin&&hasDest
+              ? `${esc(findNode(planState.originCode)?.name??'')} → ${esc(findNode(planState.destinationCode)?.name??'')}`
+              : 'Toque para planejar sua rota'}
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="sg-sheet-hint" aria-hidden="true">Arraste ou toque para abrir</div>`;
+  }
+
+  const dest = findNode(planState.destinationCode);
+  const origin = findNode(planState.originCode);
+  return `<div class="sg-sheet-collapsed">
+    <div class="sg-sheet-collapsed__route">
+      <span class="sg-sheet-collapsed__dot" aria-hidden="true"></span>
+      <span class="sg-sheet-collapsed__text">${esc(dest?.name ?? 'Destino')}</span>
+      <iconify-icon icon="solar:alt-arrow-up-bold" class="sg-sheet-collapsed__arrow" aria-hidden="true"></iconify-icon>
+    </div>
+    <span>
+      <span class="sg-sheet-collapsed__time">${fmtMin(route.estimatedMinutes)}</span>
+      <span class="sg-sheet-collapsed__unit"> min</span>
+    </span>
+    <button type="button" class="sg-sheet-collapsed__cta" id="start-nav-mini-btn" aria-label="Iniciar navegação para ${esc(dest?.name??'destino')}">
+      Iniciar
+    </button>
+  </div>
+  <div class="sg-sheet-hint" aria-hidden="true">Arraste para ver detalhes</div>`;
+}
+
+function renderPlannerForm() {
+  const oNode = findNode(planState.originCode);
+  const dNode = findNode(planState.destinationCode);
+
+  const isCalc   = uiState.loading === 'route';
+  const same     = planState.originCode && planState.originCode === planState.destinationCode;
+  const missing  = !planState.originCode || !planState.destinationCode;
+  const disabled = missing || same || !!uiState.loading;
+  const hint     = same ? 'Origem e destino devem ser diferentes.'
+    : missing && planState.originCode ? 'Selecione também o destino.'
+    : missing && planState.destinationCode ? 'Selecione também a origem.'
+    : '';
+
+  return `<div class="sg-planner">
+    ${uiState.error ? `<div class="sg-error-banner" role="alert" id="error-banner">
+      <iconify-icon icon="solar:danger-circle-bold" aria-hidden="true"></iconify-icon>
+      <span class="sg-error-banner__text">${esc(uiState.error)}</span>
+      <button type="button" class="sg-error-banner__dismiss" id="dismiss-error" aria-label="Fechar aviso de erro">
+        <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
+      </button>
+    </div>` : ''}
+
+    <!-- Compound route input -->
+    <div class="sg-route-input" aria-label="Origem e destino">
+      <!-- Connector line between icons -->
+      <div class="sg-route-input__connector" aria-hidden="true"></div>
+
+      <!-- Origin field -->
+      <div class="sg-route-input__field">
+        <span class="sg-route-input__icon-col sg-route-input__icon-origin" aria-hidden="true">
+          <iconify-icon icon="solar:map-point-bold"></iconify-icon>
+        </span>
+        <button
+          type="button"
+          class="sg-route-input__btn open-search"
+          data-kind="origin"
+          id="origin-btn"
+          aria-label="${oNode ? `Origem: ${esc(oNode.name)}. Toque para mudar.` : 'Escolher ponto de partida'}"
+          aria-haspopup="dialog"
+        >
+          <span class="sg-route-input__label">Partindo de</span>
+          <span class="sg-route-input__value ${oNode?'':'sg-route-input__value--placeholder'}">
+            ${oNode ? esc(oNode.name) : 'Buscar local de partida…'}
+          </span>
+          ${oNode ? `<span class="sg-route-input__sub">${esc(getFloorLabel(oNode.floorId))}</span>` : ''}
+        </button>
+        ${oNode ? `<button type="button" class="sg-route-input__clear clear-loc" data-kind="origin" aria-label="Limpar origem" id="clear-origin">
+          <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
+        </button>` : ''}
+      </div>
+
+      <!-- Destination field -->
+      <div class="sg-route-input__field">
+        <span class="sg-route-input__icon-col sg-route-input__icon-dest" aria-hidden="true">
+          <iconify-icon icon="solar:routing-2-bold"></iconify-icon>
+        </span>
+        <button
+          type="button"
+          class="sg-route-input__btn open-search"
+          data-kind="destination"
+          id="destination-btn"
+          aria-label="${dNode ? `Destino: ${esc(dNode.name)}. Toque para mudar.` : 'Escolher destino'}"
+          aria-haspopup="dialog"
+        >
+          <span class="sg-route-input__label">Destino</span>
+          <span class="sg-route-input__value ${dNode?'':'sg-route-input__value--placeholder'}">
+            ${dNode ? esc(dNode.name) : 'Buscar destino…'}
+          </span>
+          ${dNode ? `<span class="sg-route-input__sub">${esc(getFloorLabel(dNode.floorId))}</span>` : ''}
+        </button>
+        ${dNode ? `<button type="button" class="sg-route-input__clear clear-loc" data-kind="destination" aria-label="Limpar destino" id="clear-dest">
+          <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
+        </button>` : ''}
+      </div>
+
+      <!-- Swap button -->
+      <button
+        type="button"
+        class="sg-route-input__swap"
+        id="swap-btn"
+        aria-label="Inverter origem e destino"
+        ${!planState.originCode && !planState.destinationCode ? 'disabled style="opacity:.4;cursor:not-allowed;"' : ''}
+      >
+        <iconify-icon icon="solar:round-sort-vertical-bold" aria-hidden="true"></iconify-icon>
+      </button>
+    </div>
+
+    <!-- Route type segmented control -->
+    <div class="sg-mode-seg" role="radiogroup" aria-label="Tipo de rota">
+      ${['fastest','accessible'].map(m => {
+        const active = planState.routeMode === m;
+        const icon   = m==='accessible' ? 'solar:accessibility-bold' : 'solar:bolt-bold';
+        const label  = m==='accessible' ? 'Acessível' : 'Mais rápida';
+        return `<button
+          type="button"
+          class="sg-mode-seg__btn ${active?'is-active':''}"
+          data-mode="${m}"
+          role="radio"
+          aria-checked="${active}"
+          id="mode-${m}"
+          aria-label="${esc(label)}${m==='accessible' ? ' — Usa elevadores, evita escadas' : ''}"
+        >
+          <iconify-icon icon="${icon}" data-mode="${m}" aria-hidden="true"></iconify-icon>
+          ${esc(label)}
+        </button>`;
+      }).join('')}
+    </div>
+
+    <!-- Calculate button -->
+    <button
+      type="button"
+      class="sg-calc-btn"
+      id="calc-btn"
+      ${disabled?'disabled':''}
+      aria-busy="${isCalc}"
+      aria-disabled="${disabled}"
+    >
+      ${isCalc
+        ? `<span class="sg-calc-btn__spinner" aria-hidden="true"></span>Calculando…`
+        : `<iconify-icon icon="solar:map-arrow-right-bold" aria-hidden="true" style="font-size:17px;"></iconify-icon>Calcular rota`}
+    </button>
+    ${hint ? `<p class="sg-calc-hint ${same?'sg-calc-hint--warn':''}" role="status">${esc(hint)}</p>` : ''}
+  </div>`;
+}
+
+function renderRouteSummary() {
+  const route = navState.route;
+  if (!route) return '';
+  const dest   = findNode(planState.destinationCode);
+  const fids   = [...navState.routeFloorIds];
+  const transitions = (route.segments??[]).filter(s=>s.type==='transition').length;
+  const semSteps = navState.semanticSteps;
+  const firstStep = semSteps[0];
+
+  return `<div class="sg-summary">
+    <!-- Hero -->
+    <div class="sg-summary__hero">
+      <div>
+        ${dest ? `<div class="sg-summary__dest-floor">${esc(getFloorLabel(dest.floorId))}</div>` : ''}
+        <div class="sg-summary__dest-name">${esc(dest?.name??'Destino')}</div>
+      </div>
+      <span class="sg-mode-badge sg-mode-badge--${planState.routeMode}">
+        <iconify-icon icon="${planState.routeMode==='accessible'?'solar:accessibility-bold':'solar:bolt-bold'}" aria-hidden="true" style="font-size:10px;"></iconify-icon>
+        ${esc(getModeLabel(planState.routeMode))}
+      </span>
+    </div>
+
+    <!-- Stats -->
+    <div class="sg-summary__stats">
+      <div class="sg-summary__stat">
+        <div class="sg-summary__stat-val">
+          ${fmtMin(route.estimatedMinutes)}
+          <span class="sg-summary__stat-unit">min</span>
+        </div>
+        <div class="sg-summary__stat-label">Tempo estimado</div>
+      </div>
+      <div class="sg-summary__stat-divider" aria-hidden="true"></div>
+      <div class="sg-summary__stat">
+        <div class="sg-summary__stat-val">${fids.length||1}</div>
+        <div class="sg-summary__stat-label">${(fids.length||1)===1?'piso':'pisos'}</div>
+      </div>
+      ${transitions > 0 ? `<div class="sg-summary__stat-divider" aria-hidden="true"></div>
+        <div class="sg-summary__stat">
+          <div class="sg-summary__stat-val">${transitions}</div>
+          <div class="sg-summary__stat-label">${transitions===1?'mudança':'mudanças'}</div>
+        </div>` : ''}
+    </div>
+
+    <!-- Next step preview -->
+    ${firstStep ? `<div class="sg-next-step-card" aria-label="Primeiro passo">
+      <div class="sg-next-step-card__num" aria-hidden="true">1</div>
+      <div>
+        <div class="sg-next-step-card__label">Próximo passo</div>
+        <div class="sg-next-step-card__text">${esc(firstStep.text)}</div>
+      </div>
+    </div>` : ''}
+
+    <!-- Actions — clear hierarchy -->
+    <div class="sg-summary__actions">
+      <button type="button" class="sg-btn-primary" id="start-nav-btn" aria-label="Iniciar navegação passo a passo">
+        <iconify-icon icon="solar:play-bold" aria-hidden="true" style="font-size:14px;"></iconify-icon>
+        Iniciar navegação
+      </button>
+      <button type="button" class="sg-btn-secondary" id="edit-route-btn" aria-label="Editar rota">
+        <iconify-icon icon="solar:pen-bold" aria-hidden="true" style="font-size:13px;"></iconify-icon>
+        Editar rota
+      </button>
+    </div>
+
+    <!-- Expandable step list -->
+    <button
+      type="button"
+      class="sg-details-toggle ${uiState.stepsExpanded?'is-open':''}"
+      id="toggle-steps-btn"
+      aria-expanded="${uiState.stepsExpanded}"
+      aria-controls="steps-panel"
+    >
+      <span>Ver ${semSteps.length} ${semSteps.length===1?'passo':'passos'} da rota</span>
+      <iconify-icon icon="solar:alt-arrow-down-bold" aria-hidden="true"></iconify-icon>
+    </button>
+
+    ${uiState.stepsExpanded ? `<div id="steps-panel" aria-label="Passos da rota">
+      <ol class="sg-steps-list">
+        ${semSteps.map((step,i)=>{
+          const cls = ['sg-step', step.isTransition?'sg-step--transition':''].filter(Boolean).join(' ');
+          return `<li class="${cls}">
+            <span class="sg-step__num" aria-hidden="true">${i+1}</span>
+            <div class="sg-step__body">
+              <span class="sg-step__text">${esc(step.text)}</span>
+              ${step.floorId ? `<div class="sg-step__floor">${esc(getFloorLabel(step.floorId))}</div>` : ''}
+            </div>
+          </li>`;
+        }).join('')}
+      </ol>
+    </div>` : ''}
+  </div>`;
+}
+
+function renderNavSheet() {
+  const steps = navState.semanticSteps;
+  const total = steps.length;
+  const cur   = steps[navState.activeStepIndex];
+  const isFirst = navState.activeStepIndex === 0;
+  const isLast  = navState.activeStepIndex >= total-1;
+
+  return `<div style="display:flex;flex-direction:column;gap:10px;padding:0 16px 16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:11px;font-weight:700;color:var(--slate-400);text-transform:uppercase;letter-spacing:.06em;">
+        Passo ${navState.activeStepIndex+1} de ${total}
+      </span>
+      <button type="button" class="sg-btn-secondary" id="exit-nav-btn" style="min-height:32px;padding:0 10px;font-size:11px;">
+        <iconify-icon icon="solar:arrow-left-bold" aria-hidden="true" style="font-size:12px;"></iconify-icon>
+        Visão geral
+      </button>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button type="button" class="sg-btn-secondary" id="nav-prev-sheet" ${isFirst?'disabled':''} aria-label="Instrução anterior" style="flex:1;min-height:40px;font-size:12px;">
+        <iconify-icon icon="solar:arrow-left-bold" aria-hidden="true"></iconify-icon>
+        Anterior
+      </button>
+      <button type="button" class="sg-btn-primary" id="nav-next-sheet" ${isLast?'disabled':''} aria-label="${isLast?'Chegou':'Próximo'}" style="flex:1;min-height:40px;font-size:12px;">
+        ${isLast?'Chegou!':'Próximo'}
+        <iconify-icon icon="${isLast?'solar:check-circle-bold':'solar:arrow-right-bold'}" aria-hidden="true"></iconify-icon>
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderSearchOverlay() {
+  const kind = uiState.searchOpenFor;
+  if (!kind) return '';
+  const isOrigin = kind === 'origin';
+  const title = isOrigin ? 'Selecionar origem' : 'Selecionar destino';
+  const ph    = isOrigin ? 'Portão, banheiro, café, farmácia…' : 'Portão 7, câmbio, sala VIP…';
+  const except= isOrigin ? planState.destinationCode : planState.originCode;
+  const results = filterNodes(uiState.searchQuery, except);
+  const grouped = groupByCategory(results);
+  const quickChips = kind==='origin'
+    ? ['Entrada','Check-in','Elevador','Escada']
+    : ['Portão','Sanitário','Alimentação','Farmácia','Câmbio'];
+
+  return `<div class="sg-search-overlay" id="search-overlay" role="dialog" aria-modal="true" aria-labelledby="search-title">
+    <button type="button" class="sg-search-backdrop" id="search-backdrop" aria-label="Fechar busca" tabindex="-1"></button>
+    <div class="sg-search-dialog">
+      <div class="sg-search-dialog__header">
+        <div class="sg-search-dialog__handle" aria-hidden="true"></div>
+        <div class="sg-search-dialog__top">
+          <h2 class="sg-search-dialog__title" id="search-title">${esc(title)}</h2>
+          <button type="button" class="sg-search-close" id="close-search" aria-label="Fechar busca">
+            <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
+          </button>
+        </div>
+        <div class="sg-search-input-wrap">
+          <iconify-icon icon="solar:magnifer-linear" aria-hidden="true"></iconify-icon>
+          <input
+            type="search" id="search-input" class="sg-search-input"
+            placeholder="${esc(ph)}" value="${esc(uiState.searchQuery)}"
+            autocomplete="off" autocorrect="off" spellcheck="false"
+            enterkeyhint="search" aria-label="${esc(title)}"
+            aria-controls="search-results" aria-autocomplete="list"
+            data-kind="${kind}"
+          />
+        </div>
+        <div class="sg-quick-chips" aria-label="Sugestões">
+          ${quickChips.map(c=>`<button type="button" class="sg-quick-chip" data-label="${esc(c)}" data-kind="${kind}" aria-label="Buscar por ${esc(c)}">${esc(c)}</button>`).join('')}
+        </div>
+      </div>
+      <div id="search-results" class="sg-search-results" role="listbox" aria-label="Resultados" aria-live="polite">
+        ${renderSearchResults(grouped, kind)}
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderSearchResults(grouped, kind) {
+  if (!grouped.size) {
+    const empty = !uiState.searchQuery;
+    return `<div class="sg-search-empty" role="status">
+      <iconify-icon icon="${empty?'solar:magnifer-linear':'solar:map-point-wave-linear'}" aria-hidden="true"></iconify-icon>
+      <p class="sg-search-empty__title">${empty?'Digite para buscar':'Nenhum resultado'}</p>
+      <p class="sg-search-empty__sub">${empty?'Ex: "Portão 18", "banheiro", "café"':'Tente outra busca.'}</p>
+    </div>`;
+  }
+  return Array.from(grouped).map(([g, nodes]) => `
+    <div class="sg-results-group">
+      <p class="sg-results-group__label">${esc(g)}</p>
+      ${nodes.map(n => {
+        const meta = getNodeMeta(n.type);
+        return `<button type="button" class="sg-result-item" data-kind="${kind}" data-code="${esc(n.code)}" role="option" aria-label="${esc(n.name)} — ${esc(getFloorLabel(n.floorId))}">
+          <span class="sg-result-item__icon" style="color:${meta.color}" aria-hidden="true">
+            <iconify-icon icon="${meta.icon}"></iconify-icon>
+          </span>
+          <span class="sg-result-item__body">
+            <span class="sg-result-item__name">${esc(n.name)}</span>
+            <span class="sg-result-item__meta">
+              <iconify-icon icon="solar:map-bold" style="font-size:9px;" aria-hidden="true"></iconify-icon>
+              ${esc(getFloorLabel(n.floorId))}
+            </span>
+          </span>
+          <iconify-icon icon="solar:alt-arrow-right-linear" class="sg-result-item__arrow" aria-hidden="true"></iconify-icon>
+        </button>`;
+      }).join('')}
+    </div>
+  `).join('');
+}
+
+/* ============================================================
+   9. MAIN RENDER — targeted partial renders where possible
+   ============================================================ */
+
+const root = document.getElementById('app');
+
+function render() {
+  const sheetState = uiState.sheetState;
+  const hasError   = !uiState.loading && uiState.error && !appData.floors.length;
+
+  root.innerHTML = `
+    ${renderHeader()}
+
+    <!-- Map area — always full screen behind everything -->
+    <div class="sg-map-area" id="map-area" aria-label="Mapa do aeroporto" role="img">
+
+      ${uiState.loading === 'map' || uiState.loading === 'airports' ? `
+        <div class="sg-map-loading" role="status" aria-live="polite">
+          <div class="sg-map-loading__spinner" aria-hidden="true"></div>
+          <p class="sg-map-loading__text">${uiState.loading==='map'?'Carregando mapa…':'Conectando…'}</p>
+        </div>` : ''}
+
+      ${hasError ? `
+        <div class="sg-map-loading" role="alert">
+          <iconify-icon icon="solar:danger-circle-bold" style="font-size:36px;color:#dc2626;margin-bottom:8px;" aria-hidden="true"></iconify-icon>
+          <p style="font-size:13px;font-weight:700;color:rgba(255,255,255,.8);text-align:center;max-width:260px;line-height:1.5;">${esc(uiState.error)}</p>
+        </div>` : ''}
+
+      <!-- Map SVG wrapper -->
+      ${appData.floors.length && !hasError ? `
+        <div class="sg-map-wrapper" id="map-wrapper">
+          ${getFloorSvg(mapState.selectedFloorId)}
+        </div>` : ''}
+
+      <!-- Floor control -->
+      ${appData.floors.length ? renderFloorControl() : ''}
+
+      <!-- Return to route button -->
+      ${renderReturnRouteBtn()}
+
+      <!-- Map controls -->
+      ${renderMapControls()}
+
+      <!-- Navigation instruction (nav mode only) -->
+      ${renderNavInstruction()}
+    </div>
+
+    <!-- Bottom sheet -->
+    ${appData.floors.length || uiState.error ? `
+    <aside
+      class="sg-sheet"
+      id="main-sheet"
+      data-state="${sheetState}"
+      role="complementary"
+      aria-label="${navState.navMode?'Navegação':navState.route?'Resultado da rota':'Planejamento de rota'}"
+    >
+      <div class="sg-sheet__handle-area" id="sheet-handle" aria-hidden="true">
+        <div class="sg-sheet__handle"></div>
+      </div>
+      ${sheetState === 'collapsed' ? renderCollapsedSheet() : `
+        <div class="sg-sheet__scroll" id="sheet-scroll">
+          ${navState.navMode && sheetState==='nav' ? renderNavSheet()
+            : navState.route ? renderRouteSummary()
+            : renderPlannerForm()}
+        </div>`}
+    </aside>` : ''}
+
+    <!-- Search overlay (rendered as a portal above all) -->
+    ${renderSearchOverlay()}
+  `;
+
+  document.body.style.overflow = uiState.searchOpenFor ? 'hidden' : '';
+  applyMapTransform();
+  bindEvents();
+}
+
+/* Partial renderers — avoid full re-render when only map changes */
+
+function updateMapSvg() {
+  const wrapper = $('map-wrapper');
+  if (!wrapper || !appData.floors.length) return;
+  requestAnimationFrame(() => {
+    wrapper.innerHTML = getFloorSvg(mapState.selectedFloorId);
+    applyMapTransform();
+  });
+}
+
+function updateFloorControl() {
+  const el = $('floor-ctrl');
+  if (!el) return;
+  el.outerHTML = renderFloorControl();
+  // Re-bind floor control events
+  bindFloorControlEvents();
+}
+
+function updateReturnBtn() {
+  const el = $('return-route-btn');
+  if (!el) return;
+  const show = navState.route && mapState.manualFloor;
+  el.classList.toggle('is-hidden', !show);
+  el.setAttribute('aria-hidden', String(!show));
+  el.tabIndex = show ? 0 : -1;
+}
+
+function updateSearchResults_() {
+  const container = $('search-results');
+  if (!container || !uiState.searchOpenFor) return;
+  const except = uiState.searchOpenFor==='origin' ? planState.destinationCode : planState.originCode;
+  const results = filterNodes(uiState.searchQuery, except);
+  const grouped = groupByCategory(results);
+  container.innerHTML = renderSearchResults(grouped, uiState.searchOpenFor);
+  bindSearchResultEvents();
+}
+
+function updateNavInstruction() {
+  const existing = document.querySelector('.sg-nav-instruction');
+  if (!navState.navMode) { existing?.remove(); return; }
+  const html = renderNavInstruction();
+  if (existing) {
+    existing.outerHTML = html;
+  } else {
+    const mapArea = $('map-area');
+    if (mapArea) mapArea.insertAdjacentHTML('beforeend', html);
+  }
+  bindNavEvents();
+}
+
+/* ============================================================
+   10. MAP PAN & ZOOM
+   ============================================================ */
+
+function applyMapTransform() {
+  const wrapper = $('map-wrapper');
+  if (!wrapper) return;
+  const { x, y, scale } = getFloorTransform(mapState.selectedFloorId);
+  const svg = wrapper.querySelector('.sg-map-svg');
+  if (svg) {
+    svg.style.transform = `translate(${x}px,${y}px) scale(${scale})`;
+    svg.style.transformOrigin = 'center center';
+    svg.style.transition = 'transform 80ms linear';
+  }
+}
+
+function setTransform(x, y, scale) {
+  const clamped = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
+  mapState.floorTransforms[mapState.selectedFloorId] = { x, y, scale:clamped };
+  applyMapTransform();
+}
+
+function zoomAt(delta, cx, cy) {
+  const t = getFloorTransform(mapState.selectedFloorId);
+  const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, t.scale + delta));
+  // Zoom towards pointer
+  const factor = newScale / t.scale;
+  const wrapper = $('map-wrapper');
+  if (wrapper && cx !== undefined) {
+    const rect = wrapper.getBoundingClientRect();
+    const px = cx - rect.left - rect.width/2;
+    const py = cy - rect.top - rect.height/2;
+    const nx = t.x - (factor-1)*(px - t.x);
+    const ny = t.y - (factor-1)*(py - t.y);
+    setTransform(nx, ny, newScale);
+  } else {
+    setTransform(t.x, t.y, newScale);
+  }
+}
+
+function resetTransform() {
+  mapState.floorTransforms[mapState.selectedFloorId] = { x:0, y:0, scale:1 };
+  applyMapTransform();
+}
+
+let _panDragging = false, _panStart = {x:0,y:0,tx:0,ty:0};
+let _lastPinchDist = 0;
+// Track bound handlers so we can remove them on re-render
+let _panHandlers = null;
+
+function bindMapPan() {
+  const area = $('map-area');
+  if (!area) return;
+
+  // Clean up old handlers
+  if (_panHandlers) {
+    window.removeEventListener('mousemove', _panHandlers.mm);
+    window.removeEventListener('mouseup', _panHandlers.mu);
+  }
+
+  const onMouseDown = e => {
+    if (e.button !== 0) return;
+    if (e.target.closest('button, a, .sg-floor-ctrl, .sg-map-ctrl-btn, .sg-nav-instruction, .sg-return-route-btn')) return;
+    _panDragging = true;
+    const t = getFloorTransform(mapState.selectedFloorId);
+    _panStart = { x:e.clientX, y:e.clientY, tx:t.x, ty:t.y };
+    area.classList.add('is-grabbing');
+  };
+  const onMouseMove = e => {
+    if (!_panDragging) return;
+    const t = getFloorTransform(mapState.selectedFloorId);
+    setTransform(_panStart.tx + (e.clientX-_panStart.x), _panStart.ty + (e.clientY-_panStart.y), t.scale);
+  };
+  const onMouseUp = () => { _panDragging = false; area.classList.remove('is-grabbing'); };
+
+  _panHandlers = { mm: onMouseMove, mu: onMouseUp };
+  area.addEventListener('mousedown', onMouseDown);
+  window.addEventListener('mousemove', onMouseMove);
+  window.addEventListener('mouseup', onMouseUp);
+
+  area.addEventListener('wheel', e => {
+    if (e.target.closest('button, .sg-floor-ctrl')) return;
+    e.preventDefault();
+    zoomAt(e.deltaY < 0 ? 0.25 : -0.25, e.clientX, e.clientY);
+  }, { passive:false });
+
+  // Touch
+  area.addEventListener('touchstart', e => {
+    if (e.touches.length === 1) {
+      const t = getFloorTransform(mapState.selectedFloorId);
+      _panDragging = true;
+      _panStart = { x:e.touches[0].clientX, y:e.touches[0].clientY, tx:t.x, ty:t.y };
+    }
+    if (e.touches.length === 2) {
+      _panDragging = false;
+      _lastPinchDist = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+    }
+  }, { passive:true });
+
+  area.addEventListener('touchmove', e => {
+    if (e.touches.length === 1 && _panDragging) {
+      const t = getFloorTransform(mapState.selectedFloorId);
+      setTransform(_panStart.tx+(e.touches[0].clientX-_panStart.x), _panStart.ty+(e.touches[0].clientY-_panStart.y), t.scale);
+    }
+    if (e.touches.length === 2 && _lastPinchDist) {
+      const d = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
+      const mid = { x:(e.touches[0].clientX+e.touches[1].clientX)/2, y:(e.touches[0].clientY+e.touches[1].clientY)/2 };
+      zoomAt((d-_lastPinchDist)*0.012, mid.x, mid.y);
+      _lastPinchDist = d;
+    }
+  }, { passive:true });
+
+  area.addEventListener('touchend', () => { _panDragging = false; _lastPinchDist = 0; });
+}
+
+/* ============================================================
+   11. BOTTOM SHEET DRAG
+   ============================================================ */
+
+let _sheetDrag = false, _sheetStartY = 0, _sheetStartH = 0;
+
+function bindSheetDrag() {
+  const handle = $('sheet-handle');
+  const sheet  = $('main-sheet');
+  if (!handle || !sheet) return;
+
+  // Desktop — no drag
+  if (window.innerWidth >= 1024) return;
+
+  const onTouchStart = e => {
+    _sheetDrag = true;
+    _sheetStartY = e.touches[0].clientY;
+    _sheetStartH = sheet.getBoundingClientRect().height;
+    sheet.classList.remove('sheet-animating');
+  };
+  const onTouchMove = e => {
+    if (!_sheetDrag) return;
+    const dy = _sheetStartY - e.touches[0].clientY;
+    const newH = Math.max(80, Math.min(window.innerHeight - 80, _sheetStartH + dy));
+    sheet.style.height = `${newH}px`;
+  };
+  const onTouchEnd = e => {
+    if (!_sheetDrag) return;
+    _sheetDrag = false;
+    const h = sheet.getBoundingClientRect().height;
+    const vh = window.innerHeight;
+    sheet.classList.add('sheet-animating');
+    if (h < 140) snapSheet('collapsed');
+    else if (h > vh * 0.65) snapSheet('full');
+    else snapSheet('half');
+    sheet.style.height = '';
+  };
+
+  handle.addEventListener('touchstart', onTouchStart, { passive:true });
+  handle.addEventListener('touchmove', onTouchMove, { passive:true });
+  handle.addEventListener('touchend', onTouchEnd);
+}
+
+function snapSheet(state) {
+  uiState.sheetState = state;
+  const sheet = $('main-sheet');
+  if (sheet) {
+    sheet.dataset.state = state;
+    sheet.style.height = '';
+  }
+}
+
+/* ============================================================
+   12. FLOOR SWITCHING — immediate, no full re-render
+   ============================================================ */
+
+function switchFloor(floorId, isManual=true) {
+  if (floorId === mapState.selectedFloorId && !isManual) return;
+  mapState.selectedFloorId = floorId;
+
+  // Track whether user is manually exploring away from route floor
+  if (isManual && navState.route) {
+    const routeFirstFloor = [...navState.routeFloorIds][0] ?? '';
+    mapState.manualFloor = (floorId !== routeFirstFloor) && !navState.routeFloorIds.has(floorId)
+      || (navState.navMode && floorId !== (navState.semanticSteps[navState.activeStepIndex]?.floorId ?? ''));
+  } else {
+    mapState.manualFloor = false;
+  }
+
+  // Only update map SVG and floor control — NOT the entire app
+  updateMapSvg();
+  updateFloorControl();
+  updateReturnBtn();
+}
+
+/* ============================================================
+   13. EVENT BINDING
+   ============================================================ */
+
+let _searchDebounce = null;
+
+function bindEvents() {
+  bindFloorControlEvents();
+  bindMapPan();
+  bindSheetDrag();
+  bindSheetTap();
+
+  // Map controls
+  $('zoom-in')?.addEventListener('click', () => { const t=getFloorTransform(mapState.selectedFloorId); zoomAt(0.4); });
+  $('zoom-out')?.addEventListener('click', () => zoomAt(-0.4));
+  $('zoom-reset')?.addEventListener('click', resetTransform);
+
+  // Return to route
+  $('return-route-btn')?.addEventListener('click', returnToRoute);
+
+  // Search
+  document.querySelectorAll('.open-search').forEach(btn => {
+    btn.addEventListener('click', () => openSearch(btn.dataset.kind));
+  });
+  document.querySelectorAll('.clear-loc').forEach(btn => {
+    btn.addEventListener('click', () => clearLocation(btn.dataset.kind));
+  });
+
+  // Swap
+  $('swap-btn')?.addEventListener('click', swapLocations);
+
+  // Route modes
+  document.querySelectorAll('[data-mode]').forEach(btn => {
+    btn.addEventListener('click', () => setRouteMode(btn.dataset.mode));
+  });
+
+  // Calculate
+  $('calc-btn')?.addEventListener('click', handleCalculate);
+
+  // Route summary
+  $('start-nav-btn')?.addEventListener('click', startNavigation);
+  $('start-nav-mini-btn')?.addEventListener('click', startNavigation);
+  $('edit-route-btn')?.addEventListener('click', editRoute);
+  $('toggle-steps-btn')?.addEventListener('click', toggleSteps);
+
+  // Nav mode
+  bindNavEvents();
+
+  // Search overlay
+  bindSearchOverlayEvents();
+
+  // Dismiss error
+  $('dismiss-error')?.addEventListener('click', () => { uiState.error=''; render(); });
+
+  // Help
+  $('help-btn')?.addEventListener('click', showHelp);
+}
+
+function bindFloorControlEvents() {
+  $('floor-trigger-btn')?.addEventListener('click', e => {
+    e.stopPropagation();
+    uiState.floorMenuOpen = !uiState.floorMenuOpen;
+    updateFloorControl();
+  });
+  document.querySelectorAll('.sg-floor-popover__item').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      switchFloor(btn.dataset.floorId, true);
+      uiState.floorMenuOpen = false;
+      updateFloorControl();
+    });
+  });
+  // Close on outside click
+  document.addEventListener('click', closeFloorMenuOnOutside);
+}
+
+function closeFloorMenuOnOutside(e) {
+  if (!uiState.floorMenuOpen) return;
+  if (!e.target.closest('#floor-ctrl')) {
+    uiState.floorMenuOpen = false;
+    updateFloorControl();
+    document.removeEventListener('click', closeFloorMenuOnOutside);
+  }
+}
+
+function bindNavEvents() {
+  $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
+  $('nav-next')?.addEventListener('click', () => advanceStep(1));
+  $('nav-exit')?.addEventListener('click', exitNavigation);
+  $('nav-prev-sheet')?.addEventListener('click', () => advanceStep(-1));
+  $('nav-next-sheet')?.addEventListener('click', () => advanceStep(1));
+  $('exit-nav-btn')?.addEventListener('click', exitNavigation);
+}
+
+function bindSheetTap() {
+  const handle = $('sheet-handle');
+  if (!handle || window.innerWidth >= 1024) return;
+  handle.addEventListener('click', () => {
+    if (uiState.sheetState === 'collapsed') snapSheet(navState.navMode ? 'nav' : navState.route ? 'half' : 'half');
+    else if (uiState.sheetState === 'half') snapSheet('collapsed');
+    else snapSheet('half');
+  });
+}
+
+function bindSearchOverlayEvents() {
+  $('search-backdrop')?.addEventListener('click', closeSearch);
+  $('close-search')?.addEventListener('click', closeSearch);
+
+  const input = $('search-input');
+  if (input) {
+    input.addEventListener('input', e => {
+      uiState.searchQuery = e.target.value;
+      clearTimeout(_searchDebounce);
+      _searchDebounce = setTimeout(() => updateSearchResults_(), DEBOUNCE_MS);
+    });
+    requestAnimationFrame(() => input.focus({ preventScroll:true }));
+  }
+
+  bindSearchResultEvents();
+
+  document.querySelectorAll('.sg-quick-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      uiState.searchQuery = btn.dataset.label;
+      const inp = $('search-input');
+      if (inp) inp.value = btn.dataset.label;
+      updateSearchResults_();
+      inp?.focus({ preventScroll:true });
+    });
+  });
+}
+
+function bindSearchResultEvents() {
+  document.querySelectorAll('.sg-result-item').forEach(btn => {
+    btn.addEventListener('click', () => selectLocation(btn.dataset.kind, btn.dataset.code));
+  });
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && uiState.searchOpenFor) { e.preventDefault(); closeSearch(); }
+  if (e.key === 'Escape' && uiState.floorMenuOpen) { uiState.floorMenuOpen=false; updateFloorControl(); }
+});
+
+/* ============================================================
+   14. ACTIONS
+   ============================================================ */
+
+function openSearch(kind) {
+  if (!['origin','destination'].includes(kind)) return;
+  clearTimeout(_searchDebounce);
+  uiState.searchOpenFor = kind;
+  uiState.searchQuery   = '';
+  render();
+}
+
+function closeSearch() {
+  if (!uiState.searchOpenFor) return;
+  clearTimeout(_searchDebounce);
+  const prev = uiState.searchOpenFor;
+  uiState.searchOpenFor = '';
+  uiState.searchQuery   = '';
+  render();
+  requestAnimationFrame(() => $(`${prev}-btn`)?.focus({ preventScroll:true }));
+}
+
+function selectLocation(kind, code) {
+  const other = kind==='origin' ? planState.destinationCode : planState.originCode;
+  if (!code || code === other) return;
+  if (kind==='origin')      planState.originCode = code;
+  if (kind==='destination') planState.destinationCode = code;
+  const node = findNode(code);
+  if (node) switchFloor(node.floorId, false);
+  navState.route = null;
+  navState.navMode = false;
+  navState.routeFloorIds = new Set();
+  uiState.searchOpenFor = '';
+  uiState.searchQuery   = '';
+  uiState.error = '';
+  clearTimeout(_searchDebounce);
+  invalidateRouteCache();
+  snapSheet('half');
+  render();
+}
+
+function clearLocation(kind) {
+  if (kind==='origin')      planState.originCode = '';
+  if (kind==='destination') planState.destinationCode = '';
+  navState.route = null;
+  navState.navMode = false;
+  navState.routeFloorIds = new Set();
+  uiState.error = '';
+  invalidateRouteCache();
+  render();
+  requestAnimationFrame(() => $(`${kind}-btn`)?.focus({ preventScroll:true }));
+}
+
+function swapLocations() {
+  [planState.originCode, planState.destinationCode] = [planState.destinationCode, planState.originCode];
+  navState.route = null; navState.navMode = false;
+  invalidateRouteCache();
+  render();
+}
+
+function setRouteMode(mode) {
+  if (!['fastest','accessible'].includes(mode)) return;
+  if (planState.routeMode === mode) return;
+  planState.routeMode = mode;
+  navState.route = null; navState.navMode = false;
+  invalidateRouteCache();
+  render();
+}
+
+function editRoute() {
+  navState.route = null;
+  navState.navMode = false;
+  navState.routeFloorIds = new Set();
+  uiState.stepsExpanded = false;
+  invalidateRouteCache();
+  snapSheet('half');
+  render();
+}
+
+function toggleSteps() {
+  uiState.stepsExpanded = !uiState.stepsExpanded;
+  render();
+}
+
+function returnToRoute() {
+  if (!navState.route) return;
+  const firstFloor = [...navState.routeFloorIds][0] ?? appData.floors[0]?.id;
+  if (firstFloor) switchFloor(firstFloor, false);
+  mapState.manualFloor = false;
+  updateReturnBtn();
+}
+
+function startNavigation() {
+  if (!navState.route?.steps?.length) return;
+  navState.navMode        = true;
+  navState.activeStepIndex= 0;
+  uiState.sheetState      = 'nav';
+  snapSheet('nav');
+
+  // Go to first step floor
+  const firstStep = navState.semanticSteps[0];
+  if (firstStep?.floorId && firstStep.floorId !== mapState.selectedFloorId) {
+    switchFloor(firstStep.floorId, false);
+  }
+  render();
+}
+
+function exitNavigation() {
+  navState.navMode        = false;
+  navState.activeStepIndex= 0;
+  uiState.sheetState      = 'half';
+  snapSheet('half');
+  render();
+}
+
+function advanceStep(delta) {
+  const total = navState.semanticSteps.length;
+  const next  = navState.activeStepIndex + delta;
+  if (next < 0 || next >= total) return;
+  navState.activeStepIndex = next;
+
+  const step = navState.semanticSteps[next];
+  if (step?.floorId && step.floorId !== mapState.selectedFloorId) {
+    switchFloor(step.floorId, false);
+  }
+
+  // Invalidate SVG cache to show active step highlight
+  invalidateRouteCache();
+  updateMapSvg();
+  updateNavInstruction();
+
+  // Also update sheet in nav mode
+  const scroll = $('sheet-scroll');
+  if (scroll && navState.navMode) scroll.innerHTML = renderNavSheet();
+  bindNavEvents();
+
+  // Announce to screen reader
+  const liveEl = document.getElementById('nav-live-announce');
+  if (liveEl) liveEl.textContent = `Passo ${next+1} de ${total}: ${step?.text??''}`;
+}
+
+function showHelp() {
+  const existing = $('help-toast');
+  if (existing) { existing.remove(); return; }
+  const el = document.createElement('div');
+  el.id = 'help-toast';
+  el.setAttribute('role','status'); el.setAttribute('aria-live','polite');
+  el.style.cssText = 'position:fixed;bottom:120px;left:50%;transform:translateX(-50%);background:#0a192f;color:#fff;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:200;max-width:300px;text-align:center;line-height:1.5;';
+  el.innerHTML = '<strong>Como usar o SkyGate</strong><br>1. Toque nos campos de origem e destino<br>2. Escolha o tipo de rota<br>3. Calcule e inicie a navegação';
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 5500);
+}
+
+/* ============================================================
+   15. ROUTE CALCULATION
+   ============================================================ */
+
+async function handleCalculate() {
+  if (uiState.loading === 'route') return;
+  if (!planState.originCode || !planState.destinationCode) return;
+  if (planState.originCode === planState.destinationCode) return;
+
+  try {
+    uiState.loading = 'route';
+    uiState.error   = '';
+    navState.route  = null;
+    navState.navMode= false;
+    render();
+
+    const raw = await calculateRoute({
+      airport_slug:     getAirportSlug(appData.airport),
+      origin_code:      planState.originCode,
+      destination_code: planState.destinationCode,
+      route_mode:       planState.routeMode,
+    });
+
+    const route = normalizeRoute(raw);
+    if (!route.path.length) throw Object.assign(new Error('No path.'), {kind:'no_path'});
+
+    navState.route  = route;
+    navState.routeFloorIds = new Set(
+      (route.segments??[]).filter(s=>s.type==='floor').map(s=>s.floorId)
+    );
+    navState.semanticSteps = buildSemanticSteps(route);
+    navState.activeStepIndex = 0;
+    mapState.manualFloor = false;
+
+    invalidateRouteCache();
+
+    // Switch to first route floor
+    const firstFloor = (route.segments??[]).find(s=>s.type==='floor')?.floorId
+      ?? findNode(planState.originCode)?.floorId
+      ?? mapState.selectedFloorId;
+    mapState.selectedFloorId = firstFloor;
+
+    uiState.sheetState = 'half';
+    snapSheet('half');
+
+  } catch(err) {
+    console.error('[SkyGate]', err);
+    navState.route = null;
+    uiState.error  = routeError(err);
+  } finally {
+    uiState.loading = '';
+    render();
+  }
+}
+
+function routeError(err) {
+  if (err?.kind==='no_path') return 'Não foi possível encontrar um caminho entre os pontos.';
+  if (err instanceof SkyGateApiError) {
+    if (err.kind==='network') return 'Sem conexão. Verifique sua internet.';
+    if (err.status===404)     return 'Rota não encontrada para estes pontos.';
+    if (err.status===422)     return 'Não foi possível calcular esta rota. Verifique origem e destino.';
+    if (err.status>=500)      return 'Servidor temporariamente indisponível. Tente novamente.';
+  }
+  return 'Não foi possível calcular a rota.';
+}
+
+/* ============================================================
+   16. INIT
+   ============================================================ */
+
+async function init() {
+  try {
+    uiState.loading = 'airports';
+    render();
+
+    const airports = asArray(await getAirports());
+    appData.airport = airports.find(a=>(a.slug??a.code??'')===FORTALEZA_SLUG)
+      ?? airports.find(a=>String(a.slug??'').toLowerCase().includes(FORTALEZA_SLUG))
+      ?? { slug:FORTALEZA_SLUG, name:'Aeroporto Internacional de Fortaleza', city:'Fortaleza' };
+
+    uiState.loading = 'map';
+    render();
+
+    const mapData = await getAirportMap(getAirportSlug(appData.airport));
+    const { floors, nodes } = normalizeMap(mapData);
+    appData.floors = floors;
+    appData.nodes  = nodes;
+    mapState.selectedFloorId = floors[0]?.id ?? '0';
+    uiState.error  = '';
+
+    // Add live announce region
+    const liveEl = document.createElement('div');
+    liveEl.id = 'nav-live-announce';
+    liveEl.setAttribute('role','status');
+    liveEl.setAttribute('aria-live','polite');
+    liveEl.className = 'sr-only';
+    document.body.appendChild(liveEl);
+
+  } catch(err) {
+    console.error('[SkyGate] init:', err);
+    uiState.error = err instanceof SkyGateApiError && err.kind==='network'
+      ? 'Sem conexão com o servidor. Verifique se o backend está rodando.'
+      : 'Não foi possível carregar os dados do aeroporto.';
+  } finally {
+    uiState.loading = '';
+    render();
+  }
+}
+
+init();
