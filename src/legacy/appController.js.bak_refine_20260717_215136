@@ -972,36 +972,38 @@ function renderPlanning() {
     : missing && planState.destinationCode ? 'Selecione a origem também.'
     : '';
   const isAccessible = planState.accessibleRoute;
-  const airportCity = appData.airport?.city ?? 'Fortaleza';
-  const airportLabel = uiState.loading === 'airports' ? 'Conectando…' : `Aeroporto de ${airportCity}`;
-  const statusDot = uiState.error ? 'error' : uiState.loading ? 'loading' : 'ok';
+  const airportLabel = appData.airport?.city
+    ? `Aeroporto de ${appData.airport.city}`
+    : uiState.loading === 'airports' ? 'Conectando…' : 'Aeroporto de Fortaleza';
 
+  /* ---- Quick shortcut categories ---- */
   const QUICK_CATS = [
-    { key:'gates',     label:'Portões',     icon:'solar:routing-2-bold',    subtitle:'Encontre seu portão'  },
-    { key:'services',  label:'Check-in',    icon:'solar:ticket-sale-bold',  subtitle:'Balcões e áreas'      },
-    { key:'restrooms', label:'Banheiros',   icon:'solar:bath-bold',         subtitle:'Ver todos'            },
-    { key:'food',      label:'Alimentação', icon:'solar:cup-hot-bold',      subtitle:'Restaurantes e cafés' },
+    { key:'gates', label:'Port\u00f5es', icon:'solar:routing-2-bold', subtitle:'Encontre seu port\u00e3o' },
+    { key:'services', label:'Check-in', icon:'solar:case-round-bold', subtitle:'Balc\u00f5es e \u00e1reas' },
+    { key:'restrooms', label:'Banheiros', icon:'solar:bath-bold', subtitle:'Ver todos' },
+    { key:'food', label:'Alimenta\u00e7\u00e3o', icon:'solar:cup-hot-bold', subtitle:'Restaurantes e caf\u00e9s' },
   ];
 
   return `
     <div class="sg-planning">
-
+      <!-- APP BAR -->
       <header class="sg-appbar" role="banner">
         <div class="sg-appbar__brand">
           <img src="assets/logo.jpeg" alt="" class="sg-appbar__logo" aria-hidden="true">
-          <div class="sg-appbar__text">
+          <div>
             <span class="sg-appbar__name">SkyGate</span>
             <span class="sg-appbar__loc">
-              <span class="sg-dot sg-dot--${statusDot}" aria-hidden="true"></span>
-              <span>${esc(airportLabel)}</span>
+              <span class="sg-dot sg-dot--${uiState.error ? 'error' : uiState.loading ? 'loading' : 'ok'}" aria-hidden="true"></span>
+              ${esc(airportLabel)}
             </span>
           </div>
         </div>
-        <button type="button" class="sg-icon-btn" id="help-btn" aria-label="Ajuda sobre o SkyGate">
+        <button type="button" class="sg-icon-btn" id="help-btn" aria-label="Ajuda — como usar o SkyGate">
           <iconify-icon icon="solar:question-circle-bold" aria-hidden="true"></iconify-icon>
         </button>
       </header>
 
+      <!-- MAIN CONTENT -->
       <main class="sg-planning-main" id="planning-main">
 
         ${uiState.loading === 'airports' || uiState.loading === 'map' ? `
@@ -1011,22 +1013,22 @@ function renderPlanning() {
           </div>
         ` : uiState.error && !appData.floors.length ? `
           <div class="sg-fullstate sg-fullstate--error" role="alert">
-            <iconify-icon icon="solar:danger-circle-bold" aria-hidden="true" style="font-size:40px;color:var(--red-600)"></iconify-icon>
-            <p style="max-width:260px;line-height:1.5">${esc(uiState.error)}</p>
-            <button type="button" class="sg-btn-primary" id="retry-btn" style="max-width:180px">Tentar novamente</button>
+            <iconify-icon icon="solar:danger-circle-bold" aria-hidden="true" style="font-size:36px;color:var(--red-600)"></iconify-icon>
+            <p>${esc(uiState.error)}</p>
+            <button type="button" class="sg-btn-primary" id="retry-btn" style="max-width:200px">Tentar novamente</button>
           </div>
         ` : `
+          <!-- Scrollable content area -->
           <div class="sg-planning-scroll">
 
-            <div class="sg-identity">
-              <div class="sg-identity__bar" aria-hidden="true"></div>
-              <div class="sg-identity__text">
-                <h1 class="sg-planning-title">Encontre seu destino</h1>
-                <p class="sg-planning-sub">Escolha o ponto de partida e para onde deseja ir.</p>
-              </div>
+            <!-- Section heading -->
+            <div class="sg-planning-heading">
+              <h1 class="sg-planning-title">Encontre seu destino</h1>
+              <p class="sg-planning-sub">Escolha o ponto de partida e para onde deseja ir.</p>
             </div>
 
-            <div class="sg-planner">
+            <!-- Route form card -->
+            <div class="sg-form-card" role="form" aria-label="Planejamento de rota">
 
               ${uiState.error ? `
               <div class="sg-form-error" role="alert">
@@ -1037,88 +1039,85 @@ function renderPlanning() {
                 </button>
               </div>` : ''}
 
-              <div class="sg-journey" role="group" aria-label="Planejamento da rota">
+              <!-- Origin + Destination cohesive input -->
+              <div class="sg-route-input" role="group" aria-label="Origem e destino">
+                <!-- Dotted connector line -->
+                <div class="sg-route-input__line" aria-hidden="true"></div>
 
-                <div class="sg-journey__rail" aria-hidden="true">
-                  <span class="sg-journey__dot sg-journey__dot--origin"></span>
-                  <span class="sg-journey__line"></span>
-                  <span class="sg-journey__dot sg-journey__dot--dest"></span>
-                </div>
-
-                <div class="sg-journey__fields">
-
+                <!-- Origin -->
+                <div class="sg-route-field">
+                  <div class="sg-route-field__icon sg-route-field__icon--origin" aria-hidden="true">
+                    <iconify-icon icon="solar:map-point-bold"></iconify-icon>
+                  </div>
                   <button type="button"
-                    class="sg-journey-field open-search"
+                    class="sg-route-field__btn open-search"
                     data-kind="origin"
                     id="origin-btn"
                     aria-label="${oNode ? `Ponto de partida: ${esc(getPublicNodeLabel(oNode))}. Toque para mudar` : 'Selecionar ponto de partida'}"
                     aria-haspopup="dialog">
-                    <div class="sg-journey-field__inner">
-                      <span class="sg-journey-field__label">Ponto de partida</span>
-                      <span class="sg-journey-field__value${oNode ? '' : ' is-ph'}">
-                        ${oNode ? esc(getPublicNodeLabel(oNode)) : 'Onde você está?'}
-                      </span>
-                      ${oNode ? `<span class="sg-journey-field__sub">${esc(getPublicNodeSubtitle(oNode))}</span>` : ''}
-                    </div>
-                    ${oNode ? `<span class="sg-journey-clear clear-loc" data-kind="origin" id="clear-origin" role="button" tabindex="0" aria-label="Limpar ponto de partida">
-                      <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
-                    </span>` : ''}
+                    <span class="sg-route-field__label">Ponto de partida</span>
+                    <span class="sg-route-field__value ${oNode ? '' : 'sg-route-field__value--ph'}">
+                      ${oNode ? esc(getPublicNodeLabel(oNode)) : 'Onde voc\u00ea est\u00e1?'}
+                    </span>
+                    ${oNode ? `<span class="sg-route-field__sub">${esc(getPublicNodeSubtitle(oNode))}</span>` : ''}
                   </button>
+                  ${oNode ? `<button type="button" class="sg-route-field__clear clear-loc" data-kind="origin" aria-label="Limpar local de partida" id="clear-origin">
+                    <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
+                  </button>` : ''}
+                </div>
 
-                  <div class="sg-journey__sep" aria-hidden="true"></div>
-
+                <!-- Destination -->
+                <div class="sg-route-field">
+                  <div class="sg-route-field__icon sg-route-field__icon--dest" aria-hidden="true">
+                    <iconify-icon icon="solar:routing-2-bold"></iconify-icon>
+                  </div>
                   <button type="button"
-                    class="sg-journey-field open-search"
+                    class="sg-route-field__btn open-search"
                     data-kind="destination"
                     id="destination-btn"
                     aria-label="${dNode ? `Destino: ${esc(getPublicNodeLabel(dNode))}. Toque para mudar` : 'Selecionar destino'}"
                     aria-haspopup="dialog">
-                    <div class="sg-journey-field__inner">
-                      <span class="sg-journey-field__label">Destino</span>
-                      <span class="sg-journey-field__value${dNode ? '' : ' is-ph'}">
-                        ${dNode ? esc(getPublicNodeLabel(dNode)) : 'Para onde deseja ir?'}
-                      </span>
-                      ${dNode ? `<span class="sg-journey-field__sub">${esc(getPublicNodeSubtitle(dNode))}</span>` : ''}
-                    </div>
-                    ${dNode ? `<span class="sg-journey-clear clear-loc" data-kind="destination" id="clear-dest" role="button" tabindex="0" aria-label="Limpar destino">
-                      <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
-                    </span>` : ''}
+                    <span class="sg-route-field__label">Destino</span>
+                    <span class="sg-route-field__value ${dNode ? '' : 'sg-route-field__value--ph'}">
+                      ${dNode ? esc(getPublicNodeLabel(dNode)) : 'Para onde deseja ir?'}
+                    </span>
+                    ${dNode ? `<span class="sg-route-field__sub">${esc(getPublicNodeSubtitle(dNode))}</span>` : ''}
                   </button>
-
+                  ${dNode ? `<button type="button" class="sg-route-field__clear clear-loc" data-kind="destination" aria-label="Limpar destino" id="clear-dest">
+                    <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
+                  </button>` : ''}
                 </div>
 
-                <button type="button"
-                  class="sg-journey__swap"
-                  id="swap-btn"
-                  aria-label="Inverter ponto de partida e destino"
+                <!-- Swap button -->
+                <button type="button" class="sg-swap-btn" id="swap-btn"
+                  aria-label="Inverter origem e destino"
                   ${!planState.originCode && !planState.destinationCode ? 'disabled' : ''}>
                   <iconify-icon icon="solar:round-sort-vertical-bold" aria-hidden="true"></iconify-icon>
                 </button>
-
               </div>
 
-              <div class="sg-access-row">
-                <label class="sg-access-row__label" for="accessible-toggle">
-                  <iconify-icon icon="solar:accessibility-bold" aria-hidden="true" class="sg-access-row__icon${isAccessible ? ' is-on' : ''}"></iconify-icon>
-                  <div class="sg-access-row__text">
-                    <span class="sg-access-row__title">Rota acessível</span>
-                    <span class="sg-access-row__desc">Usa elevadores e evita escadas.</span>
+              <!-- Accessible route toggle -->
+              <div class="sg-accessible-row">
+                <div class="sg-accessible-label">
+                  <iconify-icon icon="solar:accessibility-bold" aria-hidden="true" class="sg-accessible-icon ${isAccessible ? 'is-active' : ''}"></iconify-icon>
+                  <div class="sg-accessible-text">
+                    <span class="sg-accessible-title">Rota acess\u00edvel</span>
+                    <span class="sg-accessible-desc">Usa elevadores e evita escadas.</span>
                   </div>
-                </label>
+                </div>
                 <button type="button"
-                  class="sg-toggle${isAccessible ? ' is-on' : ''}"
+                  class="sg-toggle ${isAccessible ? 'is-on' : ''}"
                   id="accessible-toggle"
                   role="switch"
                   aria-checked="${isAccessible}"
-                  aria-label="Ativar rota acessível">
+                  aria-label="Rota acessível — usa elevadores, evita escadas">
                   <span class="sg-toggle__thumb" aria-hidden="true"></span>
                 </button>
               </div>
 
-              <div class="sg-planner__action">
-                <button type="button"
-                  class="sg-calc-btn"
-                  id="calc-btn"
+              <!-- Primary action -->
+              <div class="sg-form-actions">
+                <button type="button" class="sg-calc-btn" id="calc-btn"
                   ${disabled ? 'disabled' : ''}
                   aria-busy="${isCalc}"
                   aria-disabled="${disabled}">
@@ -1126,25 +1125,24 @@ function renderPlanning() {
                     ? `<span class="sg-spinner-sm" aria-hidden="true"></span>Calculando…`
                     : `<iconify-icon icon="solar:map-arrow-right-bold" aria-hidden="true"></iconify-icon>Calcular rota`}
                 </button>
-                ${hint ? `<p class="sg-form-hint${same ? ' is-warn' : ''}" role="status" aria-live="polite">${esc(hint)}</p>` : ''}
+                ${hint ? `<p class="sg-form-hint ${same ? 'sg-form-hint--warn' : ''}" role="status" aria-live="polite">${esc(hint)}</p>` : ''}
               </div>
-
             </div>
 
-            <section class="sg-quick" aria-label="Destinos frequentes">
-              <h2 class="sg-quick__title">Destinos frequentes</h2>
-              <div class="sg-quick__grid" role="list">
+            <!-- Quick category shortcuts -->
+            <section class="sg-quick-section" aria-label="Destinos frequentes">
+              <h2 class="sg-quick-title">Destinos frequentes</h2>
+              <div class="sg-quick-grid" role="list">
                 ${QUICK_CATS.map(cat => `
                   <button type="button"
-                    class="sg-quick__item"
+                    class="sg-quick-item"
                     data-cat-key="${cat.key}"
-                    aria-label="${esc(cat.label)}: ${esc(cat.subtitle)}"
+                    aria-label="Buscar ${cat.label}: ${cat.subtitle}"
                     role="listitem">
-                    <iconify-icon icon="${cat.icon}" aria-hidden="true" class="sg-quick__icon"></iconify-icon>
-                    <span class="sg-quick__text">
-                      <span class="sg-quick__name">${esc(cat.label)}</span>
-                      <span class="sg-quick__sub">${esc(cat.subtitle)}</span>
+                    <span class="sg-quick-item__icon" aria-hidden="true">
+                      <iconify-icon icon="${cat.icon}"></iconify-icon>
                     </span>
+                    <span class="sg-quick-item__content"><span class="sg-quick-item__label">${esc(cat.label)}</span><span class="sg-quick-item__sub">${esc(cat.subtitle)}</span></span>
                   </button>
                 `).join('')}
               </div>
@@ -1154,11 +1152,11 @@ function renderPlanning() {
         `}
       </main>
 
+      <!-- Screen-reader live region for status -->
       <div id="plan-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     </div>
   `;
 }
-
 
 // ---- SUMMARY ----
 
@@ -1684,15 +1682,9 @@ function bindEvents() {
   $('accessible-toggle')?.addEventListener('click', toggleAccessibleRoute);
 
   // Quick category shortcuts — open destination search pre-filtered by category
-  document.querySelectorAll('.sg-quick__item, .sg-quick-item').forEach(btn =>
+  document.querySelectorAll('.sg-quick-item').forEach(btn =>
     btn.addEventListener('click', () => openCategorySearch(btn.dataset.catKey))
   );
-
-  // Clear-location spans (role=button, keyboard accessible)
-  document.querySelectorAll('.sg-journey-clear').forEach(el => {
-    el.addEventListener('click', e => { e.stopPropagation(); clearLocation(el.dataset.kind); });
-    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); clearLocation(el.dataset.kind); } });
-  });
 
   // Summary
   $('start-nav-btn')?.addEventListener('click', startNavigation);
