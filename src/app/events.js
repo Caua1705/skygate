@@ -21,6 +21,8 @@ export function bindEvents() {
   document.querySelectorAll('.open-search').forEach(btn =>
     btn.addEventListener('click', () => openSearch(btn.dataset.kind))
   );
+  // Clear buttons are real <button>s and siblings of the field button, so
+  // they need no stopPropagation and get Enter/Space for free.
   document.querySelectorAll('.clear-loc').forEach(btn =>
     btn.addEventListener('click', () => clearLocation(btn.dataset.kind))
   );
@@ -40,12 +42,6 @@ export function bindEvents() {
   document.querySelectorAll('.sg-quick__item, .sg-quick-item, .sg-quick-card').forEach(btn =>
     btn.addEventListener('click', () => openCategorySearch(btn.dataset.catKey))
   );
-
-  // Clear-location spans (role=button, keyboard accessible)
-  document.querySelectorAll('.sg-journey-clear').forEach(el => {
-    el.addEventListener('click', e => { e.stopPropagation(); clearLocation(el.dataset.kind); });
-    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); clearLocation(el.dataset.kind); } });
-  });
 
   // Summary
   $('start-nav-btn')?.addEventListener('click', startNavigation);

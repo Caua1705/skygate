@@ -196,7 +196,9 @@ button.ds-chip { cursor: pointer; min-height: var(--tap-min); }
 .ds-header__title { font-family: var(--font-display); font-size: var(--text-lg);
   font-weight: var(--weight-extra); line-height: var(--leading-tight);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ds-header__sub { font-size: var(--text-xs); color: var(--text-muted); }
+.ds-header__sub { display: flex; align-items: center; gap: 3px;
+  font-size: var(--text-xs); color: var(--text-muted); }
+.ds-header__sub-icon { font-size: 13px; flex: none; }
 .ds-header--dark .ds-header__sub, .ds-header--gradient .ds-header__sub { color: var(--text-muted-dark); }
 .ds-header__spacer { flex: 1 1 auto; }
 .ds-header--dark .ds-iconbtn, .ds-header--gradient .ds-iconbtn {

@@ -11,3 +11,7 @@
 @import url('./desktop.css');
 @import url('./a11y.css');
 @import url('./screens/planning-v5.css');
+/* Home rebuilt on the DS — last, so it wins over planning-v5.css for the
+   class names shared with the old markup (.sg-access-row, .sg-toggle,
+   .sg-quick-card). */
+@import url('./screens/home.css');

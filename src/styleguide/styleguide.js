@@ -202,7 +202,8 @@ export function renderStyleguide() {
       ]) })}
     `)}
 
-    ${section('Header', 'Versão clara e versão escura, com slots de voltar e ajuda.', `
+    ${section('Header', 'Versão clara e versão escura, com slots de voltar e ajuda. <code class="sgd-code">subtitleIcon</code> adiciona um ícone antes do subtítulo (usado na Home); <code class="sgd-code">backId</code> / <code class="sgd-code">helpId</code> trocam os ids para a tela ligar seus próprios handlers.', `
+      <div class="sgd-frame">${Header({ title: 'SkyGate', subtitle: 'FOR · Aeroporto de Fortaleza', subtitleIcon: 'solar:map-point-bold', onHelp: true })}</div>
       <div class="sgd-frame">${Header({ title: 'SkyGate', subtitle: 'FOR · Aeroporto de Fortaleza', onHelp: true })}</div>
       <div class="sgd-frame">${Header({ title: 'Navegação', subtitle: 'Portão 12', theme: 'dark', onBack: true, onHelp: true })}</div>
       <div class="sgd-frame">${Header({ title: 'SkyGate', subtitle: 'Gradiente da marca', theme: 'gradient', onBack: true, onHelp: true })}</div>

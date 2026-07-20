@@ -1,0 +1,548 @@
+/* ============================================================
+   HOME / PLANNING — Design System v5
+   ------------------------------------------------------------
+   Every rule is scoped under `.sg-ds .sg-home`, so it only applies
+   inside the DS token scope and cannot leak into the legacy screens.
+
+   Imported LAST in styles/index.css so it wins over planning-v5.css
+   for the few class names shared with the old markup for behaviour
+   reasons (.sg-access-row, .sg-toggle, .sg-quick-card).
+   ============================================================ */
+
+.sg-ds.sg-home {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  overflow: hidden;
+}
+
+/* ---- Hero wash ----
+   A soft brand gradient behind the header + title. It is decorative,
+   sits under the text, and never drops the title below AA.
+
+   To use the photo instead, drop assets/airport-lounge-hero.webp in
+   place and add to .sg-home__hero:
+     background-image: linear-gradient(...same stops...),
+                       url('../../assets/airport-lounge-hero.webp');
+     background-size: cover;
+   The gradient MUST stay on top of the image — it is what keeps the
+   title readable over an arbitrary photo. */
+.sg-home__hero {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 280px;
+  background:
+    radial-gradient(120% 100% at 85% 0%, rgba(41, 171, 226, .18) 0%, transparent 60%),
+    linear-gradient(180deg, rgba(14, 42, 107, .07) 0%, rgba(244, 246, 250, 0) 100%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ---- Header (DS component, transparent over the hero) ---- */
+.sg-ds.sg-home .sg-home__header {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  border-bottom: none;
+  flex: 0 0 auto;
+}
+
+/* ---- Heading ---- */
+.sg-home__heading {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  padding: var(--space-2) var(--space-5) var(--space-5);
+}
+
+.sg-home__title {
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: var(--weight-extra);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+  color: var(--navy-900);
+  margin: 0 0 var(--space-2);
+}
+
+.sg-home__subtitle {
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ---- Scroll region ---- */
+.sg-home__main {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.sg-home__scroll {
+  height: 100%;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
+}
+
+/* ============================================================
+   ROUTE CARD
+   ============================================================ */
+
+.sg-ds.sg-home .sg-home__card {
+  padding: var(--space-5) var(--space-4) var(--space-4);
+}
+
+/* The journey block is a 2-column grid: fields | swap.
+   The rail lives in the fields column's left gutter (--rail-gutter), drawn
+   from the field wraps themselves. The swap column reserves space so the
+   button never overlaps text. */
+.sg-home__journey {
+  --rail-gutter: 32px;   /* space reserved left of the fields for the rail */
+  --dot-size: 13px;
+  --dot-top: 34px;       /* distance from a wrap's top to the dot's top —
+                            centres it on the value line, since every field
+                            has the same label+value structure above the
+                            chip. Measured, not guessed. */
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+/* ---- Endpoint fields ---- */
+.sg-home__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding-left: var(--rail-gutter);
+}
+
+.sg-home__field-wrap {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+/* ---- Rail dots: anchored to each field, so they stay level with the
+   place name whether or not a Chip is present. ---- */
+.sg-home__field-wrap::before {
+  content: '';
+  position: absolute;
+  top: var(--dot-top);
+  left: calc((var(--rail-gutter) / 2 + var(--dot-size) / 2) * -1);
+  width: var(--dot-size);
+  height: var(--dot-size);
+  border: 2.5px solid var(--sky-ink);
+  border-radius: 50%;
+  background: var(--surface);   /* origin: hollow ring */
+}
+
+/* Destination: filled */
+.sg-home__field-wrap--destination::before { background: var(--sky-ink); }
+
+/* Dashed connector, drawn with a repeating gradient so the dash rhythm
+   stays crisp at any height (a dashed border would not). It hangs off the
+   origin wrap and reaches down to the destination dot:
+     top    = dot top + dot size + 3px breathing room
+     bottom = -(flex gap + dot top + 3px) */
+.sg-home__field-wrap--origin::after {
+  content: '';
+  position: absolute;
+  top: calc(var(--dot-top) + var(--dot-size) + 3px);
+  bottom: calc((var(--space-2) + var(--dot-top) + 3px) * -1);
+  left: calc((var(--rail-gutter) / 2 + 1px) * -1);
+  width: 2px;
+  background-image: linear-gradient(
+    to bottom,
+    var(--sky-500) 0 5px,
+    transparent 5px 10px
+  );
+  background-size: 2px 10px;
+  background-repeat: repeat-y;
+  opacity: .55;
+  transition: opacity var(--ds-transition);
+}
+
+.sg-home__fields.is-filled .sg-home__field-wrap--origin::after { opacity: 1; }
+
+.sg-home__field {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: var(--tap-min);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-2) 44px var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--ds-transition), border-color var(--ds-transition);
+}
+
+.sg-home__field:hover { background: var(--surface-2); border-color: var(--border); }
+
+.sg-home__field-label {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sg-home__field-value {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-snug);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Placeholder still has to pass AA — --text-muted is 7.58:1, not a
+   washed-out grey. */
+.sg-home__field-value.is-placeholder {
+  color: var(--text-muted);
+  font-weight: var(--weight-medium);
+}
+
+.sg-home__field-chip { display: block; margin-top: var(--space-1); }
+
+/* Clear button: sibling of the field, absolutely positioned over its
+   reserved right padding. Full 44px target. */
+.sg-home__clear {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: var(--tap-min);
+  height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 20px;
+  cursor: pointer;
+  transition: color var(--ds-transition), background var(--ds-transition);
+}
+
+.sg-home__clear:hover { color: var(--danger); background: var(--danger-soft); }
+
+/* ---- Swap ---- */
+.sg-home__swap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sg-ds.sg-home .sg-home__swap .ds-iconbtn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--elev-2);
+  color: var(--navy-900);
+}
+
+.sg-ds.sg-home .sg-home__swap .ds-iconbtn:disabled {
+  opacity: .45;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+/* ---- Divider ---- */
+.sg-home__divider {
+  height: 1px;
+  background: var(--border);
+  margin: var(--space-4) 0;
+}
+
+/* ============================================================
+   ACCESSIBLE ROUTE ROW
+   Shares .sg-access-row / .sg-toggle with the old markup because
+   actions.js patches those nodes directly.
+   ============================================================ */
+
+.sg-ds.sg-home .sg-home__access {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--tap-min);
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.sg-ds.sg-home .sg-access-row__icon {
+  flex: 0 0 auto;
+  font-size: 26px;
+  color: var(--text-muted);
+  transition: color var(--ds-transition);
+}
+
+.sg-ds.sg-home .sg-access-row__icon.is-on { color: var(--sky-ink); }
+
+.sg-home__access-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sg-home__access-title {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+}
+
+.sg-home__access-desc {
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--text-muted);
+}
+
+/* Toggle switch */
+.sg-ds.sg-home .sg-home__toggle {
+  position: relative;
+  flex: 0 0 auto;
+  width: 52px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: #94A3B8;   /* 3.02:1 on white — passes AA for a UI component */
+  cursor: pointer;
+  transition: background var(--ds-transition);
+}
+
+.sg-ds.sg-home .sg-home__toggle.is-on { background: var(--sky-ink); }
+
+.sg-ds.sg-home .sg-home__toggle .sg-toggle__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--elev-1);
+  transition: transform var(--ds-transition);
+}
+
+.sg-ds.sg-home .sg-home__toggle.is-on .sg-toggle__thumb { transform: translateX(20px); }
+
+/* The switch is 32px tall for visual balance; this pseudo-element
+   extends its HIT area to the full 44px minimum without changing
+   the drawn size. */
+.sg-ds.sg-home .sg-home__toggle::after {
+  content: '';
+  position: absolute;
+  inset: -7px;   /* 32 + 14 = 46px effective, clears 44 at any pixel ratio */
+}
+
+/* ---- CTA ---- */
+.sg-home__action { margin-top: var(--space-4); }
+
+.sg-home__hint {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.sg-home__hint.is-warn { color: var(--warning); font-weight: var(--weight-medium); }
+
+.sg-home__spinner {
+  width: 17px;
+  height: 17px;
+  border: 2px solid rgba(255, 255, 255, .35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: sg-home-spin .7s linear infinite;
+}
+
+@keyframes sg-home-spin { to { transform: rotate(360deg); } }
+
+/* ---- Inline error ---- */
+.sg-home__error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+}
+
+.sg-home__error > span { flex: 1 1 auto; }
+
+/* Offline banner keeps a retry affordance inline, since there is no
+   longer a full-screen error state to host it. */
+.sg-home__error-retry {
+  flex: 0 0 auto;
+  min-height: var(--tap-min);
+  padding: 0 var(--space-4);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: inherit;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sg-home__error-close {
+  flex: 0 0 auto;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: calc(var(--space-3) * -1) calc(var(--space-3) * -1) calc(var(--space-3) * -1) 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 19px;
+  cursor: pointer;
+}
+
+/* ============================================================
+   QUICK ACCESS
+   ============================================================ */
+
+.sg-home__quick { margin-top: var(--space-6); }
+
+.sg-home__section-title {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-snug);
+  color: var(--text);
+  margin: 0 0 var(--space-3);
+  padding: 0 var(--space-1);
+}
+
+.sg-home__quick-scroll {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+
+.sg-ds.sg-home .sg-home__quick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  /* planning-v5.css pins .sg-quick-card to a fixed 122px for its old
+     horizontal scroller — reset it so the grid track drives the width. */
+  width: auto;
+  min-width: 0;
+  flex: 1 1 auto;
+  min-height: var(--tap-min);
+  padding: var(--space-4) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--elev-1);
+  text-align: left;
+  cursor: pointer;
+  transition: box-shadow var(--ds-transition), transform var(--ds-transition);
+}
+
+.sg-ds.sg-home .sg-home__quick-card:hover {
+  box-shadow: var(--elev-2);
+  transform: translateY(-1px);
+}
+
+.sg-home__quick-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: var(--space-1);
+  border-radius: var(--radius-md);
+  background: rgba(41, 171, 226, .12);
+  color: var(--sky-ink);
+  font-size: 21px;
+}
+
+.sg-home__quick-name {
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  color: var(--text);
+}
+
+.sg-home__quick-sub {
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--text-muted);
+}
+
+/* ============================================================
+   LOADING / ERROR STATES
+   ============================================================ */
+
+.sg-home__state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  min-height: 320px;
+  padding: var(--space-6) var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.sg-home__state p { max-width: 280px; line-height: var(--leading-normal); margin: 0; }
+.sg-home__state-icon { font-size: 42px; color: var(--danger); }
+
+/* ============================================================
+   FOCUS — every interactive element in the screen
+   ============================================================ */
+
+.sg-ds.sg-home :is(
+  .sg-home__field,
+  .sg-home__clear,
+  .sg-home__toggle,
+  .sg-home__quick-card,
+  .sg-home__error-close,
+  .sg-home__error-retry
+):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ============================================================
+   DESKTOP — the phone frame is the intended reading width
+   ============================================================ */
+
+@media (min-width: 768px) {
+  .sg-home__quick-scroll { grid-template-columns: repeat(4, 1fr); }
+  .sg-home__hero { height: 320px; }
+
+  /* Keep the reading width sane instead of stretching edge to edge. */
+  .sg-ds.sg-home .sg-home__header,
+  .sg-home__heading,
+  .sg-home__scroll { max-width: 720px; margin-inline: auto; width: 100%; }
+}
