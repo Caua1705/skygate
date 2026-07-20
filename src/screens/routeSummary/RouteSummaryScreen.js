@@ -90,11 +90,27 @@ function miniMapSvg(route) {
       stroke-linejoin="round" opacity=".22"></path>
     <path d="${d}" fill="none" stroke="var(--sky-500)" stroke-width="3.5" stroke-linecap="round"
       stroke-linejoin="round" filter="url(#rsGlow)"></path>
-    <circle cx="${a.x.toFixed(1)}" cy="${a.y.toFixed(1)}" r="7" fill="var(--surface)"
-      stroke="var(--sky-ink)" stroke-width="3.5"></circle>
-    <circle cx="${b.x.toFixed(1)}" cy="${b.y.toFixed(1)}" r="7" fill="var(--sky-ink)"
-      stroke="var(--surface)" stroke-width="2.5"></circle>
+    ${originMarker(a.x, a.y)}
+    ${destPin(b.x, b.y)}
   </svg>`;
+}
+
+/** Origin: hollow turquoise ring on a soft white halo, so it reads off the line. */
+function originMarker(x, y) {
+  const cx = x.toFixed(1), cy = y.toFixed(1);
+  return `<circle cx="${cx}" cy="${cy}" r="9.5" fill="var(--surface)" opacity=".85"></circle>
+    <circle cx="${cx}" cy="${cy}" r="6.5" fill="var(--surface)" stroke="var(--sky-ink)" stroke-width="3.5"></circle>`;
+}
+
+/** Destination: a filled map pin whose tip sits exactly on the route's end. */
+function destPin(x, y) {
+  const bx = x, by = y;
+  const d = `M ${bx.toFixed(1)} ${by.toFixed(1)}`
+    + ` C ${(bx - 5.8).toFixed(1)} ${(by - 6).toFixed(1)} ${(bx - 7).toFixed(1)} ${(by - 11).toFixed(1)} ${(bx - 7).toFixed(1)} ${(by - 14).toFixed(1)}`
+    + ` a 7 7 0 1 1 14 0`
+    + ` C ${(bx + 7).toFixed(1)} ${(by - 11).toFixed(1)} ${(bx + 5.8).toFixed(1)} ${(by - 6).toFixed(1)} ${bx.toFixed(1)} ${by.toFixed(1)} Z`;
+  return `<path d="${d}" fill="var(--sky-ink)" stroke="var(--surface)" stroke-width="1.5"></path>
+    <circle cx="${bx.toFixed(1)}" cy="${(by - 14).toFixed(1)}" r="2.8" fill="var(--surface)"></circle>`;
 }
 
 export function renderSummary() {
@@ -120,14 +136,10 @@ export function renderSummary() {
         <button type="button" class="sg-rs__back" id="back-to-planning-btn" aria-label="Voltar ao planejamento">
           ${dsIcon('solar:arrow-left-linear')}
         </button>
-        <div class="sg-rs__headtext">
-          <span class="sg-rs__eyebrow">Rota calculada</span>
-          <span class="sg-rs__route" title="${esc(originName)} → ${esc(destName)}">
-            <span class="sg-rs__route-o">${esc(originName)}</span>
-            ${dsIcon('solar:arrow-right-linear', 'sg-rs__route-arrow')}
-            <span class="sg-rs__route-d">${esc(destName)}</span>
-          </span>
-        </div>
+        <h1 class="sg-rs__title">Rota calculada</h1>
+        <button type="button" class="sg-rs__edit" id="edit-route-btn" aria-label="Alterar rota">
+          ${dsIcon('solar:pen-2-linear')}<span>Alterar</span>
+        </button>
       </header>
 
       <div class="sg-rs__scroll">
@@ -135,8 +147,9 @@ export function renderSummary() {
         <div class="ds-card sg-rs__dest">
           <span class="sg-rs__dest-icon" aria-hidden="true">${dsIcon(destMeta.icon)}</span>
           <div class="sg-rs__dest-text">
+            ${origin ? `<span class="sg-rs__dest-from">De: ${esc(originName)}</span>` : ''}
             <span class="sg-rs__dest-floor">${esc(destFloor)}</span>
-            <h1 class="sg-rs__dest-name">${esc(destName)}</h1>
+            <h2 class="sg-rs__dest-name">${esc(destName)}</h2>
           </div>
           ${Chip({
             label: getModeLabel(planState.routeMode),
@@ -189,11 +202,6 @@ export function renderSummary() {
             </li>`).join('')}
           </ol>
         </details>
-
-        <!-- 7. Change route (discreet ghost) -->
-        <button type="button" class="sg-rs__edit" id="edit-route-btn">
-          ${dsIcon('solar:pen-2-linear')}<span>Alterar rota</span>
-        </button>
       </div>
 
       <!-- FIXED FOOTER — the single hero action -->

@@ -50,39 +50,51 @@
 .sg-ds.sg-rs .sg-rs__back:hover { background: var(--surface-2); }
 .sg-ds.sg-rs .sg-rs__back iconify-icon { font-size: 22px; }
 
-.sg-rs__headtext { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-
-.sg-rs__eyebrow {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-semibold);
-  letter-spacing: .06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-/* Origin → Destination, one line, ellipsis on the long ends. The arrow
-   never shrinks; the two names share the remaining width. */
-.sg-rs__route {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+/* Only "Rota calculada" now — the destination lives in the card below, so the
+   header no longer repeats a truncated "origem → destino" line. Takes the
+   remaining width so the edit control sits at the far right. */
+.sg-rs__title {
+  flex: 1 1 auto;
   min-width: 0;
   font-family: var(--font-display);
-  font-size: var(--text-base);
-  font-weight: var(--weight-bold);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-extra);
+  letter-spacing: -0.01em;
   color: var(--text);
-  line-height: var(--leading-snug);
-}
-.sg-rs__route-o, .sg-rs__route-d {
+  line-height: var(--leading-tight);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.sg-rs__route-o { flex: 0 1 auto; color: var(--text-muted); font-weight: var(--weight-semibold); }
-.sg-rs__route-d { flex: 1 1 auto; }
-.sg-rs__route-arrow { flex: 0 0 auto; font-size: 16px; color: var(--sky-ink); }
 
-/* ---- Scroll body ---- */
+/* Edit route — moved to the header's top-right, freeing the middle of the
+   screen. Compact ghost link; the icon-only label collapses on narrow. */
+.sg-ds.sg-rs .sg-rs__edit {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--sky-ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  border-radius: var(--radius-pill);
+  transition: background var(--ds-transition);
+}
+.sg-ds.sg-rs .sg-rs__edit:hover { background: var(--surface-2); }
+.sg-ds.sg-rs .sg-rs__edit iconify-icon { font-size: 18px; }
+
+/* ---- Scroll body ----
+   Grouping by proximity (Gestalt): a small base gap keeps related blocks
+   tight; a bigger `margin-top` on the block that STARTS a new group opens the
+   air between groups. Groups:
+     A  destination card + mini-map   (the "what / where")
+     B  metrics + first step          (the "trip at a glance")
+     C  see-all-steps                 (the detail, set further apart) */
 .sg-rs__scroll {
   flex: 1 1 auto;
   min-height: 0;
@@ -91,11 +103,15 @@
   -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
-  padding: 0 var(--space-5);
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5) 0;
   /* Clear the fixed footer: button height + its padding + safe area. */
   padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 }
+
+/* Group breaks — extra air before the block that opens each new group. */
+.sg-rs__metrics { margin-top: var(--space-5); }   /* start of group B */
+.sg-rs__steps   { margin-top: var(--space-6); }   /* start of group C */
 
 /* Shared card polish for the plain .ds-card blocks used here. */
 .sg-ds.sg-rs .ds-card { border: 1px solid var(--border); }
@@ -119,6 +135,18 @@
   font-size: 26px;
 }
 .sg-rs__dest-text { flex: 1 1 auto; min-width: 0; }
+/* Discreet origin reference — one line, clean ellipsis if long. Keeps the
+   origin visible without repeating the destination or truncating the header. */
+.sg-rs__dest-from {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  color: var(--text-muted);
+  margin: 0 0 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .sg-rs__dest-floor {
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
@@ -306,25 +334,6 @@
   white-space: nowrap;
 }
 
-/* ---- 7. Change route (discreet ghost) ---- */
-.sg-ds.sg-rs .sg-rs__edit {
-  align-self: center;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--tap-min);
-  padding: 0 var(--space-4);
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  cursor: pointer;
-  border-radius: var(--radius-pill);
-  transition: background var(--ds-transition), color var(--ds-transition);
-}
-.sg-ds.sg-rs .sg-rs__edit:hover { background: var(--surface-2); color: var(--navy-900); }
-.sg-ds.sg-rs .sg-rs__edit iconify-icon { font-size: 17px; }
 
 /* ---- Fixed footer: the ONE hero action ---- */
 .sg-rs__footer {
