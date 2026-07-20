@@ -1,0 +1,904 @@
+/* ============================================================
+   PLANNING SCREEN REFINEMENT
+   Scoped to the initial route-planning state: summary and navigation
+   screens keep their existing visual treatment.
+   ============================================================ */
+.sg-planning {
+  background: #f6f8fb;
+}
+
+.sg-planning .sg-appbar {
+  height: calc(60px + var(--safe-top));
+  padding: var(--safe-top) 16px 0;
+  background: #f6f8fb;
+  border-bottom: 0;
+  box-shadow: none;
+}
+.sg-planning .sg-appbar__brand { gap: 9px; }
+.sg-planning .sg-appbar__logo { width: 30px; height: 30px; border-radius: 8px; border-color: rgba(30,58,95,.12); }
+.sg-planning .sg-appbar__name { font-size: 14px; }
+.sg-planning .sg-appbar__loc { color: var(--slate-600); font-size: 12px; }
+.sg-planning .sg-icon-btn { width: 44px; height: 44px; color: var(--navy-700); }
+
+.sg-planning .sg-planning-main { align-items: stretch; }
+.sg-planning .sg-planning-scroll {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 24px 16px max(20px, var(--safe-bottom));
+  gap: 24px;
+}
+.sg-planning .sg-planning-heading {
+  position: relative;
+  padding: 0 2px;
+}
+.sg-planning .sg-planning-heading::after {
+  content: '';
+  display: block;
+  width: 46px;
+  height: 2px;
+  margin-top: 14px;
+  background: var(--teal-500);
+  border-radius: 99px;
+  opacity: .75;
+}
+.sg-planning .sg-planning-title { font-size: clamp(24px, 6vw, 26px); line-height: 1.15; margin-bottom: 6px; }
+.sg-planning .sg-planning-sub { max-width: 300px; font-size: 15px; color: var(--slate-600); line-height: 1.45; }
+
+.sg-planning .sg-form-card {
+  border: 1px solid rgba(148,163,184,.35);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15,23,42,.04);
+  overflow: visible;
+}
+.sg-planning .sg-route-input { border-bottom: 0; padding: 4px 0; }
+.sg-planning .sg-route-input__line { left: 29px; top: 59px; height: 26px; opacity: .8; }
+.sg-planning .sg-route-field { min-height: 62px; }
+.sg-planning .sg-route-field + .sg-route-field { border-top: 0; }
+.sg-planning .sg-route-field__icon { width: 52px; font-size: 19px; }
+.sg-planning .sg-route-field__btn { padding: 11px 42px 11px 0; border-radius: 8px; }
+.sg-planning .sg-route-field__btn:hover { background: var(--slate-50); }
+.sg-planning .sg-route-field__label {
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--slate-600);
+}
+.sg-planning .sg-route-field__value { font-size: 16px; line-height: 1.25; }
+.sg-planning .sg-route-field__value--ph { color: var(--slate-500); }
+.sg-planning .sg-route-field__sub { font-size: 12px; }
+.sg-planning .sg-route-field__clear { width: 44px; height: 44px; margin-right: 2px; }
+.sg-planning .sg-swap-btn {
+  right: 14px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border-color: var(--slate-200);
+  box-shadow: 0 1px 2px rgba(15,23,42,.08);
+  color: var(--navy-700);
+}
+
+.sg-planning .sg-accessible-row {
+  min-height: 60px;
+  padding: 8px 14px 8px 16px;
+  border-top: 1px solid var(--slate-100);
+  border-bottom: 0;
+}
+.sg-planning .sg-accessible-label { gap: 10px; }
+.sg-planning .sg-accessible-icon { font-size: 19px; color: var(--navy-700); }
+.sg-planning .sg-accessible-title { font-size: 14px; }
+.sg-planning .sg-accessible-desc { font-size: 12px; line-height: 1.3; color: var(--slate-600); }
+.sg-planning .sg-toggle { width: 46px; height: 28px; border-radius: 14px; }
+.sg-planning .sg-toggle__thumb { width: 22px; height: 22px; }
+.sg-planning .sg-toggle.is-on .sg-toggle__thumb { transform: translateX(18px); }
+
+.sg-planning .sg-form-actions { padding: 8px 16px 16px; }
+.sg-planning .sg-calc-btn { min-height: 52px; border-radius: 12px; box-shadow: none; }
+.sg-planning .sg-calc-btn:disabled { background: var(--slate-100); color: var(--slate-500); }
+.sg-planning .sg-form-hint { color: var(--slate-600); }
+
+.sg-planning .sg-quick-section { padding: 0 2px; }
+.sg-planning .sg-quick-title {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--navy-950);
+}
+.sg-planning .sg-quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.sg-planning .sg-quick-item {
+  min-height: 76px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border-color: rgba(148,163,184,.3);
+  border-radius: 12px;
+  background: var(--white);
+  text-align: left;
+}
+.sg-planning .sg-quick-item:hover { background: var(--teal-50); transform: none; }
+.sg-planning .sg-quick-item__icon { width: auto; height: auto; background: transparent; border-radius: 0; font-size: 21px; color: var(--teal-700); }
+.sg-planning .sg-quick-item__content { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.sg-planning .sg-quick-item__label { font-size: 14px; font-weight: 700; text-align: left; color: var(--navy-950); }
+.sg-planning .sg-quick-item__sub { font-size: 12px; line-height: 1.25; color: var(--slate-600); }
+
+@media (min-width: 640px) {
+  .sg-planning .sg-planning-scroll { padding-top: 32px; }
+  .sg-planning .sg-quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+/* Planning switch: the visible track remains compact while its hit target is 44px high. */
+.sg-planning .sg-toggle {
+  height: 44px;
+  background: transparent;
+  border-radius: 0;
+}
+.sg-planning .sg-toggle::before {
+  content: '';
+  position: absolute;
+  inset: 8px 0;
+  border-radius: 14px;
+  background: var(--slate-200);
+  transition: background var(--t-base);
+}
+.sg-planning .sg-toggle.is-on::before { background: var(--teal-600); }
+.sg-planning .sg-toggle__thumb { top: 11px; z-index: 1; }
+
+/* ============================================================
+   PLANNING SCREEN — PREMIUM REDESIGN v5
+   Overrides via cascade (declared after legacy rules)
+   ============================================================ */
+
+/* ── Design tokens (reference-fidelity pass) ────────────── */
+:root {
+  --sg-page: #f5f8fc;
+  --sg-surface: #ffffff;
+  --sg-navy-950: #061a35;
+  --sg-navy-900: #08213f;
+  --sg-navy-800: #102d52;
+  --sg-teal-600: #009f98;
+  --sg-teal-500: #08aaa2;
+  --sg-teal-soft: #e4f6f3;
+  --sg-text-primary: #071a33;
+  --sg-text-secondary: #667894;
+  --sg-text-muted: #91a0b5;
+  --sg-border: #dce5ef;
+  --sg-border-soft: rgba(7, 26, 51, 0.08);
+  --sg-disabled-bg: #e8eef5;
+  --sg-disabled-text: #94a3b7;
+  --sg-shadow-card: 0 24px 60px rgba(7, 26, 51, 0.10), 0 4px 14px rgba(7, 26, 51, 0.04);
+  --sg-shadow-control: 0 8px 24px rgba(7, 26, 51, 0.10);
+  --sg-radius-card: 28px;
+  --sg-radius-button: 17px;
+  --sg-radius-shortcut: 20px;
+}
+
+/* ── Page canvas ───────────────────────────────────────── */
+.sg-planning {
+  position: relative !important;
+  height: auto !important;
+  min-height: 100dvh !important;
+  background: var(--sg-page) !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Allow the app shell to not clip the scrolling planning screen */
+#app:has(.sg-planning) {
+  overflow: visible;
+  position: relative;
+}
+
+/* ── Airport hero background ────────────────────────────── */
+.sg-hero-bg {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: min(610px, 58dvh);
+  min-height: 260px;
+  max-height: 610px;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  contain: layout style;
+}
+
+.sg-hero-bg__img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 42%;
+  opacity: 0.38;
+  filter: saturate(0.78) brightness(1.16);
+  /* Prevent horizontal overflow */
+  max-width: none;
+}
+
+/* Fade gradient from image to page color */
+.sg-hero-bg__overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(245, 248, 252, 0.18) 0%,
+    rgba(245, 248, 252, 0.36) 24%,
+    rgba(245, 248, 252, 0.68) 48%,
+    rgba(245, 248, 252, 0.92) 70%,
+    var(--sg-page) 92%,
+    var(--sg-page) 100%
+  );
+  pointer-events: none;
+}
+
+/* ── Brand utility row (borderless) ─────────────────────── */
+.sg-brandbar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding-top: calc(var(--safe-top) + 18px);
+  padding-left: 22px;
+  padding-right: 14px;
+  padding-bottom: 0;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  height: auto !important;
+}
+
+.sg-brandbar__left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* White surface tile behind the logo glyph */
+.sg-brandbar__logo-tile {
+  display: block;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--sg-surface) url('../../assets/logo.png') no-repeat;
+  background-size: 312px 208px;
+  background-position: -81px -72px;
+  box-shadow: 0 4px 14px rgba(6, 26, 53, 0.14);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.sg-brandbar__logo {
+  display: none;
+}
+
+.sg-brandbar__wordmark {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 27px;
+  font-weight: 800;
+  color: var(--sg-navy-950);
+  letter-spacing: -0.025em;
+  line-height: 1;
+}
+
+/* Circular help button */
+.sg-help-btn {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--sg-navy-950);
+  color: #ffffff;
+  font-size: 23px;
+  cursor: pointer;
+  border: none;
+  transition: background var(--t-fast), transform var(--t-fast);
+  box-shadow: 0 2px 8px rgba(6,26,53,.22);
+}
+.sg-help-btn:hover  { background: var(--sg-navy-900); transform: scale(1.04); }
+.sg-help-btn:active { transform: scale(0.97); }
+.sg-help-btn:focus-visible { outline: 2px solid var(--sg-teal-500); outline-offset: 2px; }
+
+/* ── Airport context row ─────────────────────────────────── */
+.sg-airport-ctx {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 0 22px 0;
+  margin-top: 24px;
+}
+
+.sg-airport-ctx__icon {
+  font-size: 16px;
+  color: var(--sg-teal-600);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.sg-airport-ctx__text {
+  font-size: 16px;
+  font-weight: 600;
+  color: #183554;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+/* ── Heading region ─────────────────────────────────────── */
+.sg-heading-region {
+  position: relative;
+  z-index: 2;
+  padding: 46px 22px 0;
+  max-width: 400px;
+}
+
+.sg-heading {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: clamp(44px, 11.8vw, 50px);
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.048em;
+  color: var(--sg-navy-950);
+  margin-bottom: 0;
+  max-width: 340px;
+}
+
+.sg-heading-sub {
+  margin-top: 18px;
+  font-size: 17.5px;
+  font-weight: 450;
+  line-height: 1.48;
+  color: var(--sg-text-secondary);
+  max-width: 330px;
+}
+
+/* ── Planning main scroll area ──────────────────────────── */
+.sg-planning .sg-planning-main {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: visible !important;
+  padding-bottom: 0 !important;
+}
+
+.sg-planning .sg-planning-scroll {
+  width: 100%;
+  max-width: 520px;
+  padding: 36px 22px max(48px, var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Route composer surface ─────────────────────────────── */
+.sg-composer {
+  background: var(--sg-surface);
+  border-radius: var(--sg-radius-card);
+  border: 1px solid var(--sg-border-soft);
+  box-shadow: var(--sg-shadow-card);
+  overflow: hidden;
+  margin-bottom: 0;
+}
+
+/* ── Journey rail (composer layout) ─────────────────────── */
+.sg-journey--composer {
+  display: flex;
+  align-items: stretch;
+  position: relative;
+  border-bottom: none;
+}
+
+/* Left decorative rail */
+.sg-journey--composer .sg-journey__rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  width: 56px;
+  flex-shrink: 0;
+  gap: 0;
+}
+
+/* Origin dot — turquoise ring */
+.sg-journey--composer .sg-journey__dot--origin {
+  width: 22px !important;
+  height: 22px !important;
+  background: #ffffff !important;
+  border: 2.5px solid var(--sg-teal-600) !important;
+  box-shadow: 0 0 0 3px rgba(0, 159, 152, 0.12) !important;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 30px;
+}
+
+/* Dashed connector */
+.sg-journey__connector {
+  flex: 1;
+  width: 2px;
+  margin: 6px 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--sg-teal-600) 0, var(--sg-teal-600) 4px,
+    transparent 4px, transparent 10px
+  );
+  opacity: 0.42;
+  transition: opacity 0.25s ease;
+  min-height: 24px;
+}
+
+/* Filled state: both locations selected */
+.sg-journey__rail.is-filled .sg-journey__connector {
+  opacity: 0.78;
+}
+
+/* Destination dot — solid turquoise */
+.sg-journey--composer .sg-journey__dot--dest {
+  width: 22px !important;
+  height: 22px !important;
+  background: var(--sg-teal-600) !important;
+  box-shadow: 0 0 0 3px rgba(0, 159, 152, 0.18) !important;
+  border: none !important;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-bottom: 30px;
+}
+
+/* Fields column */
+.sg-journey--composer .sg-journey__fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Origin / destination rows */
+.sg-journey--composer .sg-journey-field {
+  display: flex !important;
+  align-items: center !important;
+  min-height: 92px !important;
+  width: 100% !important;
+  padding: 16px 20px 16px 0 !important;
+  background: transparent !important;
+  border: none !important;
+  text-align: left !important;
+  cursor: pointer !important;
+  transition: background 0.12s ease !important;
+  position: relative !important;
+}
+.sg-journey--composer .sg-journey-field:hover {
+  background: rgba(245, 248, 252, 0.7) !important;
+}
+.sg-journey--composer .sg-journey-field:focus-visible {
+  outline: 2px solid var(--sg-teal-500);
+  outline-offset: -2px;
+  border-radius: 4px;
+}
+
+.sg-journey-field__label {
+  display: block;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: #657791 !important;
+  line-height: 1 !important;
+  margin-bottom: 6px !important;
+}
+
+.sg-journey--composer .sg-journey-field__value {
+  display: block;
+  font-size: 21px !important;
+  font-weight: 750 !important;
+  line-height: 1.2 !important;
+  color: var(--sg-text-primary) !important;
+}
+.sg-journey--composer .sg-journey-field__value.is-ph {
+  color: var(--sg-text-muted) !important;
+  font-weight: 450 !important;
+  font-size: 19px !important;
+}
+
+/* Floor + category metadata pill (shown once a location is selected) */
+.sg-journey-field__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 30px;
+  margin-top: 10px;
+  padding: 5px 11px;
+  border: 1px solid rgba(0, 159, 152, 0.14);
+  border-radius: 999px;
+  background: var(--sg-teal-soft);
+  color: #197c76;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.sg-journey-field__meta iconify-icon { font-size: 14px; flex-shrink: 0; }
+.sg-journey-field__meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sg-journey--composer .sg-journey-clear {
+  width: 42px !important;
+  height: 42px !important;
+  font-size: 18px !important;
+  background: rgba(7, 26, 51, 0.045) !important;
+  color: #5b6b83 !important;
+}
+
+/* Divider between origin and destination */
+.sg-journey__divider {
+  display: flex;
+  align-items: center;
+  position: relative;
+  height: 0;
+  z-index: 1;
+}
+
+.sg-journey__sep-line {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: rgba(7, 26, 51, 0.07);
+  pointer-events: none;
+}
+
+/* Swap button — floating on the divider line */
+.sg-journey--composer .sg-journey__swap {
+  position: absolute !important;
+  right: 12px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 52px !important;
+  height: 52px !important;
+  border-radius: 50% !important;
+  display: grid !important;
+  place-items: center !important;
+  background: #ffffff !important;
+  border: 1px solid var(--sg-border) !important;
+  box-shadow: var(--sg-shadow-control) !important;
+  font-size: 21px !important;
+  color: #2d4263 !important;
+  cursor: pointer !important;
+  margin: 0 !important;
+  align-self: auto !important;
+  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast) !important;
+  z-index: 2;
+}
+.sg-journey--composer .sg-journey__swap:hover:not(:disabled) {
+  background: #f0fdfa !important;
+  border-color: rgba(0, 159, 152, 0.35) !important;
+  color: var(--sg-teal-600) !important;
+  box-shadow: 0 4px 16px rgba(0, 159, 152, 0.14) !important;
+}
+.sg-journey--composer .sg-journey__swap:active:not(:disabled) {
+  transform: translateY(-50%) scale(0.97) !important;
+}
+.sg-journey--composer .sg-journey__swap:disabled {
+  opacity: 0.28 !important;
+  cursor: not-allowed !important;
+}
+.sg-journey--composer .sg-journey__swap:focus-visible {
+  outline: 2px solid var(--sg-teal-500);
+  outline-offset: 2px;
+}
+
+/* ── Accessible route row (composer) ─────────────────────── */
+.sg-access-row--composer {
+  display: flex;
+  align-items: center;
+  min-height: 78px;
+  padding: 16px 20px;
+  gap: 14px;
+  border-top: 1px solid rgba(7, 26, 51, 0.07);
+  border-bottom: 1px solid rgba(7, 26, 51, 0.07);
+  transition: background var(--t-fast);
+  cursor: pointer;
+}
+.sg-access-row--composer:hover { background: rgba(245, 248, 252, 0.6); }
+
+.sg-access-row--composer .sg-access-row__label {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.sg-access-row--composer .sg-access-row__icon {
+  font-size: 23px !important;
+  color: #94a3b8 !important;
+  flex-shrink: 0;
+  transition: color var(--t-fast);
+}
+.sg-access-row--composer .sg-access-row__icon.is-on {
+  color: var(--sg-teal-600) !important;
+}
+
+.sg-access-row--composer .sg-access-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sg-access-row--composer .sg-access-row__title {
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  color: var(--sg-navy-950) !important;
+  line-height: 1.2 !important;
+}
+.sg-access-row--composer .sg-access-row__desc {
+  font-size: 14px !important;
+  color: var(--sg-text-secondary) !important;
+  font-weight: 400 !important;
+  line-height: 1.35 !important;
+  margin-top: 0 !important;
+}
+
+/* Reset the toggle for new composer context (no pseudo-element trick needed) */
+.sg-composer .sg-toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 54px !important;
+  height: 32px !important;
+  border-radius: 16px !important;
+  background: #d1dce8 !important;
+  border: none !important;
+  cursor: pointer !important;
+}
+.sg-composer .sg-toggle::before { display: none !important; }
+.sg-composer .sg-toggle.is-on { background: var(--sg-teal-600) !important; }
+.sg-composer .sg-toggle:focus-visible { outline: 2px solid var(--sg-teal-500); outline-offset: 3px; }
+.sg-composer .sg-toggle__thumb {
+  position: absolute !important;
+  top: 4px !important; left: 4px !important;
+  width: 24px !important; height: 24px !important;
+  border-radius: 50% !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,.22) !important;
+  transition: transform var(--t-base) !important;
+}
+.sg-composer .sg-toggle.is-on .sg-toggle__thumb {
+  transform: translateX(22px) !important;
+}
+
+/* ── Composer action / Calculate button ─────────────────── */
+.sg-composer__action {
+  padding: 22px 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sg-composer .sg-calc-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 10px !important;
+  min-height: 62px !important;
+  width: 100% !important;
+  background: var(--sg-navy-950) !important;
+  color: #ffffff !important;
+  border-radius: var(--sg-radius-button) !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.01em !important;
+  border: none !important;
+  cursor: pointer !important;
+  transition: background var(--t-fast), transform var(--t-fast), box-shadow var(--t-fast) !important;
+  box-shadow: none !important;
+}
+.sg-composer .sg-calc-btn:hover:not(:disabled) {
+  background: var(--sg-navy-900) !important;
+  transform: scale(0.99) !important;
+  box-shadow: 0 6px 20px rgba(6,26,53,.28) !important;
+}
+.sg-composer .sg-calc-btn:active:not(:disabled) {
+  transform: scale(0.98) !important;
+  transition-duration: 80ms !important;
+}
+.sg-composer .sg-calc-btn:disabled {
+  background: var(--sg-disabled-bg) !important;
+  color: var(--sg-disabled-text) !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  font-size: 17px !important;
+  min-height: 62px !important;
+}
+.sg-composer .sg-calc-btn:focus-visible { outline: 2px solid var(--sg-teal-500); outline-offset: 3px; }
+.sg-calc-btn__arrow { font-size: 20px; opacity: 0.85; }
+
+.sg-form-hint { text-align: center; font-size: 13.5px; color: var(--sg-text-muted); line-height: 1.4; margin-top: 2px; }
+.sg-form-hint.is-warn { color: var(--red-600); font-weight: 600; }
+
+/* ── Quick access section ───────────────────────────────── */
+.sg-quick-section {
+  margin-top: 34px;
+  margin-bottom: 32px;
+}
+
+.sg-quick-section__title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 21px;
+  font-weight: 750;
+  color: var(--sg-navy-950);
+  letter-spacing: -0.018em;
+  margin-bottom: 16px;
+}
+
+/* Horizontally scrollable row */
+.sg-quick-scroll {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: visible;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 4px;
+  padding-top: 2px;
+  margin: 0 -2px;
+  padding-left: 2px;
+  padding-right: 2px;
+}
+.sg-quick-scroll::-webkit-scrollbar { display: none; }
+
+/* Quick access card */
+.sg-quick-card {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 20px 12px 18px;
+  width: 122px;
+  min-height: 168px;
+  background: #ffffff;
+  border: 1px solid var(--sg-border-soft);
+  border-radius: var(--sg-radius-shortcut);
+  cursor: pointer;
+  text-align: center;
+  scroll-snap-align: start;
+  transition: background var(--t-fast), border-color var(--t-fast), transform var(--t-fast), box-shadow var(--t-fast);
+  box-shadow: 0 2px 8px rgba(7, 26, 51, 0.05);
+}
+.sg-quick-card:hover {
+  background: #f0fdfa;
+  border-color: rgba(0, 159, 152, 0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(7, 26, 51, 0.09);
+}
+.sg-quick-card:active { transform: scale(0.97); }
+.sg-quick-card:focus-visible { outline: 2px solid var(--sg-teal-500); outline-offset: 2px; }
+
+.sg-quick-card__icon {
+  font-size: 40px;
+  color: var(--sg-teal-600);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.sg-quick-card__icon-wrap {
+  font-size: 40px;
+  color: var(--sg-teal-600);
+  line-height: 1;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+.sg-quick-card:hover .sg-quick-card__icon,
+.sg-quick-card:hover .sg-quick-card__icon-wrap { color: var(--sg-teal-600); }
+
+.sg-quick-card__name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--sg-navy-950);
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.sg-quick-card__sub {
+  font-size: 13.5px;
+  color: var(--sg-text-secondary);
+  font-weight: 400;
+  line-height: 1.35;
+}
+
+/* ── Entrance animations ────────────────────────────────── */
+@keyframes sg-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes sg-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.sg-planning .sg-brandbar    { animation: sg-fade-in 0.22s ease both; }
+.sg-planning .sg-airport-ctx { animation: sg-fade-in 0.22s ease both; animation-delay: 30ms; }
+.sg-planning .sg-heading-region { animation: sg-fade-up 0.26s ease both; animation-delay: 60ms; }
+.sg-planning .sg-composer    { animation: sg-fade-up 0.28s ease both; animation-delay: 100ms; }
+.sg-planning .sg-quick-section { animation: sg-fade-up 0.26s ease both; animation-delay: 140ms; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sg-planning .sg-brandbar,
+  .sg-planning .sg-airport-ctx,
+  .sg-planning .sg-heading-region,
+  .sg-planning .sg-composer,
+  .sg-planning .sg-quick-section {
+    animation: none !important;
+  }
+}
+
+/* ── Responsive breakpoints ─────────────────────────────── */
+
+/* Narrow (≤380px) */
+@media (max-width: 380px) {
+  .sg-brandbar          { padding-left: 16px !important; padding-right: 10px !important; }
+  .sg-airport-ctx       { padding-left: 16px !important; }
+  .sg-heading-region    { padding-left: 16px !important; padding-right: 16px !important; }
+  .sg-planning .sg-planning-scroll { padding-left: 16px !important; padding-right: 16px !important; }
+  .sg-heading           { font-size: clamp(38px, 11vw, 44px) !important; }
+  .sg-quick-card        { width: 112px !important; }
+}
+
+/* Standard mobile (381–520px) */
+@media (min-width: 381px) and (max-width: 520px) {
+  .sg-planning .sg-planning-scroll { padding-left: 22px !important; padding-right: 22px !important; }
+}
+
+/* Desktop — centered panel */
+@media (min-width: 521px) {
+  .sg-planning { align-items: center; }
+  .sg-brandbar {
+    width: 100%;
+    max-width: 520px;
+    padding-left: 24px !important;
+    padding-right: 16px !important;
+    align-self: center;
+  }
+  .sg-airport-ctx {
+    width: 100%;
+    max-width: 520px;
+    padding-left: 24px !important;
+    align-self: center;
+  }
+  .sg-heading-region {
+    width: 100%;
+    max-width: 520px;
+    padding-left: 24px !important;
+    align-self: center;
+  }
+  .sg-planning .sg-planning-main {
+    width: 100%;
+    max-width: 520px;
+    align-self: center;
+  }
+  .sg-planning .sg-planning-scroll {
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+  }
+  .sg-quick-card  { width: 122px !important; }
+  .sg-hero-bg     { left: 50%; transform: translateX(-50%); max-width: 520px; }
+}
+
+/* Tall viewports */
+@media (min-height: 900px) {
+  .sg-heading-region { padding-top: 52px !important; }
+  .sg-planning .sg-planning-scroll { padding-top: 40px !important; }
+}

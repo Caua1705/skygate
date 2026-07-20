@@ -1,0 +1,49 @@
+/* ============================================================
+   DESKTOP LAYOUT (≥ 1024px)
+   ============================================================ */
+
+@media (min-width: 1024px) {
+  /* Planning + summary: centered cards */
+  .sg-planning, .sg-summary-screen {
+    max-width: 100%; align-items: stretch;
+  }
+  .sg-planning-body, .sg-summary-body {
+    justify-content: flex-start; align-items: center;
+    padding-top: 40px;
+  }
+  .sg-form-card { min-width: 440px; }
+
+  /* Navigation: map fills the viewport, sheet becomes a right-hand panel */
+  .sg-map-area {
+    height: 100%;
+    right: var(--nav-sheet-w);
+  }
+  .sg-map-area::after {
+    background: radial-gradient(120% 80% at 50% 35%, transparent 45%, rgba(6, 18, 33, .5) 100%);
+  }
+
+  .sg-instruction-card {
+    top: 0; left: auto; bottom: 0;
+    width: var(--nav-sheet-w);
+    border-radius: 0;
+    box-shadow: -14px 0 44px rgba(9, 25, 45, .16);
+    padding-top: 24px;
+  }
+
+  .sg-sheet-handle { display: none; }
+
+  /* Overlay overlays: centered */
+  .sg-search-overlay { justify-content: center; align-items: center; }
+  .sg-search-sheet {
+    border-radius: var(--sg-radius-card);
+    width: min(600px, calc(100vw - 32px)); max-height: 80dvh;
+  }
+  .sg-search-handle { display: none; }
+
+  .sg-detail-overlay { justify-content: center; align-items: center; }
+  .sg-detail-sheet {
+    border-radius: var(--sg-radius-card);
+    width: min(480px, calc(100vw - 32px)); max-height: 85dvh;
+  }
+  .sg-detail-handle { display: none; }
+}

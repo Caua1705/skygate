@@ -1,0 +1,13 @@
+/* SkyGate stylesheet manifest.
+   Import order mirrors the original single styles.css exactly — the CSS
+   cascade depends on it, so do not reorder these lines. */
+
+@import url('./tokens.css');
+@import url('./base.css');
+@import url('./components.css');
+@import url('./screens/planning.css');
+@import url('./screens/navigation.css');
+@import url('./overlays.css');
+@import url('./desktop.css');
+@import url('./a11y.css');
+@import url('./screens/planning-v5.css');

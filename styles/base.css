@@ -1,0 +1,28 @@
+/* ============================================================
+   APP SHELL
+   ============================================================ */
+
+#app {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+
+/* Planning mode: allow the inner shell to scroll naturally */
+#app:has(.sg-planning) {
+  overflow: visible;
+  position: relative;
+}
+
+/* ============================================================
+   UTILITY
+   ============================================================ */
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0;
+  margin: -1px; overflow: hidden; clip: rect(0,0,0,0);
+  white-space: nowrap; border: 0;
+}
+.truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+:focus-visible { outline: 2px solid var(--teal-500); outline-offset: 2px; }

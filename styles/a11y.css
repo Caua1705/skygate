@@ -1,0 +1,11 @@
+/* ============================================================
+   ACCESSIBILITY CONTRAST HELPERS
+   ============================================================ */
+
+@media (prefers-contrast: high) {
+  .sg-form-card { border-color: var(--navy-700); }
+  .sg-route-field__value--ph { color: var(--slate-700); }
+  .sg-instr-head__title { color: #000000; }
+  .sg-metric__label, .sg-next-step__dist { color: #4a5b73; }
+  .sg-map-fab, .sg-nav-help { border: 1px solid rgba(255,255,255,.45); }
+}
