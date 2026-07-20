@@ -7,6 +7,7 @@ import { renderInstructionCardInner, renderOverlayOverview } from '../screens/na
 import { switchFloor } from '../map/floorSwitch.js';
 import { fitFullRoute, fitStepToView } from '../map/mapFit.js';
 import { prefersReducedMotion , $ } from '../utils/dom.js';
+import { hasPlaceDetails } from '../components/PlaceDetailSheet.js';
 
 /* ============================================================
    14. ACTIONS
@@ -53,6 +54,47 @@ export function closeLocationDetail() {
 
 export function traceRouteToLocation(code) {
   uiState.modalNodeCode = '';
+  selectLocation('destination', code);
+}
+
+/* ---- Place detail sheet (rich business card) ---- */
+let _placeTriggerEl = null;
+
+/**
+ * The "i" target. Prefers the rich place card when we have a record for the
+ * code; otherwise falls back to the legacy node detail so nothing regresses.
+ */
+export function openPlaceOrLocationDetail(code) {
+  if (hasPlaceDetails(code)) return openPlaceDetail(code);
+  return openLocationDetail(code);
+}
+
+export function openPlaceDetail(id) {
+  if (!hasPlaceDetails(id)) return;
+  _placeTriggerEl = document.activeElement;
+  uiState.placeDetailId = id;
+  render();
+  requestAnimationFrame(() => $('place-detail-close')?.focus({ preventScroll: true }));
+}
+
+export function closePlaceDetail() {
+  if (!uiState.placeDetailId) return;
+  uiState.placeDetailId = '';
+  render();
+  const trigger = _placeTriggerEl;
+  _placeTriggerEl = null;
+  // render() rebuilt the DOM, so the original trigger node is detached. Return
+  // focus to it only if it survived; otherwise keep focus in context (the
+  // search field the card opened from) rather than dropping it to <body>.
+  requestAnimationFrame(() => {
+    const target = (trigger && document.contains(trigger)) ? trigger : $('search-input');
+    target?.focus?.({ preventScroll: true });
+  });
+}
+
+/** "Traçar rota até aqui" — close the card and set it as the destination. */
+export function tracePlaceRoute(code) {
+  uiState.placeDetailId = '';
   selectLocation('destination', code);
 }
 

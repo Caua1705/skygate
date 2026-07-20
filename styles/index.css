@@ -19,3 +19,5 @@
 @import url('./screens/route-summary.css');
 /* Navigation header + bottom sheet on the DS — own classes, tokens only. */
 @import url('./screens/navigation-sheet.css');
+/* Reusable place-detail card (business info) on the DS — tokens only. */
+@import url('./components/place-detail.css');

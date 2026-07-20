@@ -1,5 +1,5 @@
 import { $ } from '../utils/dom.js';
-import { advanceStep, clearLocation, closeLocationDetail, closeOverview, closeSearch, editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail, openOverview, openSearch, returnToCurrentStep, selectLocation, setRouteMode, showHelp, startNavigation, swapLocations, toggleAccessibleRoute, traceRouteToLocation } from './actions.js';
+import { advanceStep, clearLocation, closeLocationDetail, closePlaceDetail, closeOverview, closeSearch, editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail, openPlaceOrLocationDetail, openOverview, openSearch, returnToCurrentStep, selectLocation, setRouteMode, showHelp, startNavigation, swapLocations, toggleAccessibleRoute, traceRouteToLocation, tracePlaceRoute } from './actions.js';
 import { handleCalculate } from './routeController.js';
 import { init } from './bootstrap.js';
 import { app, navState, uiState } from '../state/appState.js';
@@ -79,12 +79,40 @@ export function bindEvents() {
   // Search
   bindSearchOverlayEvents();
 
-  // Location detail sheet
+  // Location detail sheet (legacy node-based)
   $('detail-backdrop')?.addEventListener('click', closeLocationDetail);
   $('close-detail')?.addEventListener('click', closeLocationDetail);
   $('detail-route-btn')?.addEventListener('click', e => {
     const code = e.currentTarget.dataset.code;
     if (code) traceRouteToLocation(code);
+  });
+
+  // Place detail sheet (rich business card)
+  $('place-detail-backdrop')?.addEventListener('click', closePlaceDetail);
+  $('place-detail-close')?.addEventListener('click', closePlaceDetail);
+  $('place-route-btn')?.addEventListener('click', e => {
+    const code = e.currentTarget.dataset.code;
+    if (code) tracePlaceRoute(code);
+  });
+  bindFocusTrap($('place-detail'));
+}
+
+/**
+ * Keep Tab focus inside a dialog while it is open. Cheap and dependency-free:
+ * wrap from last→first and first→last. Returning focus to the trigger is done
+ * by the close action.
+ */
+export function bindFocusTrap(container) {
+  if (!container) return;
+  container.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    const f = [...container.querySelectorAll(
+      'a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])'
+    )].filter(el => el.offsetParent !== null || el === document.activeElement);
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
 }
 
@@ -154,8 +182,10 @@ export function bindSearchItemEvents() {
   document.querySelectorAll('.sg-search-item').forEach(btn =>
     btn.addEventListener('click', () => selectLocation(btn.dataset.kind, btn.dataset.code))
   );
+  // Tapping the row selects the place for the route; tapping the "i" opens the
+  // rich detail card (falling back to the legacy node detail when unmocked).
   document.querySelectorAll('.sg-search-item__info').forEach(btn =>
-    btn.addEventListener('click', e => { e.stopPropagation(); openLocationDetail(btn.dataset.code); })
+    btn.addEventListener('click', e => { e.stopPropagation(); openPlaceOrLocationDetail(btn.dataset.code); })
   );
 }
 
@@ -182,6 +212,7 @@ export function bindInstructionSwipe() {
 // Keyboard
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
+    if (uiState.placeDetailId) { closePlaceDetail(); return; }
     if (uiState.modalNodeCode) { closeLocationDetail(); return; }
     if (uiState.showOverview)  { closeOverview(); return; }
     if (uiState.searchOpenFor) { e.preventDefault(); closeSearch(); return; }

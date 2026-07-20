@@ -1,0 +1,231 @@
+/* ============================================================
+   PLACE DETAIL SHEET — Design System v5
+   ------------------------------------------------------------
+   Reusable business detail card. Rendered with `.sg-ds`, tokens only.
+   Navy + turquoise; the ONLY non-brand colours are the DS semantic
+   success/danger used for the open/closed status pill.
+   Imported last so it wins where needed.
+   ============================================================ */
+
+.sg-place-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;                 /* above the search overlay (80) */
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.sg-place-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  width: 100%;
+  background: rgba(10, 25, 47, .55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  cursor: pointer;
+}
+
+.sg-place-sheet {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  max-height: 90dvh;
+  background: var(--surface);
+  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  box-shadow: var(--elev-3);
+  overflow: hidden;
+  animation: sheetUp var(--t-base) ease;
+}
+
+/* ---- Photo ---- */
+.sg-place__photo {
+  position: relative;
+  flex: 0 0 auto;
+  height: 200px;
+  background: var(--surface-2);
+}
+.sg-place__photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* No photo → a branded gradient with a soft glyph, never a broken image. */
+.sg-place__photo.is-placeholder {
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(120% 120% at 80% 20%, rgba(41, 171, 226, .35) 0%, transparent 60%),
+    var(--brand-gradient);
+}
+.sg-place__photo-glyph { font-size: 64px; color: rgba(255, 255, 255, .9); }
+
+.sg-place__close {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  width: var(--tap-min);
+  height: var(--tap-min);
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 50%;
+  background: rgba(10, 25, 47, .5);
+  color: #FFFFFF;
+  cursor: pointer;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  transition: background var(--ds-transition);
+}
+.sg-place__close:hover { background: rgba(10, 25, 47, .72); }
+.sg-place__close iconify-icon { font-size: 24px; }
+
+/* ---- Scroll body ---- */
+.sg-place__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--space-5);
+}
+
+/* ---- Open-now status (DS semantic colours, not the brand green) ---- */
+.sg-place__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  margin-bottom: var(--space-4);
+}
+.sg-place__status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+/* Outline on --surface (not the soft fill): --success on soft only reaches
+   4.49:1 — a hair under AA. On white it clears 5.3:1. Dot carries the fill. */
+.sg-place__status { background: var(--surface); border: 1.5px solid currentColor; }
+.sg-place__status.is-open   { color: var(--success); }
+.sg-place__status.is-closed { color: var(--danger); }
+
+/* ---- Identity ---- */
+.sg-place__name {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-extra);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.02em;
+  color: var(--navy-900);
+  margin: 0 0 var(--space-3);
+}
+
+.sg-place__tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.sg-place__floor,
+.sg-place__access {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--sky-ink);
+}
+.sg-place__floor iconify-icon,
+.sg-place__access iconify-icon { font-size: 16px; }
+
+.sg-place__desc {
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--text);
+  margin: 0 0 var(--space-5);
+}
+
+/* ---- Sections ---- */
+.sg-place__section { padding-top: var(--space-4); border-top: 1px solid var(--border); margin-bottom: var(--space-4); }
+.sg-place__section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: var(--text);
+  margin: 0 0 var(--space-3);
+}
+.sg-place__section-title iconify-icon { font-size: 18px; color: var(--sky-ink); }
+
+/* ---- Hours ---- */
+.sg-place__hours { display: flex; flex-direction: column; gap: 2px; }
+.sg-place__hours-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+.sg-place__hours-day { color: var(--text-muted); font-weight: var(--weight-medium); }
+.sg-place__hours-val { color: var(--text); font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; }
+.sg-place__hours-val.is-closed { color: var(--text-muted); font-weight: var(--weight-medium); }
+
+/* Today stands out in turquoise. */
+.sg-place__hours-row.is-today {
+  background: rgba(41, 171, 226, .12);
+}
+.sg-place__hours-row.is-today .sg-place__hours-day,
+.sg-place__hours-row.is-today .sg-place__hours-val { color: var(--sky-ink); font-weight: var(--weight-bold); }
+.sg-place__hours-today { font-weight: var(--weight-bold); }
+
+/* ---- Contacts ---- */
+.sg-place__contacts { display: flex; flex-direction: column; gap: var(--space-2); }
+.sg-place__contact {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--navy-900);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  transition: background var(--ds-transition), border-color var(--ds-transition);
+}
+.sg-place__contact:hover { background: var(--surface-2); border-color: var(--sky-ink); }
+.sg-place__contact > iconify-icon:first-child { font-size: 20px; color: var(--sky-ink); flex: 0 0 auto; }
+.sg-place__contact > span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sg-place__contact-ext { font-size: 15px; color: var(--text-muted); flex: 0 0 auto; }
+
+/* ---- Fixed action ---- */
+.sg-place__actions {
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-5) calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.sg-ds .sg-place__route {
+  min-height: 52px;
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+}
+
+/* ---- Focus (buttons/links inside get the DS ring via .sg-ds; the close
+   over the dark photo needs a lighter ring) ---- */
+.sg-place-overlay .sg-place__close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(10, 25, 47, .7), 0 0 0 5px var(--sky-400);
+}
+
+/* ---- Desktop: centred modal, like the search sheet ---- */
+@media (min-width: 640px) {
+  .sg-place-overlay { justify-content: center; align-items: center; }
+  .sg-place-sheet {
+    width: min(460px, calc(100vw - 32px));
+    max-height: 84dvh;
+    border-radius: var(--radius-2xl);
+  }
+}

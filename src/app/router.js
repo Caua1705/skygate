@@ -3,6 +3,7 @@ import { root , $ } from '../utils/dom.js';
 import { renderPlanning } from '../screens/home/HomeScreen.js';
 import { renderSearchOverlay, renderSearchResults } from '../components/SearchOverlay.js';
 import { renderLocationDetail } from '../components/LocationDetail.js';
+import { renderPlaceDetailSheet } from '../components/PlaceDetailSheet.js';
 import { renderSummary } from '../screens/routeSummary/RouteSummaryScreen.js';
 import { renderFloorControl, renderNavigation } from '../screens/navigation/NavigationScreen.js';
 import { bindEvents, bindFloorControlEvents, bindSearchItemEvents } from './events.js';
@@ -18,9 +19,9 @@ import { filterNodes, groupByCategory } from '../services/nodeSearch.js';
 
 export function render() {
   switch (app.mode) {
-    case 'planning':   root.innerHTML = renderPlanning() + renderSearchOverlay() + renderLocationDetail(); break;
-    case 'summary':    root.innerHTML = renderSummary() + renderSearchOverlay() + renderLocationDetail(); break;
-    case 'navigation': root.innerHTML = renderNavigation() + renderSearchOverlay() + renderLocationDetail(); break;
+    case 'planning':   root.innerHTML = renderPlanning() + renderSearchOverlay() + renderLocationDetail() + renderPlaceDetailSheet(); break;
+    case 'summary':    root.innerHTML = renderSummary() + renderSearchOverlay() + renderLocationDetail() + renderPlaceDetailSheet(); break;
+    case 'navigation': root.innerHTML = renderNavigation() + renderSearchOverlay() + renderLocationDetail() + renderPlaceDetailSheet(); break;
   }
   bindEvents();
   if (app.mode === 'navigation') {

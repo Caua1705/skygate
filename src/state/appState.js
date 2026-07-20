@@ -31,7 +31,8 @@ export const uiState = {
   searchQuery: '',
   searchCategory: '',   // SEARCH_CATEGORIES key or '' — active quick-filter chip
   showOverview: false,
-  modalNodeCode: '',
+  modalNodeCode: '',    // legacy node-based detail sheet (LocationDetail)
+  placeDetailId: '',    // rich business detail sheet (PlaceDetailSheet)
   floorMenuOpen: false,
   routeAnimating: false,
 };
