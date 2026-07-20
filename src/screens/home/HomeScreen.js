@@ -14,7 +14,8 @@
  *                             .sg-access-row / .sg-access-row__icon)
  *   #calc-btn                 handleCalculate -> RouteSummaryScreen
  *   #help-btn #retry-btn #dismiss-error
- *   .sg-quick-card[data-cat-key]
+ *   .sg-home-quick[data-cat-key]  quick-action shortcuts (own class, not
+ *                             .sg-quick-card — see events.js and home.css)
  *   #origin-btn #destination-btn   focus targets after clearLocation
  *   #plan-status              live region for the toggle announcement
  */
@@ -24,14 +25,14 @@ import { appData, planState, uiState } from '../../state/appState.js';
 import { esc } from '../../utils/format.js';
 import { Button, Card, Chip, Header, IconButton, dsIcon } from '../../components/ds/index.js';
 
-/* Four columns on the grid, so the visible copy is kept SHORT — at 4-up on a
-   360px phone each card is only ~78px wide. The long-form description lives
-   in `hint`, which goes to the aria-label, where it costs no layout. */
+/* Four quick actions on a single row (Uber/Maps style). The visible label is
+   ONE word; the fuller description lives in `hint`, which goes to the
+   aria-label where it costs no layout. */
 const QUICK_CATS = [
-  { key: 'gates',    label: 'Portões',     icon: 'solar:plain-bold',   subtitle: 'Embarque',     hint: 'Encontre seu portão'         },
-  { key: 'services', label: 'Check-in',    icon: 'solar:bag-2-bold',   subtitle: 'Balcões',      hint: 'Balcões e áreas de check-in' },
-  { key: 'food',     label: 'Alimentação', icon: 'solar:cup-hot-bold', subtitle: 'Restaurantes', hint: 'Restaurantes e lojas'        },
-  { key: 'services', label: 'Serviços',    icon: 'solar:bell-bold',    subtitle: 'Facilidades',  hint: 'Facilidades do aeroporto'    },
+  { key: 'gates',    label: 'Portões',  icon: 'solar:plain-bold',   hint: 'encontre seu portão'      },
+  { key: 'services', label: 'Check-in', icon: 'solar:bag-2-bold',   hint: 'balcões e áreas de check-in' },
+  { key: 'food',     label: 'Comida',   icon: 'solar:cup-hot-bold', hint: 'restaurantes e lojas'     },
+  { key: 'services', label: 'Serviços', icon: 'solar:bell-bold',    hint: 'facilidades do aeroporto' },
 ];
 
 /**
@@ -182,13 +183,6 @@ export function renderPlanning() {
   return `
     <div class="sg-ds sg-home" id="planning-root">
 
-      <!-- HERO: purely decorative airport photo + brand overlay behind the
-           header and title. The photo, framing and measured contrast live in
-           styles/screens/home.css (.sg-home__hero). If the image is ever
-           missing, the photo layer just fails to load and the brand gradient
-           carries the band — a designed fallback, not a bug. -->
-      <div class="sg-home__hero" aria-hidden="true" role="presentation"></div>
-
       ${Header({
         title: 'SkyGate',
         subtitle: `FOR · ${airportLabel}`,
@@ -196,7 +190,6 @@ export function renderPlanning() {
         onHelp: true,
         helpId: 'help-btn',
         wordmark: true,   // the real lockup spells "SkyGate" — no text title
-        theme: 'gradient', // dark hero behind it -> white logo + light controls
         className: 'sg-home__header',
       })}
 
@@ -217,17 +210,14 @@ export function renderPlanning() {
 
             <section class="sg-home__quick" aria-labelledby="quick-title">
               <h2 class="sg-home__section-title" id="quick-title">Encontre rapidamente</h2>
-              <div class="sg-home__quick-scroll">
+              <div class="sg-home__quick-row">
                 ${QUICK_CATS.map(cat => `
                   <button type="button"
-                    class="sg-quick-card sg-home__quick-card"
+                    class="sg-home-quick"
                     data-cat-key="${esc(cat.key)}"
-                    aria-label="${esc(cat.label)}: ${esc(cat.hint)}">
-                    <span class="sg-home__quick-icon" aria-hidden="true">${dsIcon(cat.icon)}</span>
-                    <span class="sg-home__quick-text">
-                      <span class="sg-home__quick-name">${esc(cat.label)}</span>
-                      <span class="sg-home__quick-sub">${esc(cat.subtitle)}</span>
-                    </span>
+                    aria-label="${esc(cat.label)} — ${esc(cat.hint)}">
+                    <span class="sg-home-quick__icon" aria-hidden="true">${dsIcon(cat.icon)}</span>
+                    <span class="sg-home-quick__label">${esc(cat.label)}</span>
                   </button>
                 `).join('')}
               </div>

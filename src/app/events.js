@@ -38,8 +38,11 @@ export function bindEvents() {
   // Accessible route toggle (compact replacement for two big mode cards)
   $('accessible-toggle')?.addEventListener('click', toggleAccessibleRoute);
 
-  // Quick category shortcuts — open destination search pre-filtered by category
-  document.querySelectorAll('.sg-quick__item, .sg-quick-item, .sg-quick-card').forEach(btn =>
+  // Quick category shortcuts — open destination search pre-filtered by category.
+  // .sg-home-quick is the Home's own hook: it deliberately does NOT reuse
+  // .sg-quick-card, whose legacy width:122px!important (planning-v5.css) would
+  // otherwise leak into the Home shortcuts.
+  document.querySelectorAll('.sg-quick__item, .sg-quick-item, .sg-quick-card, .sg-home-quick').forEach(btn =>
     btn.addEventListener('click', () => openCategorySearch(btn.dataset.catKey))
   );
 

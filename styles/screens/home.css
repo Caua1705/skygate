@@ -6,7 +6,9 @@
 
    Imported LAST in styles/index.css so it wins over planning-v5.css
    for the few class names shared with the old markup for behaviour
-   reasons (.sg-access-row, .sg-toggle, .sg-quick-card).
+   reasons (.sg-access-row, .sg-toggle). The quick actions deliberately use
+   their OWN class (.sg-home-quick), not .sg-quick-card, to sidestep the
+   legacy width:122px!important that class still carries in planning-v5.css.
    ============================================================ */
 
 .sg-ds.sg-home {
@@ -20,57 +22,11 @@
   overflow: hidden;
 }
 
-/* ---- Hero ----
-   A clean brand GRADIENT behind the header + title (the airport photo was
-   dropped — it read flat and fought the text). Layers, painted top-down:
-
-     1. turquoise bloom  a soft radial glow low-right, the brand accent
-     2. navy gradient    150deg deep-navy → mid-navy, rich, never flat
-
-   Then the whole element is MASK-faded to transparent by ~92%, revealing the
-   identical page --bg behind it — so the dark top dissolves into the light
-   background with no visible seam before the card.
-
-   ---- Contrast is guaranteed by keeping the TEXT BAND fully navy ----
-   White title / light subtitle need a DARK background, and turquoise (#29ABE2)
-   is light — white on it is only ~2.6:1. So the turquoise bloom is centred
-   BELOW the text band (at 80% 96%); its transparent stop lands before the
-   band bottom, contributing almost nothing there. The text sits on navy in
-   the #0E2A6B–#16408F range, where the whole text band (y 16–185) MEASURES:
-
-                      title (#FFFFFF)   subtitle (--text-muted-dark)
-     mobile              10.30:1             5.85:1
-     desktop             10.36:1             5.89:1
-     % of area < AA       0.0%               0.0%
-
-   (The header "FOR" line sits higher, on pure navy, ~14:1.) The bloom lives
-   in the lower third, which the mask is already dissolving, so the
-   navy→turquoise identity reads without ever dropping the text under AA. */
-.sg-home__hero {
-  position: absolute;
-  inset: 0 0 auto 0;
-  height: 340px;
-  background-image:
-    radial-gradient(78% 62% at 80% 96%,
-      rgba(41, 171, 226, .60) 0%,
-      rgba(41, 171, 226, .22) 34%,
-      rgba(41, 171, 226, 0)   60%),
-    linear-gradient(150deg,
-      #0E2A6B 0%,
-      #123A86 55%,
-      #16408F 100%);
-  background-repeat: no-repeat;
-  background-color: var(--bg);
-  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 50%, rgba(0, 0, 0, 0) 92%);
-          mask-image: linear-gradient(180deg, #000 0%, #000 50%, rgba(0, 0, 0, 0) 92%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* ---- Header (DS component, transparent over the hero) ---- */
+/* ---- Header ----
+   Clean and light on the page --bg — no hero, no dark layer, nothing behind
+   it to dissolve. The coloured SkyGate lockup sits top-left, "FOR ·
+   Aeroporto" beneath it, help button top-right. */
 .sg-ds.sg-home .sg-home__header {
-  position: relative;
-  z-index: 1;
   align-items: flex-start;   /* logo block stacks; help button pins to the top */
   background: transparent;
   border-bottom: none;
@@ -83,62 +39,56 @@
 /* Bigger, crisper lockup than the 32px icon it used to be. */
 .sg-ds.sg-home .sg-home__header .ds-header__logo--wordmark { height: 46px; }
 
-/* Light on the dark hero. --text-muted-dark (#B8C4D9) holds ~8:1 on the navy
-   band where the "FOR" line sits — measured — as a calm secondary line. */
 .sg-ds.sg-home .sg-home__header .ds-header__sub {
   font-size: var(--text-sm);
-  color: var(--text-muted-dark);
+  color: var(--text-muted);
   font-weight: var(--weight-medium);
 }
 
-.sg-ds.sg-home .sg-home__header .ds-header__sub-icon { font-size: 15px; color: var(--sky-400); }
+/* Turquoise location pin — the one brand accent in the light header. */
+.sg-ds.sg-home .sg-home__header .ds-header__sub-icon { font-size: 15px; color: var(--sky-ink); }
 
-/* The help button is the one icon-only control up here — a translucent white
-   pill on the dark hero: 44x44 target, white glyph, legible on navy. */
+/* Help button: light IconButton with a subtle border, full 44x44 target. */
 .sg-ds.sg-home .sg-home__header .ds-iconbtn {
   width: var(--tap-min);
   height: var(--tap-min);
-  background: rgba(255, 255, 255, .16);
-  color: #FFFFFF;
-  box-shadow: none;
+  background: var(--surface);
+  color: var(--navy-900);
+  border: 1px solid var(--border);
+  box-shadow: var(--elev-1);
 }
 
-.sg-ds.sg-home .sg-home__header .ds-iconbtn:hover { background: rgba(255, 255, 255, .28); }
+.sg-ds.sg-home .sg-home__header .ds-iconbtn:hover { background: var(--surface-2); }
 
 /* ---- Heading ----
    Generous vertical rhythm is the whole point of this block: --space-5 of
    air above the title separates it from the header, --space-6 below
    separates it from the card. */
 .sg-home__heading {
-  position: relative;
-  z-index: 1;
   flex: 0 0 auto;
   padding: var(--space-5) var(--space-5) var(--space-6);
 }
 
-/* White on the navy hero — 10.3:1, measured. */
+/* Navy title on the light page. */
 .sg-home__title {
   font-family: var(--font-display);
   font-size: var(--text-3xl);
   font-weight: var(--weight-extra);
   line-height: var(--leading-tight);
   letter-spacing: -0.02em;
-  color: var(--text-on-dark);
+  color: var(--text);
   margin: 0 0 var(--space-3);
 }
 
-/* --text-muted-dark on the navy hero — 5.85:1, measured. */
 .sg-home__subtitle {
   font-size: var(--text-lg);
   line-height: var(--leading-normal);
-  color: var(--text-muted-dark);
+  color: var(--text-muted);
   margin: 0;
 }
 
 /* ---- Scroll region ---- */
 .sg-home__main {
-  position: relative;
-  z-index: 1;
   flex: 1 1 auto;
   min-height: 0;
 }
@@ -566,17 +516,16 @@
   font-weight: var(--weight-bold);
   line-height: var(--leading-snug);
   color: var(--text);
-  margin: 0 0 var(--space-3);
-  padding: 0;   /* flush with the first carousel card */
+  margin: 0 0 var(--space-4);
+  padding: 0;   /* flush with the first shortcut */
 }
 
-/* Fixed 2x2 grid: all four shortcuts always visible, none clipped, none
-   scrolling. Two equal columns give each card enough width for the longest
-   label + description on a single line. */
-.sg-home__quick-scroll {
+/* Single row of four quick actions (Uber/Maps style). Four equal columns, all
+   always visible, none scrolling, none clipped. */
+.sg-home__quick-row {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-3);
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
 }
 
 /* ---- Narrow phones: buy back horizontal room for the place name ----
@@ -593,87 +542,51 @@
   .sg-home__field { padding-left: var(--space-2); }
 }
 
-/* Grid card: icon tile on the left, title + description stacked on the right.
-   The wide 2-column cell holds the longest label on one line with room to
-   spare. */
-.sg-ds.sg-home .sg-home__quick-card {
+/* One quick action: a soft turquoise icon tile with a short label beneath.
+   Its own class (.sg-home-quick), NOT .sg-quick-card — the latter carries a
+   width:122px!important from planning-v5.css that would break this row. The
+   whole column is the tap target; min-height keeps it >= 44px. */
+.sg-ds.sg-home .sg-home-quick {
   display: flex;
-  flex-direction: row;
+  flex-direction: column;
   align-items: center;
-  gap: var(--space-3);
-  /* planning-v5.css pins .sg-quick-card to a fixed width with `!important`
-     inside its media queries (legacy of the old horizontal scroller, leaking
-     via the shared class). !important here is the only thing that beats it so
-     the card fills its grid cell. */
-  width: auto !important;
+  gap: var(--space-2);
   min-width: 0;
-  min-height: 64px;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  box-shadow: var(--elev-1);
-  text-align: left;
+  min-height: var(--tap-min);
+  padding: var(--space-2) var(--space-1);
+  background: transparent;
+  border: none;
   cursor: pointer;
-  transition: box-shadow var(--ds-transition), transform var(--ds-transition),
-              border-color var(--ds-transition);
+  transition: transform var(--ds-transition);
 }
 
-.sg-ds.sg-home .sg-home__quick-card:hover {
-  box-shadow: var(--elev-2);
-  border-color: rgba(41, 171, 226, .45);
-  transform: translateY(-2px);
-}
+.sg-ds.sg-home .sg-home-quick:active { transform: scale(0.96); }
 
-.sg-ds.sg-home .sg-home__quick-card:active { transform: translateY(0); }
-
-.sg-home__quick-icon {
-  flex: 0 0 auto;
+.sg-home-quick__icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 60px;
+  height: 60px;
   border-radius: var(--radius-lg);
   background: rgba(41, 171, 226, .14);
   color: var(--sky-ink);
-  font-size: 26px;
+  font-size: 28px;
   transition: background var(--ds-transition);
 }
 
-.sg-ds.sg-home .sg-home__quick-card:hover .sg-home__quick-icon {
+.sg-ds.sg-home .sg-home-quick:hover .sg-home-quick__icon {
   background: rgba(41, 171, 226, .22);
 }
 
-/* Text column beside the icon; min-width:0 lets it shrink and ellipsis if a
-   future label ever overran, instead of pushing the card wider. */
-.sg-home__quick-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-/* One line each. At 2-up the cell is wide enough (~150px+ of text room) for
-   the longest label ("Alimentação") and description ("Restaurantes") with
-   margin to spare — measured. Ellipsis is only a safety net. */
-.sg-home__quick-name {
-  font-size: var(--text-base);
+/* Short one-word label; may wrap to a 2nd line but never ellipsis. */
+.sg-home-quick__label {
+  font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
   color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.sg-home__quick-sub {
-  font-size: var(--text-sm);
-  line-height: var(--leading-snug);
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  text-align: center;
+  max-width: 100%;
 }
 
 /* ============================================================
@@ -703,11 +616,20 @@
   .sg-home__field,
   .sg-home__clear,
   .sg-home__toggle,
-  .sg-home__quick-card,
+  .sg-home-quick,
   .sg-home__error-close,
   .sg-home__error-retry
 ):focus-visible {
   outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* The focus ring on a transparent quick action reads better hugging the icon
+   tile than the whole invisible column. */
+.sg-ds.sg-home .sg-home-quick:focus-visible {
+  box-shadow: none;
+}
+.sg-ds.sg-home .sg-home-quick:focus-visible .sg-home-quick__icon {
   box-shadow: var(--focus-ring);
 }
 
@@ -716,11 +638,6 @@
    ============================================================ */
 
 @media (min-width: 768px) {
-  /* The carousel keeps its fixed-card sizing on desktop too; only the hero
-     grows. (Font stays --text-sm so the nowrap labels never overrun the
-     fixed 104px track.) */
-  .sg-home__hero { height: 380px; }
-
   /* Keep the reading width sane instead of stretching edge to edge. */
   .sg-ds.sg-home .sg-home__header,
   .sg-home__heading,
