@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createStore } from '../src/state/createStore.js';
 import { createSvgMapCache } from '../src/map/svgMapCache.js';
-import { buildSemanticSteps } from '../src/presentation/semanticStepBuilder.js';
+import { buildSemanticSteps } from '../src/services/semanticStepBuilder.js';
 
 const store = createStore({ accessible: false, count: 0 });
 let updates = 0;

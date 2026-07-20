@@ -36,7 +36,7 @@ import {
   buildSearchText,
   runPresentationTests,
   getFloorLabel as _presFloorLabel,
-} from '../presentation/nodePresentation.js';
+} from '../services/nodePresentation.js';
 
 /* ============================================================
    1. CONSTANTS
