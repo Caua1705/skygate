@@ -28,11 +28,11 @@
      1. white veil    holds text contrast, then ramps to full --bg (dissolve)
      2. turquoise tint faint brand wash so veiled areas read as photo, not a
                        flat white block — also erases the wall/window seam
-     3. photo          assets/airport-lounge-hero.png, framed on the windows
+     3. photo          assets/airport-lounge-hero.webp, framed on the windows
      4. brand wash     navy→turquoise, the fallback when the photo is absent
 
    ---- Everything here was MEASURED against the real photo ----
-   Every pixel the text can land on was sampled from airport-lounge-hero.png,
+   Every pixel the text can land on was sampled from airport-lounge-hero.webp,
    composited under layers 1+2, and scored. Worst pixel in the whole text
    zone, at veil .62 + tint .08:
 
@@ -48,7 +48,16 @@
    `background-position-x: 80%` on the photo frames the glass + aircraft
    rather than the blank sunlit wall, so the band reads as a photo across its
    whole width instead of half-empty. --text-muted (#475569) was rejected for
-   any text on the hero — it only reaches 2.85:1 here. */
+   any text on the hero — it only reaches 2.85:1 here.
+
+   ---- No cut line: the whole element is MASK-faded to transparent ----
+   On a phone, `cover` shows the photo's full height, so its architectural
+   lines (ceiling beam, floor) used to read as a hard seam mid-band. Rather
+   than fight that with the veil, the element itself carries a vertical mask
+   that fades EVERYTHING — photo, veil and background-color — to transparent
+   by ~90%, revealing the identical page --bg behind it. There is no bottom
+   edge to see because the layer dissolves into the exact colour underneath
+   it. The veil handles only contrast at the top; the mask handles the fade. */
 .sg-home__hero {
   position: absolute;
   inset: 0 0 auto 0;
@@ -56,15 +65,15 @@
   background-image:
     linear-gradient(180deg,
       rgba(244, 246, 250, .62) 0%,
-      rgba(244, 246, 250, .62) 46%,
-      rgba(244, 246, 250, .82) 72%,
-      rgba(244, 246, 250, .97) 90%,
-      rgba(244, 246, 250, 1)   100%),
+      rgba(244, 246, 250, .62) 40%,
+      rgba(244, 246, 250, .74) 60%,
+      rgba(244, 246, 250, .86) 80%,
+      rgba(244, 246, 250, .95) 100%),
     linear-gradient(180deg,
       rgba(41, 171, 226, .12) 0%,
       rgba(41, 171, 226, .06) 45%,
       rgba(41, 171, 226, 0)   72%),
-    url('../../assets/airport-lounge-hero.png'),
+    url('../../assets/airport-lounge-hero.webp'),
     linear-gradient(120deg,
       rgba(18, 41, 106, .24) 0%,
       rgba(41, 171, 226, .16) 55%,
@@ -73,6 +82,8 @@
   background-position: center top, center top, 80% top, center top;
   background-repeat: no-repeat;
   background-color: var(--bg);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 50%, rgba(0, 0, 0, 0) 92%);
+          mask-image: linear-gradient(180deg, #000 0%, #000 50%, rgba(0, 0, 0, 0) 92%);
   pointer-events: none;
   z-index: 0;
 }
@@ -156,12 +167,15 @@
 }
 
 .sg-home__scroll {
+  /* Single source of truth for the content gutter, so a full-bleed child
+     (the shortcuts carousel) can cancel it and re-apply it precisely. */
+  --home-gutter: var(--space-5);
   height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   /* --space-8 of tail, PLUS the home-bar inset on phones that have one, so
      the last shortcut never sits flush against the bottom edge. */
-  padding: 0 var(--space-5) calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
+  padding: 0 var(--home-gutter) calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
   /* iOS momentum scrolling can clip the final row without this. */
   scroll-padding-bottom: var(--space-8);
   overscroll-behavior: contain;
@@ -577,23 +591,29 @@
   line-height: var(--leading-snug);
   color: var(--text);
   margin: 0 0 var(--space-3);
-  padding: 0 var(--space-1);
+  padding: 0;   /* flush with the first carousel card */
 }
 
-/* Four columns by default, collapsing to 2x2 only on genuinely narrow
-   phones where a quarter-width card can no longer hold "Alimentação". */
+/* Horizontal carousel: swipe sideways, the mobile-native pattern. Fixed-width
+   cards that never wrap or clip; if they overrun the screen the user scrolls.
+   Full-bleed by cancelling the scroll gutter, then re-applying it as padding
+   so the first card still aligns to content and the last gets trailing air.
+   scroll-padding keeps snap targets aligned to that same content edge. */
 .sg-home__quick-scroll {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-2);
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  scroll-padding-left: var(--home-gutter);
+  margin-inline: calc(var(--home-gutter) * -1);
+  padding-inline: var(--home-gutter);
+  padding-block: var(--space-2);   /* room for the hover lift + focus ring */
+  /* Hide the scrollbar — the peeking next card signals scrollability. */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-@media (max-width: 400px) {
-  .sg-home__quick-scroll {
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-3);
-  }
-}
+.sg-home__quick-scroll::-webkit-scrollbar { display: none; }
 
 /* ---- Narrow phones: buy back horizontal room for the place name ----
    The generous padding above is what makes the screen feel premium at
@@ -602,27 +622,28 @@
    short as "Onde você está?". Vertical air is untouched — only the
    horizontal budget is tightened, and only where it actually hurts. */
 @media (max-width: 400px) {
-  .sg-home__scroll  { padding-inline: var(--space-4); }
+  .sg-home__scroll  { --home-gutter: var(--space-4); }   /* also retracts the carousel bleed */
   .sg-home__heading { padding-inline: var(--space-4); }  /* stay flush with the card */
   .sg-ds.sg-home .sg-home__card { padding: var(--space-5) var(--space-4); }
   .sg-home__journey { --rail-gutter: 30px; }
   .sg-home__field { padding-left: var(--space-2); }
 }
 
-/* Centred column: icon tile, then name, then a one-word description.
-   Comfortably past 44x44 in both axes at every breakpoint. */
+/* Fixed-width carousel card: icon tile, short title, short description.
+   Comfortably past 44x44 in both axes. */
 .sg-ds.sg-home .sg-home__quick-card {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 2px;
   /* planning-v5.css pins .sg-quick-card to a fixed 122px for its old
-     horizontal scroller — reset it so the grid track drives the width. */
-  width: auto;
+     scroller — override with the carousel's own fixed track. */
+  flex: 0 0 108px;
+  width: 108px;
   min-width: 0;
-  flex: 1 1 auto;
   min-height: var(--tap-min);
   padding: var(--space-4) var(--space-2);
+  scroll-snap-align: start;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -659,15 +680,16 @@
   background: rgba(41, 171, 226, .22);
 }
 
+/* Both lines stay on ONE line — the fixed 104px track is sized so the
+   longest label ("Alimentação") and description ("Restaurantes") fit without
+   wrapping or ellipsis. Verified by measurement, not eyeballed. */
 .sg-home__quick-name {
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
   color: var(--text);
-  /* At 4-up the track is ~78px; let the name use all of it before wrapping,
-     and wrap rather than ellipsis — these are single words. */
   max-width: 100%;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .sg-home__quick-sub {
@@ -675,7 +697,7 @@
   line-height: var(--leading-snug);
   color: var(--text-muted);
   max-width: 100%;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 /* ============================================================
@@ -718,11 +740,10 @@
    ============================================================ */
 
 @media (min-width: 768px) {
-  /* The grid is already 4-up; desktop only widens the gap and the hero. */
-  .sg-home__quick-scroll { gap: var(--space-3); }
+  /* The carousel keeps its fixed-card sizing on desktop too; only the hero
+     grows. (Font stays --text-sm so the nowrap labels never overrun the
+     fixed 104px track.) */
   .sg-home__hero { height: 380px; }
-  .sg-home__quick-name { font-size: var(--text-base); }
-  .sg-home__quick-sub  { font-size: var(--text-sm); }
 
   /* Keep the reading width sane instead of stretching edge to edge. */
   .sg-ds.sg-home .sg-home__header,
