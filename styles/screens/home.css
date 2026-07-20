@@ -20,24 +20,44 @@
   overflow: hidden;
 }
 
-/* ---- Hero wash ----
-   A soft brand gradient behind the header + title. It is decorative,
-   sits under the text, and never drops the title below AA.
+/* ---- Hero ----
+   Decorative photo behind the header + title, dissolving into --bg before
+   it reaches the route card. Three background layers, painted top-down:
 
-   To use the photo instead, drop assets/airport-lounge-hero.webp in
-   place and add to .sg-home__hero:
-     background-image: linear-gradient(...same stops...),
-                       url('../../assets/airport-lounge-hero.webp');
-     background-size: cover;
-   The gradient MUST stay on top of the image — it is what keeps the
-   title readable over an arbitrary photo. */
+     1. scrim      the white veil that guarantees text contrast
+     2. photo      assets/airport-lounge-hero.webp
+     3. brand wash navy + turquoise, the fallback look
+
+   The photo file is optional. While it is absent the layer just fails to
+   load and layers 1 + 3 render alone as a clean brand gradient — drop the
+   .webp into assets/ and it appears with no code change.
+
+   ---- Why the scrim starts at .60 and not lower ----
+   The title is --navy-900 (#0E2A6B). Against a WORST-CASE dark photo the
+   scrim is the only thing holding contrast up, and it must survive that
+   case because we cannot see the photo from here:
+     .60 white over black  -> ~#9B9B9B  -> #0E2A6B reads ~5.1:1  (AA ✓)
+     .15 white over black  -> ~#3D3D3D  -> #0E2A6B reads ~1.6:1  (fail)
+   .60 still lets 40% of the photo through, so it reads clearly as a photo.
+   If the real image turns out to be bright, this can be relaxed — but only
+   after measuring against that specific file, never by assumption. */
 .sg-home__hero {
   position: absolute;
   inset: 0 0 auto 0;
-  height: 280px;
-  background:
-    radial-gradient(120% 100% at 85% 0%, rgba(41, 171, 226, .18) 0%, transparent 60%),
-    linear-gradient(180deg, rgba(14, 42, 107, .07) 0%, rgba(244, 246, 250, 0) 100%);
+  height: 320px;
+  background-image:
+    linear-gradient(180deg,
+      rgba(244, 246, 250, .60) 0%,
+      rgba(244, 246, 250, .72) 38%,
+      rgba(244, 246, 250, .92) 72%,
+      rgba(244, 246, 250, 1)   100%),
+    url('../../assets/airport-lounge-hero.webp'),
+    radial-gradient(120% 100% at 85% 0%, rgba(41, 171, 226, .22) 0%, transparent 60%),
+    linear-gradient(180deg, rgba(14, 42, 107, .10) 0%, rgba(244, 246, 250, 0) 100%);
+  background-size: cover, cover, cover, cover;
+  background-position: center top, center top, center top, center top;
+  background-repeat: no-repeat;
+  background-color: var(--bg);
   pointer-events: none;
   z-index: 0;
 }
@@ -51,12 +71,15 @@
   flex: 0 0 auto;
 }
 
-/* ---- Heading ---- */
+/* ---- Heading ----
+   Generous vertical rhythm is the whole point of this block: --space-5 of
+   air above the title separates it from the header, --space-6 below
+   separates it from the card. */
 .sg-home__heading {
   position: relative;
   z-index: 1;
   flex: 0 0 auto;
-  padding: var(--space-2) var(--space-5) var(--space-5);
+  padding: var(--space-5) var(--space-5) var(--space-6);
 }
 
 .sg-home__title {
@@ -66,13 +89,17 @@
   line-height: var(--leading-tight);
   letter-spacing: -0.02em;
   color: var(--navy-900);
-  margin: 0 0 var(--space-2);
+  margin: 0 0 var(--space-3);
 }
 
+
+/* Over the hero the subtitle uses --text, not --text-muted. Muted is 7.58:1
+   on a FLAT white, but the hero is not flat — the scrim only guarantees a
+   mid-grey worst case, where muted would slip under AA. --text holds. */
 .sg-home__subtitle {
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   line-height: var(--leading-normal);
-  color: var(--text-muted);
+  color: var(--text);
   margin: 0;
 }
 
@@ -88,7 +115,7 @@
   height: 100%;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 0 var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom, 0px));
+  padding: 0 var(--space-5) calc(var(--space-7) + env(safe-area-inset-bottom, 0px));
 }
 
 /* ============================================================
@@ -96,7 +123,7 @@
    ============================================================ */
 
 .sg-ds.sg-home .sg-home__card {
-  padding: var(--space-5) var(--space-4) var(--space-4);
+  padding: var(--space-6) var(--space-5);
 }
 
 /* The journey block is a 2-column grid: fields | swap.
@@ -104,9 +131,11 @@
    from the field wraps themselves. The swap column reserves space so the
    button never overlaps text. */
 .sg-home__journey {
-  --rail-gutter: 32px;   /* space reserved left of the fields for the rail */
-  --dot-size: 13px;
-  --dot-top: 34px;       /* distance from a wrap's top to the dot's top —
+  --rail-gutter: 36px;   /* space reserved left of the fields for the rail */
+  --dot-size: 18px;      /* bigger, thicker rings — a deliberate focal point */
+  --dot-ring: 3.5px;
+  --field-gap: var(--space-4);   /* air between origin and destination */
+  --dot-top: 36px;       /* distance from a wrap's top to the dot's top —
                             centres it on the value line, since every field
                             has the same label+value structure above the
                             chip. Measured, not guessed. */
@@ -120,7 +149,7 @@
 .sg-home__fields {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--field-gap);
   min-width: 0;
   padding-left: var(--rail-gutter);
 }
@@ -140,13 +169,19 @@
   left: calc((var(--rail-gutter) / 2 + var(--dot-size) / 2) * -1);
   width: var(--dot-size);
   height: var(--dot-size);
-  border: 2.5px solid var(--sky-ink);
+  border: var(--dot-ring) solid var(--sky-ink);
   border-radius: 50%;
   background: var(--surface);   /* origin: hollow ring */
+  box-shadow: 0 0 0 4px rgba(41, 171, 226, .10);
 }
 
-/* Destination: filled */
-.sg-home__field-wrap--destination::before { background: var(--sky-ink); }
+/* Destination: filled. The inset shadow paints the core inside the ring,
+   leaving a hairline of surface between ring and fill so the dot still
+   reads as a ring rather than a flat blob at this larger size. */
+.sg-home__field-wrap--destination::before {
+  background: var(--sky-ink);
+  box-shadow: inset 0 0 0 2px var(--surface), 0 0 0 4px rgba(41, 171, 226, .10);
+}
 
 /* Dashed connector, drawn with a repeating gradient so the dash rhythm
    stays crisp at any height (a dashed border would not). It hangs off the
@@ -156,18 +191,18 @@
 .sg-home__field-wrap--origin::after {
   content: '';
   position: absolute;
-  top: calc(var(--dot-top) + var(--dot-size) + 3px);
-  bottom: calc((var(--space-2) + var(--dot-top) + 3px) * -1);
-  left: calc((var(--rail-gutter) / 2 + 1px) * -1);
-  width: 2px;
+  top: calc(var(--dot-top) + var(--dot-size) + 6px);
+  bottom: calc((var(--field-gap) + var(--dot-top) + 6px) * -1);
+  left: calc((var(--rail-gutter) / 2 + 1.5px) * -1);
+  width: 3px;
   background-image: linear-gradient(
     to bottom,
-    var(--sky-500) 0 5px,
-    transparent 5px 10px
+    var(--sky-ink) 0 6px,
+    transparent 6px 12px
   );
-  background-size: 2px 10px;
+  background-size: 3px 12px;
   background-repeat: repeat-y;
-  opacity: .55;
+  opacity: .5;
   transition: opacity var(--ds-transition);
 }
 
@@ -179,8 +214,11 @@
   min-height: var(--tap-min);
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: var(--space-2) 44px var(--space-2) var(--space-3);
+  gap: 3px;
+  /* Right padding is only reserved when a clear button actually exists —
+     see the :has() rule below. Reserving 44px unconditionally was what made
+     long names ellipsis early ("McDonald's – Sobre…") even on empty rows. */
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: transparent;
@@ -190,6 +228,12 @@
 }
 
 .sg-home__field:hover { background: var(--surface-2); border-color: var(--border); }
+
+/* Only a field that HAS a clear button gives up width for it. `:has` is
+   supported everywhere the app targets; where it is not, the fallback is
+   simply the old behaviour of the name running under the clear icon, which
+   degrades gracefully rather than breaking layout. */
+.sg-home__field-wrap:has(.sg-home__clear) .sg-home__field { padding-right: 46px; }
 
 .sg-home__field-label {
   font-size: var(--text-xs);
@@ -266,7 +310,7 @@
 .sg-home__divider {
   height: 1px;
   background: var(--border);
-  margin: var(--space-4) 0;
+  margin: var(--space-5) 0;
 }
 
 /* ============================================================
@@ -353,8 +397,39 @@
   inset: -7px;   /* 32 + 14 = 46px effective, clears 44 at any pixel ratio */
 }
 
-/* ---- CTA ---- */
-.sg-home__action { margin-top: var(--space-4); }
+/* ---- CTA ----
+   The primary action, and it should read as the strongest thing in the
+   card when enabled: taller, larger type, its own elevation. The arrow
+   is pushed to the right edge so the label stays optically centred. */
+.sg-home__action { margin-top: var(--space-5); }
+
+.sg-ds.sg-home .sg-home__action .ds-btn {
+  position: relative;
+  min-height: 56px;
+  padding: var(--space-4) var(--space-6);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  letter-spacing: -0.01em;
+}
+
+.sg-ds.sg-home .sg-home__action .ds-btn:not(:disabled) {
+  box-shadow: 0 6px 18px rgba(14, 42, 107, .26);
+}
+
+.sg-ds.sg-home .sg-home__action .ds-btn:not(:disabled):hover {
+  box-shadow: 0 8px 22px rgba(14, 42, 107, .32);
+}
+
+.sg-ds.sg-home .sg-home__action .ds-btn:not(:disabled):active {
+  box-shadow: 0 3px 10px rgba(14, 42, 107, .24);
+}
+
+/* Arrow parked on the right edge rather than trailing the label. */
+.sg-ds.sg-home .sg-home__action .ds-btn iconify-icon {
+  position: absolute;
+  right: var(--space-5);
+  font-size: 1.15em;
+}
 
 .sg-home__hint {
   margin: var(--space-2) 0 0;
@@ -381,8 +456,9 @@
 .sg-home__error {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--space-2);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
   padding: var(--space-3);
   border-radius: var(--radius-md);
   background: var(--danger-soft);
@@ -391,12 +467,19 @@
   line-height: var(--leading-snug);
 }
 
-.sg-home__error > span { flex: 1 1 auto; }
+/* `flex-basis: 0` (not auto) so the message shrinks to share the row with
+   the icon instead of wrapping below it. */
+.sg-home__error > span { flex: 1 1 0; min-width: 0; }
+.sg-home__error > iconify-icon { flex: 0 0 auto; align-self: flex-start; }
 
 /* Offline banner keeps a retry affordance inline, since there is no
    longer a full-screen error state to host it. */
+/* Takes its own full-width row rather than competing with the message.
+   It is `nowrap`, so sharing a row let it starve the text down to a
+   two-words-per-line column on narrow phones. */
 .sg-home__error-retry {
-  flex: 0 0 auto;
+  flex: 1 0 100%;
+  margin-top: var(--space-1);
   min-height: var(--tap-min);
   padding: 0 var(--space-4);
   border: 1px solid currentColor;
@@ -428,7 +511,7 @@
    QUICK ACCESS
    ============================================================ */
 
-.sg-home__quick { margin-top: var(--space-6); }
+.sg-home__quick { margin-top: var(--space-7); }
 
 .sg-home__section-title {
   font-family: var(--font-display);
@@ -440,62 +523,102 @@
   padding: 0 var(--space-1);
 }
 
+/* Four columns by default, collapsing to 2x2 only on genuinely narrow
+   phones where a quarter-width card can no longer hold "Alimentação". */
 .sg-home__quick-scroll {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-3);
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
 }
 
+@media (max-width: 400px) {
+  .sg-home__quick-scroll {
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-3);
+  }
+}
+
+/* ---- Narrow phones: buy back horizontal room for the place name ----
+   The generous padding above is what makes the screen feel premium at
+   normal widths, but under ~400px the card padding + rail gutter + swap
+   column leave the name too little room and it ellipses a placeholder as
+   short as "Onde você está?". Vertical air is untouched — only the
+   horizontal budget is tightened, and only where it actually hurts. */
+@media (max-width: 400px) {
+  .sg-home__scroll  { padding-inline: var(--space-4); }
+  .sg-home__heading { padding-inline: var(--space-4); }  /* stay flush with the card */
+  .sg-ds.sg-home .sg-home__card { padding: var(--space-5) var(--space-4); }
+  .sg-home__journey { --rail-gutter: 30px; }
+  .sg-home__field { padding-left: var(--space-2); }
+}
+
+/* Centred column: icon tile, then name, then a one-word description.
+   Comfortably past 44x44 in both axes at every breakpoint. */
 .sg-ds.sg-home .sg-home__quick-card {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-1);
+  align-items: center;
+  gap: 2px;
   /* planning-v5.css pins .sg-quick-card to a fixed 122px for its old
      horizontal scroller — reset it so the grid track drives the width. */
   width: auto;
   min-width: 0;
   flex: 1 1 auto;
   min-height: var(--tap-min);
-  padding: var(--space-4) var(--space-3);
+  padding: var(--space-4) var(--space-2);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--elev-1);
-  text-align: left;
+  text-align: center;
   cursor: pointer;
-  transition: box-shadow var(--ds-transition), transform var(--ds-transition);
+  transition: box-shadow var(--ds-transition), transform var(--ds-transition),
+              border-color var(--ds-transition);
 }
 
 .sg-ds.sg-home .sg-home__quick-card:hover {
   box-shadow: var(--elev-2);
-  transform: translateY(-1px);
+  border-color: rgba(41, 171, 226, .45);
+  transform: translateY(-2px);
 }
+
+.sg-ds.sg-home .sg-home__quick-card:active { transform: translateY(0); }
 
 .sg-home__quick-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  margin-bottom: var(--space-1);
-  border-radius: var(--radius-md);
-  background: rgba(41, 171, 226, .12);
+  width: 48px;
+  height: 48px;
+  margin-bottom: var(--space-2);
+  border-radius: var(--radius-lg);
+  background: rgba(41, 171, 226, .14);
   color: var(--sky-ink);
-  font-size: 21px;
+  font-size: 26px;
+  transition: background var(--ds-transition);
+}
+
+.sg-ds.sg-home .sg-home__quick-card:hover .sg-home__quick-icon {
+  background: rgba(41, 171, 226, .22);
 }
 
 .sg-home__quick-name {
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
   color: var(--text);
+  /* At 4-up the track is ~78px; let the name use all of it before wrapping,
+     and wrap rather than ellipsis — these are single words. */
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .sg-home__quick-sub {
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   line-height: var(--leading-snug);
   color: var(--text-muted);
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 /* ============================================================
@@ -538,8 +661,11 @@
    ============================================================ */
 
 @media (min-width: 768px) {
-  .sg-home__quick-scroll { grid-template-columns: repeat(4, 1fr); }
-  .sg-home__hero { height: 320px; }
+  /* The grid is already 4-up; desktop only widens the gap and the hero. */
+  .sg-home__quick-scroll { gap: var(--space-3); }
+  .sg-home__hero { height: 380px; }
+  .sg-home__quick-name { font-size: var(--text-base); }
+  .sg-home__quick-sub  { font-size: var(--text-sm); }
 
   /* Keep the reading width sane instead of stretching edge to edge. */
   .sg-ds.sg-home .sg-home__header,

@@ -24,11 +24,14 @@ import { appData, planState, uiState } from '../../state/appState.js';
 import { esc } from '../../utils/format.js';
 import { Button, Card, Chip, Header, IconButton, dsIcon } from '../../components/ds/index.js';
 
+/* Four columns on the grid, so the visible copy is kept SHORT — at 4-up on a
+   360px phone each card is only ~78px wide. The long-form description lives
+   in `hint`, which goes to the aria-label, where it costs no layout. */
 const QUICK_CATS = [
-  { key: 'gates',    label: 'Portões',             icon: 'solar:plain-bold',   subtitle: 'Encontre seu portão'      },
-  { key: 'services', label: 'Check-in',            icon: 'solar:bag-2-bold',   subtitle: 'Balcões e áreas'          },
-  { key: 'food',     label: 'Alimentação e lojas', icon: 'solar:cup-hot-bold', subtitle: 'Restaurantes e compras'   },
-  { key: 'services', label: 'Serviços',            icon: 'solar:bell-bold',    subtitle: 'Facilidades do aeroporto' },
+  { key: 'gates',    label: 'Portões',     icon: 'solar:plain-bold',   subtitle: 'Embarque',     hint: 'Encontre seu portão'         },
+  { key: 'services', label: 'Check-in',    icon: 'solar:bag-2-bold',   subtitle: 'Balcões',      hint: 'Balcões e áreas de check-in' },
+  { key: 'food',     label: 'Alimentação', icon: 'solar:cup-hot-bold', subtitle: 'Restaurantes', hint: 'Restaurantes e lojas'        },
+  { key: 'services', label: 'Serviços',    icon: 'solar:bell-bold',    subtitle: 'Facilidades',  hint: 'Facilidades do aeroporto'    },
 ];
 
 /**
@@ -179,9 +182,10 @@ export function renderPlanning() {
   return `
     <div class="sg-ds sg-home" id="planning-root">
 
-      <!-- HERO: brand wash behind the header + title. To use the photo,
-           set --sg-home-hero-img in styles/screens/home.css once
-           assets/airport-lounge-hero.webp exists. -->
+      <!-- HERO: purely decorative photo + brand wash behind the header and
+           title. home.css already points at assets/airport-lounge-hero.webp —
+           until that file exists the photo layer simply fails to load and the
+           brand gradient shows alone, which is a designed state, not a bug. -->
       <div class="sg-home__hero" aria-hidden="true" role="presentation"></div>
 
       ${Header({
@@ -215,8 +219,8 @@ export function renderPlanning() {
                   <button type="button"
                     class="sg-quick-card sg-home__quick-card"
                     data-cat-key="${esc(cat.key)}"
-                    aria-label="${esc(cat.label)}: ${esc(cat.subtitle)}">
-                    <span class="sg-home__quick-icon">${dsIcon(cat.icon)}</span>
+                    aria-label="${esc(cat.label)}: ${esc(cat.hint)}">
+                    <span class="sg-home__quick-icon" aria-hidden="true">${dsIcon(cat.icon)}</span>
                     <span class="sg-home__quick-name">${esc(cat.label)}</span>
                     <span class="sg-home__quick-sub">${esc(cat.subtitle)}</span>
                   </button>
