@@ -6,6 +6,15 @@ export const APP_CONFIG = Object.freeze({
     timeoutMs: 15_000,
   },
   search: { debounceMs: 200, maxResults: 40 },
+  /**
+   * Node x/y arrive from the API as abstract map units, not metres.
+   * Walking distances are measured along the route path and converted here.
+   * Tune `metersPerUnit` once the real-world scale of the floor plan is known.
+   */
+  distance: {
+    metersPerUnit: 1,
+    roundToMeters: 10,   // displayed distances snap to this grid
+  },
 });
 
 export function getApiBaseUrl() {

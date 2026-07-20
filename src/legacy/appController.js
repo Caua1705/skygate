@@ -17,6 +17,7 @@
  */
 
 import { calculateRoute, getAirportMap, getAirports, SkyGateApiError } from '../api/index.js';
+import { APP_CONFIG } from '../config/appConfig.js';
 import {
   INTERNAL_TYPES as _PRES_INTERNAL,
   VERTICAL_TYPES as _PRES_VERTICAL,
@@ -437,14 +438,115 @@ function cleanStepText(raw) {
 }
 
 /* ============================================================
+   5b. WALKING DISTANCE — measured along the route path
+
+   Node coordinates are abstract map units; APP_CONFIG.distance.metersPerUnit
+   converts them to metres. Nothing here is hardcoded per route.
+   ============================================================ */
+
+function segmentMeters(a, b) {
+  if (!a || !b) return 0;
+  return Math.hypot(b.x - a.x, b.y - a.y) * APP_CONFIG.distance.metersPerUnit;
+}
+
+/** Total walking distance between two indices of the route path. */
+function pathMeters(path, fromIdx, toIdx) {
+  const start = clamp(fromIdx, 0, path.length - 1);
+  const end   = clamp(toIdx,   0, path.length - 1);
+  let total = 0;
+  for (let i = start; i < end; i++) {
+    total += segmentMeters(findNode(path[i]), findNode(path[i + 1]));
+  }
+  return total;
+}
+
+function roundMeters(m) {
+  const grid = APP_CONFIG.distance.roundToMeters;
+  if (!(m > 0)) return 0;
+  return Math.max(grid, Math.round(m / grid) * grid);
+}
+
+function formatMeters(m) {
+  const r = roundMeters(m);
+  if (!r) return '';
+  return r >= 1000 ? `${(r / 1000).toFixed(1).replace('.', ',')} km` : `${r} m`;
+}
+
+/**
+ * Attach `distanceMeters` to each semantic step: the distance walked from
+ * that step's own path position up to where the next step begins.
+ */
+function attachStepDistances(steps, path) {
+  if (!path.length) {
+    steps.forEach(s => { s.distanceMeters = 0; });
+    return steps;
+  }
+  steps.forEach((step, i) => {
+    const from = step.rawFrom ?? 0;
+    const to   = steps[i + 1]?.rawFrom ?? path.length - 1;
+    step.distanceMeters = pathMeters(path, from, Math.max(from, to));
+  });
+  return steps;
+}
+
+/** Number of floor changes on the route — drives the "Andares" metric. */
+function countFloorChanges() {
+  return navState.semanticSteps.filter(
+    s => s.isTransition && s.toFloor && s.toFloor !== s.floorId
+  ).length;
+}
+
+/* ============================================================
+   5c. NAVIGATION ICON SET — inline SVG
+
+   The navigation screen uses inline SVG (not iconify) so the glyphs match
+   the reference design exactly and can never fail to resolve. The rest of
+   the app keeps using <iconify-icon>.
+   ============================================================ */
+
+const NAV_ICON_BODIES = {
+  plane:      { fill: true,  body: '<path d="M12 2c.83 0 1.5.9 1.5 2.05v5.2l7.5 4.32v2.06l-7.5-2.2v4.42l2.6 1.9v1.6L12 20.4l-4.1.95v-1.6l2.6-1.9v-4.42l-7.5 2.2v-2.06l7.5-4.32v-5.2C10.5 2.9 11.17 2 12 2z"/>' },
+  pin:        { fill: true,  body: '<path d="M12 2.2c-3.87 0-7 3.13-7 7 0 5.14 6.28 12.2 6.55 12.5.24.27.66.27.9 0 .27-.3 6.55-7.36 6.55-12.5 0-3.87-3.13-7-7-7zm0 9.55a2.55 2.55 0 1 1 0-5.1 2.55 2.55 0 0 1 0 5.1z"/>' },
+  layers:     { fill: false, body: '<path d="M12 3.2 3.4 7.4 12 11.6l8.6-4.2L12 3.2z"/><path d="m3.4 12.2 8.6 4.2 8.6-4.2"/><path d="m3.4 16.8 8.6 4.2 8.6-4.2"/>' },
+  navigate:   { fill: true,  body: '<path d="M20.9 3.1 4.3 10.2c-1.05.45-.9 1.98.2 2.24l6.6 1.55 1.55 6.6c.26 1.1 1.8 1.25 2.24.2l7.1-16.6c.36-.85-.5-1.7-1.1-1.09z"/>' },
+  clock:      { fill: false, body: '<circle cx="12" cy="12" r="8.8"/><path d="M12 6.9V12l3.5 2.1"/>' },
+  stairs:     { fill: false, body: '<path d="M3.6 19.4h4.2v-3.6H12v-3.6h4.2V8.6h4.2"/><path d="M7.8 19.4v-3.6M12 15.8v-3.6M16.2 12.2V8.6"/>' },
+  turnRight:  { fill: false, body: '<path d="M6.4 20.2v-7.1a4.2 4.2 0 0 1 4.2-4.2h6.6"/><path d="m13.9 5.2 3.9 3.7-3.9 3.7"/>' },
+  turnLeft:   { fill: false, body: '<path d="M17.6 20.2v-7.1a4.2 4.2 0 0 0-4.2-4.2H6.8"/><path d="m10.1 5.2-3.9 3.7 3.9 3.7"/>' },
+  arrowUp:    { fill: false, body: '<path d="M12 20.2V4.6"/><path d="m5.4 11.2 6.6-6.6 6.6 6.6"/>' },
+  wheelchair: { fill: false, body: '<circle cx="12.4" cy="4.4" r="2.1"/><path d="M11.1 8.2v5.1h5l3.1 6.1"/><path d="M14.6 13.9a5.6 5.6 0 1 1-6.7-4.6"/>' },
+  list:       { fill: false, body: '<path d="M9.2 6.2h11M9.2 12h11M9.2 17.8h11"/><path d="M4.4 6.2h.02M4.4 12h.02M4.4 17.8h.02" stroke-width="3"/>' },
+  chevron:    { fill: false, body: '<path d="m9.4 5.2 6.8 6.8-6.8 6.8"/>' },
+  person:     { fill: true,  body: '<path d="M12 12.1a4.05 4.05 0 1 0 0-8.1 4.05 4.05 0 0 0 0 8.1zm0 1.9c-4.05 0-7.1 2.25-7.1 5.05V20h14.2v-.95c0-2.8-3.05-5.05-7.1-5.05z"/>' },
+};
+
+/** Inline SVG icon for the navigation screen. */
+function navIcon(name, extraClass = '') {
+  const def = NAV_ICON_BODIES[name];
+  if (!def) return '';
+  const paint = def.fill
+    ? 'fill="currentColor" stroke="none"'
+    : 'fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"';
+  return `<svg class="sg-ico ${extraClass}" viewBox="0 0 24 24" ${paint} aria-hidden="true" focusable="false">${def.body}</svg>`;
+}
+
+/** Pick the directional glyph that matches a step's instruction. */
+function getStepIconName(step) {
+  if (!step) return 'arrowUp';
+  if (step.isTransition) return 'stairs';
+  if (/\bdireita\b/i.test(step.text)) return 'turnRight';
+  if (/\besquerda\b/i.test(step.text)) return 'turnLeft';
+  return 'arrowUp';
+}
+
+/* ============================================================
    6. FLOOR MAP BUILDER — Clean semantic map (no technical nodes)
-   
-   Visual design:
-   - Light background: #f0f2f5
-   - Terminal body: white rectangle, rounded
-   - Zone clusters: subtle tinted areas by POI type group
-   - No corridor dots, no waypoint circles
-   - No internal labels
+
+   Visual design (navigation theme):
+   - Dark slate background, terminal body slightly lighter
+   - Rendered in perspective via CSS on the base layer
+   - Zone clusters: barely-there light tints
+   - No corridor dots, no waypoint circles, no internal labels
    ============================================================ */
 
 const MAP_W = 900, MAP_H = 600;
@@ -474,7 +576,7 @@ function nodeToSvg(node, bounds) {
 function buildBaseFloorSvg(floorId) {
   const allNodes = appData.nodes.filter(n => n.floorId === floorId);
   if (!allNodes.length) {
-    return `<svg viewBox="0 0 ${MAP_W} ${MAP_H}" class="sg-map-svg sg-map-base" aria-hidden="true"><rect width="${MAP_W}" height="${MAP_H}" fill="#f0f2f5"/></svg>`;
+    return `<svg viewBox="0 0 ${MAP_W} ${MAP_H}" class="sg-map-svg sg-map-base" aria-hidden="true"><rect width="${MAP_W}" height="${MAP_H}" fill="#16263a"/></svg>`;
   }
 
   const bounds = getFloorBounds(floorId);
@@ -492,10 +594,10 @@ function buildBaseFloorSvg(floorId) {
   // Zone clusters — group POI nodes by area (x-quartile)
   const poiNodes = allNodes.filter(n => n.isPoi && !n.isInternal);
   const zoneColors = [
-    'rgba(20,184,166,0.07)',
-    'rgba(99,102,241,0.06)',
-    'rgba(245,158,11,0.07)',
-    'rgba(20,184,166,0.05)',
+    'rgba(255,255,255,0.045)',
+    'rgba(148,190,255,0.035)',
+    'rgba(255,255,255,0.03)',
+    'rgba(45,212,191,0.035)',
   ];
 
   // Divide into 4 x-bands
@@ -530,11 +632,11 @@ function buildBaseFloorSvg(floorId) {
     style="overflow:visible"
   >
     <!-- Background -->
-    <rect width="${MAP_W}" height="${MAP_H}" fill="#eef0f4"/>
+    <rect width="${MAP_W}" height="${MAP_H}" fill="#16263a"/>
 
     <!-- Terminal body -->
     <rect x="${tX.toFixed(1)}" y="${tY.toFixed(1)}" width="${tW.toFixed(1)}" height="${tH.toFixed(1)}"
-      rx="24" fill="white" stroke="#dde1e9" stroke-width="1.5"/>
+      rx="24" fill="#20344c" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/>
 
     <!-- Zone areas -->
     ${zones.map(z =>
@@ -544,15 +646,15 @@ function buildBaseFloorSvg(floorId) {
     <!-- Zone divider lines (very subtle) -->
     ${Array.from({ length: 3 }, (_, i) => {
       const baseX = MAP_PAD + ((i + 1) * xRange / bounds.w) * (MAP_W - MAP_PAD * 2);
-      return `<line x1="${baseX.toFixed(1)}" y1="${(tY + 20).toFixed(1)}" x2="${baseX.toFixed(1)}" y2="${(tY + tH - 20).toFixed(1)}" stroke="#dde1e9" stroke-width="1" stroke-dasharray="4 6" opacity="0.5"/>`;
+      return `<line x1="${baseX.toFixed(1)}" y1="${(tY + 20).toFixed(1)}" x2="${baseX.toFixed(1)}" y2="${(tY + tH - 20).toFixed(1)}" stroke="rgba(255,255,255,0.14)" stroke-width="1" stroke-dasharray="4 6"/>`;
     }).join('')}
 
     <!-- Vertical connections (always visible — passengers rely on these) -->
     ${verticals.map(n => {
       const p = toSvg(n);
       const meta = getNodeMeta(n.type);
-      const symFill = n.type === 'elevator' ? '#fef3c7' : '#f0fdf4';
-      const symStroke = n.type === 'elevator' ? '#d97706' : '#16a34a';
+      const symFill = 'rgba(255,255,255,0.10)';
+      const symStroke = n.type === 'elevator' ? '#f0b866' : '#7fe3d3';
       const sym = n.type === 'elevator' ? '▲' : n.type === 'escalator' ? '≡' : '╱';
       // aria-label uses public label — never raw node name
       return `<g aria-label="${esc(getPublicNodeLabel(n))}">
@@ -566,14 +668,50 @@ function buildBaseFloorSvg(floorId) {
       const p = toSvg(n);
       const label = n.name.replace(/Portão\s*/i, '').trim() || n.name;
       return `<g aria-label="Portão ${esc(label)}">
-        <rect x="${(p.x - 14).toFixed(1)}" y="${(p.y - 8).toFixed(1)}" width="28" height="16" rx="4" fill="#1e3a5f" opacity="0.85"/>
-        <text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" dy="0.37em" text-anchor="middle" font-size="7.5" fill="white" font-family="Inter,system-ui" font-weight="700">${esc(label.length > 6 ? label.slice(0, 6) : label)}</text>
+        <rect x="${(p.x - 14).toFixed(1)}" y="${(p.y - 8).toFixed(1)}" width="28" height="16" rx="4" fill="rgba(255,255,255,0.13)"/>
+        <text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" dy="0.37em" text-anchor="middle" font-size="7.5" fill="rgba(255,255,255,0.72)" font-family="Inter,system-ui" font-weight="700">${esc(label.length > 6 ? label.slice(0, 6) : label)}</text>
       </g>`;
     }).join('')}
 
     <!-- Floor label watermark -->
-    <text x="${(MAP_W / 2).toFixed(1)}" y="${(tY + tH - 14).toFixed(1)}" text-anchor="middle" font-size="11" fill="#c1c7d0" font-family="Inter,system-ui" font-weight="600" aria-hidden="true">${esc(getFloorLabel(floorId))}</text>
+    <text x="${(MAP_W / 2).toFixed(1)}" y="${(tY + tH - 14).toFixed(1)}" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.22)" font-family="Inter,system-ui" font-weight="600" aria-hidden="true">${esc(getFloorLabel(floorId))}</text>
   </svg>`;
+}
+
+/** Teardrop map pin whose tip sits exactly on (x, y). */
+function mapPin(x, y, innerFill = '#0f2540', pinFill = '#ffffff') {
+  return `<g transform="translate(${x.toFixed(1)},${y.toFixed(1)})">
+    <path d="M0 0c-6.6-9.2-11.2-14.5-11.2-19.8a11.2 11.2 0 0 1 22.4 0C11.2-14.5 6.6-9.2 0 0z"
+      fill="${pinFill}" stroke="rgba(9,24,42,0.28)" stroke-width="0.8"/>
+    <circle cy="-19.8" r="4.8" fill="${innerFill}"/>
+  </g>`;
+}
+
+/**
+ * Dark rounded caption box beside a marker. `side` is the preferred side;
+ * it flips automatically when the box would fall outside the map viewBox.
+ */
+function mapLabel(x, y, lines, side = 'right', gap = 15) {
+  const padX = 12, lineH = 17, boxPadY = 9;
+  const widest = Math.max(...lines.map(l => l.length));
+  const w = widest * 6.85 + padX * 2;
+  const h = lines.length * lineH + boxPadY * 2;
+
+  const fitsRight = x + gap + w <= MAP_W;
+  const fitsLeft  = x - gap - w >= 0;
+  const placeRight = side === 'right' ? (fitsRight || !fitsLeft) : !(fitsLeft || !fitsRight);
+
+  const bx = clamp(placeRight ? x + gap : x - gap - w, 2, MAP_W - w - 2);
+  const by = clamp(y - h / 2, 2, MAP_H - h - 2);
+  return `<g>
+    <rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}"
+      rx="9" fill="#0e2136" opacity="0.93"/>
+    ${lines.map((l, i) => `<text x="${(bx + padX).toFixed(1)}"
+      y="${(by + boxPadY + lineH * i + lineH / 2).toFixed(1)}" dy="0.35em"
+      font-family="Inter,system-ui" font-size="12.5"
+      font-weight="${i === 0 ? 700 : 500}"
+      fill="${i === 0 ? '#ffffff' : 'rgba(255,255,255,0.72)'}">${esc(l)}</text>`).join('')}
+  </g>`;
 }
 
 /**
@@ -653,82 +791,98 @@ function buildRouteOverlaySvg(floorId) {
   const curLandmark = curStep?.landmarkCode ? findNode(curStep.landmarkCode) : null;
   const showCurLandmark = curLandmark?.floorId === floorId && curLandmark?.code !== planState.destinationCode;
 
+  // Glow stack: wide blurred halo → solid stroke → hot white core.
+  const glowLine = (pts, { width = 4.6, opacity = 1, dash = '', cls = '' }) => `
+    <polyline points="${poly(pts)}" fill="none" stroke="${routeColor}"
+      stroke-width="${width * 2.6}" stroke-linecap="round" stroke-linejoin="round"
+      opacity="${(0.34 * opacity).toFixed(2)}" filter="url(#sgRouteGlow)"/>
+    <polyline points="${poly(pts)}" fill="none" stroke="${routeColor}"
+      stroke-width="${width}" stroke-linecap="round" stroke-linejoin="round"
+      opacity="${opacity}" ${dash ? `stroke-dasharray="${dash}"` : ''} ${cls ? `class="${cls}"` : ''}/>
+    <polyline points="${poly(pts)}" fill="none" stroke="#ecfffb"
+      stroke-width="${width * 0.36}" stroke-linecap="round" stroke-linejoin="round"
+      opacity="${(0.9 * opacity).toFixed(2)}"/>`;
+
+  // Which points anchor the "you are here" / waypoint / destination markers
+  const originPt = showOrigin ? toSvg(originNode) : null;
+  const destPt   = showDest   ? toSvg(destNode)   : null;
+
   return `<svg
     viewBox="0 0 ${MAP_W} ${MAP_H}"
     class="sg-map-svg sg-map-route"
     aria-hidden="true"
     style="overflow:visible"
   >
-    <!-- Completed route (dim) -->
-    ${completedPts.length > 1 ? `
-      <polyline points="${poly(completedPts)}" fill="none" stroke="white" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
-      <polyline points="${poly(completedPts)}" fill="none" stroke="${routeColor}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"/>
-    ` : ''}
+    <defs>
+      <filter id="sgRouteGlow" x="-60%" y="-60%" width="220%" height="220%">
+        <feGaussianBlur stdDeviation="7" result="blur"/>
+        <feMerge>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="blur"/>
+        </feMerge>
+      </filter>
+    </defs>
 
-    <!-- Upcoming route (medium) -->
-    ${upcomingPts.length > 1 ? `
-      <polyline points="${poly(upcomingPts)}" fill="none" stroke="white" stroke-width="5" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/>
-      <polyline points="${poly(upcomingPts)}" fill="none" stroke="${routeColor}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.6" stroke-dasharray="6 4"/>
-    ` : ''}
+    <!-- Completed route (dimmed, already walked) -->
+    ${completedPts.length > 1 ? glowLine(completedPts, { width: 3.6, opacity: 0.38 }) : ''}
+
+    <!-- Upcoming route -->
+    ${upcomingPts.length > 1 ? glowLine(upcomingPts, { width: 4, opacity: 0.72 }) : ''}
 
     <!-- Active route segment (dominant) -->
-    ${activePts.length > 1 ? `
-      <polyline points="${poly(activePts)}" fill="none" stroke="white" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/>
-      <polyline points="${poly(activePts)}" fill="none" stroke="${routeColor}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" class="sg-route-active"/>
-    ` : activePts.length === 1 ? `
-      <circle cx="${activePts[0].x.toFixed(1)}" cy="${activePts[0].y.toFixed(1)}" r="6" fill="${routeColor}" stroke="white" stroke-width="2.5"/>
+    ${activePts.length > 1 ? glowLine(activePts, { width: 5, opacity: 1, cls: 'sg-route-active' })
+      : activePts.length === 1 ? `
+      <circle cx="${activePts[0].x.toFixed(1)}" cy="${activePts[0].y.toFixed(1)}" r="6" fill="${routeColor}" stroke="#ecfffb" stroke-width="2"/>
     ` : ''}
 
     <!-- Full route fallback (no step data) -->
     ${(!completedPts.length && !activePts.length && !upcomingPts.length && floorCodes.length > 1) ? (() => {
       const allPts = floorCodes.map(c => { const n = findNode(c); return n ? toSvg(n) : null; }).filter(Boolean);
-      return allPts.length > 1 ? `
-        <polyline points="${poly(allPts)}" fill="none" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/>
-        <polyline points="${poly(allPts)}" fill="none" stroke="${routeColor}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" class="sg-route-active"/>
-      ` : '';
+      return allPts.length > 1 ? glowLine(allPts, { width: 5, opacity: 1, cls: 'sg-route-active' }) : '';
     })() : ''}
 
     <!-- Route-relevant landmarks (vertical connections, doors on route) -->
     ${visibleLandmarks.map(n => {
       const p = toSvg(n);
-      const meta = getNodeMeta(n.type);
-      const isOnActive = activePts.some(pt => Math.abs(pt.x - p.x) < 2 && Math.abs(pt.y - p.y) < 2);
       return `<g aria-label="${esc(getPublicNodeLabel(n))}">
-        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isOnActive ? 8 : 6}" fill="white" stroke="${meta.color}" stroke-width="2"/>
-        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${isOnActive ? 4 : 3}" fill="${meta.color}"/>
+        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="6.5" fill="#ffffff" stroke="${routeColor}" stroke-width="2"/>
+        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="${routeColor}"/>
       </g>`;
     }).join('')}
 
-    <!-- Current step landmark highlight -->
+    <!-- Current step landmark: pin + floating caption -->
     ${showCurLandmark && curLandmark ? (() => {
       const p = toSvg(curLandmark);
-      const meta = getNodeMeta(curLandmark.type);
-      return `<g aria-label="Ponto atual: ${esc(getPublicNodeLabel(curLandmark))}">
-        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="16" fill="${meta.color}" opacity="0.12"/>
-        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="10" fill="white" stroke="${meta.color}" stroke-width="2.5"/>
-        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="5" fill="${meta.color}"/>
+      const label = getPublicNodeLabel(curLandmark);
+      return `<g aria-label="Ponto atual: ${esc(label)}">
+        ${mapPin(p.x, p.y, routeColor)}
+        ${mapLabel(p.x, p.y - 20, [label], 'right')}
       </g>`;
     })() : ''}
 
-    <!-- Origin marker -->
-    ${showOrigin ? (() => {
-      const p = toSvg(originNode);
-      return `<g aria-label="Partindo de: ${esc(getPublicNodeLabel(originNode))}">
-        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="13" fill="#0f172a" opacity="0.12"/>
-        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="8" fill="#0f172a" stroke="white" stroke-width="2.5"/>
-        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="white"/>
-      </g>`;
-    })() : ''}
-
-    <!-- Destination marker (always persistent) -->
-    ${showDest ? (() => {
-      const p = toSvg(destNode);
+    <!-- Destination pin + caption -->
+    ${destPt ? (() => {
       const destLabel = getPublicNodeLabel(destNode);
       return `<g aria-label="Destino: ${esc(destLabel)}">
-        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="14" fill="${routeColor}" opacity="0.15"/>
-        <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="10" fill="${routeColor}" stroke="white" stroke-width="2.5"/>
-        <text x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" dy="0.37em" text-anchor="middle" font-size="10" fill="white" font-weight="700">★</text>
-        <text x="${p.x.toFixed(1)}" y="${(p.y + 24).toFixed(1)}" text-anchor="middle" font-size="8.5" fill="${routeColor}" font-family="Inter,system-ui" font-weight="700" paint-order="stroke" stroke="white" stroke-width="3">${esc(destLabel.length > 18 ? destLabel.slice(0, 16) + '…' : destLabel)}</text>
+        <circle cx="${destPt.x.toFixed(1)}" cy="${destPt.y.toFixed(1)}" r="7" fill="${routeColor}" opacity="0.55" filter="url(#sgRouteGlow)"/>
+        ${mapPin(destPt.x, destPt.y, '#0f2540')}
+        ${mapLabel(destPt.x, destPt.y - 22, [destLabel, 'Seu destino'], 'right')}
+      </g>`;
+    })() : ''}
+
+    <!-- "Você está aqui": white puck, person glyph, pulsing dashed ring -->
+    ${originPt ? (() => {
+      const label = getPublicNodeLabel(originNode);
+      return `<g aria-label="Você está aqui: ${esc(label)}">
+        <circle cx="${originPt.x.toFixed(1)}" cy="${originPt.y.toFixed(1)}" r="26"
+          fill="none" stroke="${routeColor}" stroke-width="2" stroke-dasharray="6 6"
+          class="sg-here-ring" style="transform-origin:${originPt.x.toFixed(1)}px ${originPt.y.toFixed(1)}px"/>
+        <circle cx="${originPt.x.toFixed(1)}" cy="${originPt.y.toFixed(1)}" r="20" fill="${routeColor}" opacity="0.45" filter="url(#sgRouteGlow)"/>
+        <circle cx="${originPt.x.toFixed(1)}" cy="${originPt.y.toFixed(1)}" r="15" fill="#ffffff" stroke="${routeColor}" stroke-width="3"/>
+        <g transform="translate(${(originPt.x - 9).toFixed(1)},${(originPt.y - 9).toFixed(1)}) scale(0.75)" fill="#0f2540">
+          ${NAV_ICON_BODIES.person.body}
+        </g>
+        ${mapLabel(originPt.x, originPt.y - 18, ['Você está aqui', label], 'left', 32)}
       </g>`;
     })() : ''}
   </svg>`;
@@ -790,9 +944,11 @@ function fitFullRoute() {
   const bounds = getFloorBounds(fid);
   const pts = nodes.map(n => nodeToSvg(n, bounds));
   const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
-  const pad = 60;
-  const bX1 = Math.min(...xs) - pad, bX2 = Math.max(...xs) + pad;
-  const bY1 = Math.min(...ys) - pad, bY2 = Math.max(...ys) + pad;
+  // Asymmetric padding: pins rise above their anchor and captions sit beside
+  // it, so the raw node bounds are not what actually has to fit on screen.
+  const padL = 150, padR = 190, padT = 80, padB = 70;
+  const bX1 = Math.min(...xs) - padL, bX2 = Math.max(...xs) + padR;
+  const bY1 = Math.min(...ys) - padT, bY2 = Math.max(...ys) + padB;
 
   const wrapper = $('map-wrapper');
   if (!wrapper) return;
@@ -801,7 +957,7 @@ function fitFullRoute() {
 
   const scaleX = rect.width  / (bX2 - bX1);
   const scaleY = rect.height / (bY2 - bY1);
-  const newScale = clamp(Math.min(scaleX, scaleY) * 0.85, MIN_SCALE, MAX_SCALE);
+  const newScale = clamp(Math.min(scaleX, scaleY) * 0.96, MIN_SCALE, MAX_SCALE);
   const midX = (bX1 + bX2) / 2, midY = (bY1 + bY2) / 2;
   const nx = (MAP_W / 2 - midX) * newScale;
   const ny = (MAP_H / 2 - midY) * newScale;
@@ -1329,23 +1485,16 @@ function renderSummary() {
 // ---- NAVIGATION ----
 
 function renderNavigation() {
-  const steps    = navState.semanticSteps;
-  const total    = steps.length;
-  const stepIdx  = navState.activeStepIndex;
-  const curStep  = steps[stepIdx];
-  const isFirst  = stepIdx === 0;
-  const isLast   = stepIdx >= total - 1;
-  const accessible = planState.routeMode === 'accessible';
   const fid = mapState.selectedFloorId;
 
   return `
     <div class="sg-nav-screen" id="nav-screen">
-      <!-- Map area: full screen -->
+      <!-- Map area (top ~55%) -->
       <div class="sg-map-area" id="map-area" aria-label="Mapa do aeroporto — ${esc(getFloorLabel(fid))}" role="img">
         <div class="sg-map-wrapper" id="map-wrapper">
           <div class="sg-map-inner" id="map-inner">
             <!-- Base floor SVG (cached, never rebuilt on step change) -->
-            <div id="map-base" class="sg-map-layer">
+            <div id="map-base" class="sg-map-layer sg-map-layer--base">
               ${getBaseFloorSvg(fid)}
             </div>
             <!-- Route overlay SVG (rebuilt on step change only) -->
@@ -1355,42 +1504,34 @@ function renderNavigation() {
           </div>
         </div>
 
-        <!-- Compact header overlay -->
-        <header class="sg-nav-header" role="banner">
-          <button type="button" class="sg-nav-header__back" id="exit-nav-btn" aria-label="Sair da navegação">
-            <iconify-icon icon="solar:arrow-left-bold" aria-hidden="true"></iconify-icon>
+        <!-- Brand block (doubles as "back to route summary") -->
+        <header class="sg-nav-brand" role="banner">
+          <button type="button" class="sg-nav-brand__btn" id="exit-nav-btn" aria-label="Voltar ao resumo da rota">
+            <span class="sg-nav-brand__row">
+              <span class="sg-nav-brand__logo">${navIcon('plane')}</span>
+              <span class="sg-nav-brand__name">SkyGate</span>
+            </span>
+            <span class="sg-nav-brand__loc">
+              ${navIcon('pin')}
+              <span>FOR • Aeroporto de Fortaleza</span>
+            </span>
           </button>
-          <div class="sg-nav-header__dest" aria-label="Navegando para ${esc(findNode(planState.destinationCode) ? getPublicNodeLabel(findNode(planState.destinationCode)) : 'destino')}">
-            <span class="sg-nav-header__dest-name">${esc(findNode(planState.destinationCode) ? getPublicNodeLabel(findNode(planState.destinationCode)) : 'Destino')}</span>
-            <span class="sg-nav-header__dest-time">${fmtMin(navState.route?.estimatedMinutes ?? 0)} min</span>
-          </div>
-          ${accessible ? `<span class="sg-nav-header__badge" aria-label="Rota acessível">
-            <iconify-icon icon="solar:accessibility-bold" aria-hidden="true"></iconify-icon>
-          </span>` : ''}
         </header>
 
-        <!-- Floor control (compact floating) -->
-        ${renderFloorControl()}
+        <!-- Help -->
+        <button type="button" class="sg-nav-help" id="help-btn" aria-label="Ajuda">?</button>
 
-        <!-- FABs: recenter + fit segment + overview -->
+        <!-- Right-side floating controls: floors + recenter -->
         <div class="sg-map-fabs" aria-label="Controles do mapa">
-          <button type="button" class="sg-map-fab" id="fit-segment-btn" aria-label="Centralizar no segmento atual">
-            <iconify-icon icon="solar:target-bold" aria-hidden="true"></iconify-icon>
-          </button>
-          <button type="button" class="sg-map-fab" id="zoom-in-btn" aria-label="Ampliar">
-            <iconify-icon icon="solar:add-square-bold" aria-hidden="true"></iconify-icon>
-          </button>
-          <button type="button" class="sg-map-fab" id="zoom-out-btn" aria-label="Reduzir">
-            <iconify-icon icon="solar:minus-square-bold" aria-hidden="true"></iconify-icon>
-          </button>
-          <button type="button" class="sg-map-fab" id="overview-btn" aria-label="Ver rota completa" aria-haspopup="dialog">
-            <iconify-icon icon="solar:list-bold" aria-hidden="true"></iconify-icon>
+          ${renderFloorControl()}
+          <button type="button" class="sg-map-fab" id="fit-segment-btn" aria-label="Centralizar no passo atual">
+            ${navIcon('navigate')}
           </button>
         </div>
 
         <!-- Return to current step button -->
         ${mapState.manualFloor ? `<button type="button" class="sg-return-btn" id="return-btn" aria-label="Voltar ao passo atual">
-          <iconify-icon icon="solar:routing-2-bold" aria-hidden="true"></iconify-icon>
+          ${navIcon('navigate')}
           Voltar ao passo
         </button>` : ''}
 
@@ -1400,7 +1541,7 @@ function renderNavigation() {
         </div>
       </div>
 
-      <!-- Instruction card (bottom floating) -->
+      <!-- Bottom sheet -->
       <div
         class="sg-instruction-card"
         id="instruction-card"
@@ -1408,57 +1549,7 @@ function renderNavigation() {
         aria-label="Instrução de navegação"
         aria-live="polite"
         aria-atomic="true"
-      >
-        <!-- Progress bar -->
-        <div class="sg-instr-progress" aria-hidden="true">
-          <div class="sg-instr-progress__bar" style="width:${Math.round(((stepIdx + 1) / total) * 100)}%"></div>
-        </div>
-
-        <!-- Step meta -->
-        <div class="sg-instr-meta">
-          <span class="sg-instr-meta__text">
-            <span>${esc(getFloorLabel(fid))}</span>
-            <span aria-hidden="true">·</span>
-            <span>Passo ${stepIdx + 1} de ${total}</span>
-            ${accessible ? `<span class="sg-instr-access-badge">
-              <iconify-icon icon="solar:accessibility-bold" aria-hidden="true"></iconify-icon>
-              Acessível
-            </span>` : ''}
-          </span>
-          <button type="button" class="sg-instr-steps-btn" id="instr-steps-btn" aria-haspopup="dialog">
-            <iconify-icon icon="solar:list-bold" aria-hidden="true"></iconify-icon>
-            Ver etapas
-          </button>
-        </div>
-
-        <!-- Instruction text -->
-        <p class="sg-instr-text" id="instr-text">${esc(curStep?.text ?? '')}</p>
-
-        <!-- Floor hint for transition steps -->
-        ${curStep?.isTransition && curStep?.toFloor ? `<p class="sg-instr-floor-hint">
-          <iconify-icon icon="solar:layers-minimalistic-linear" aria-hidden="true" style="font-size:11px"></iconify-icon>
-          Indo para ${esc(getFloorLabel(curStep.toFloor))}
-        </p>` : ''}
-
-        <!-- Controls -->
-        <div class="sg-instr-controls">
-          <button type="button" class="sg-instr-prev" id="nav-prev"
-            ${isFirst ? 'disabled' : ''} aria-label="Instrução anterior" aria-disabled="${isFirst}">
-            <iconify-icon icon="solar:arrow-left-bold" aria-hidden="true"></iconify-icon>
-            Anterior
-          </button>
-          <div class="sg-instr-dots" aria-hidden="true">
-            ${total <= 10 ? Array.from({ length: total }, (_, i) =>
-              `<span class="sg-instr-dot ${i < stepIdx ? 'is-done' : i === stepIdx ? 'is-active' : ''}"></span>`
-            ).join('') : `<span class="sg-instr-counter">${stepIdx + 1}/${total}</span>`}
-          </div>
-          <button type="button" class="sg-instr-next" id="nav-next"
-            ${isLast ? 'disabled' : ''} aria-label="${isLast ? 'Chegou ao destino' : 'Próxima instrução'}" aria-disabled="${isLast}">
-            ${isLast ? 'Chegou!' : 'Próximo'}
-            <iconify-icon icon="${isLast ? 'solar:check-circle-bold' : 'solar:arrow-right-bold'}" aria-hidden="true"></iconify-icon>
-          </button>
-        </div>
-      </div>
+      >${renderInstructionCardInner()}</div>
 
       <!-- Route overview overlay (semantic only — no graph nodes) -->
       ${uiState.showOverview ? renderOverlayOverview() : ''}
@@ -1466,19 +1557,115 @@ function renderNavigation() {
   `;
 }
 
+/**
+ * Bottom-sheet contents. Shared by the full render and the partial
+ * step update so the two can never drift apart.
+ */
+function renderInstructionCardInner() {
+  const steps   = navState.semanticSteps;
+  const total   = steps.length;
+  const stepIdx = navState.activeStepIndex;
+  const curStep = steps[stepIdx];
+  const nextStep = steps[stepIdx + 1];
+  const isLast  = stepIdx >= total - 1;
+  const accessible = planState.routeMode === 'accessible';
+  const fid = mapState.selectedFloorId;
+  const upcoming = steps.slice(stepIdx + 1);
+
+  const nextDist = formatMeters(curStep?.distanceMeters ?? 0);
+
+  return `
+    <div class="sg-sheet-handle" aria-hidden="true"></div>
+
+    <!-- Step rail -->
+    <div class="sg-step-rail">
+      <span class="sg-step-rail__label">Passo ${stepIdx + 1} de ${total}</span>
+      ${total <= 10 ? `<div class="sg-step-rail__track" aria-hidden="true">
+        ${Array.from({ length: total }, (_, i) => {
+          const state = i < stepIdx ? 'is-done' : i === stepIdx ? 'is-active' : '';
+          const seg = i === 0 ? '' : `<span class="sg-step-rail__seg ${i <= stepIdx ? 'is-done' : ''}"></span>`;
+          return `${seg}<span class="sg-step-rail__dot ${state}"></span>`;
+        }).join('')}
+      </div>` : `<span class="sg-step-rail__counter" aria-hidden="true">${stepIdx + 1}/${total}</span>`}
+    </div>
+
+    <!-- Headline -->
+    <div class="sg-instr-head">
+      <span class="sg-instr-head__icon">${navIcon(getStepIconName(curStep))}</span>
+      <h2 class="sg-instr-head__title" id="instr-text">${esc(curStep?.text ?? '')}</h2>
+    </div>
+
+    <!-- Context chips -->
+    <div class="sg-nav-chips">
+      <span class="sg-nav-chip">${navIcon('layers')}${esc(getFloorLabel(fid))}</span>
+      ${accessible
+        ? `<span class="sg-nav-chip sg-nav-chip--teal">${navIcon('wheelchair')}Rota acessível</span>`
+        : `<span class="sg-nav-chip sg-nav-chip--teal">${navIcon('navigate')}Rota mais rápida</span>`}
+    </div>
+
+    <div class="sg-nav-divider" role="presentation"></div>
+
+    <!-- Metrics -->
+    <dl class="sg-metrics">
+      <div class="sg-metric">
+        <div class="sg-metric__top">${navIcon('clock')}<dd class="sg-metric__value">${fmtMin(navState.route?.estimatedMinutes ?? 0)} min</dd></div>
+        <dt class="sg-metric__label">Tempo estimado</dt>
+      </div>
+      <div class="sg-metric">
+        <div class="sg-metric__top">${navIcon('stairs')}<dd class="sg-metric__value">${countFloorChanges()}</dd></div>
+        <dt class="sg-metric__label">Andares</dt>
+      </div>
+      <div class="sg-metric">
+        <div class="sg-metric__top">${navIcon(getStepIconName(nextStep))}<dd class="sg-metric__value">${nextStep && nextDist ? `Em ${esc(nextDist)}` : 'Chegada'}</dd></div>
+        <dt class="sg-metric__label">${esc(nextStep ? stripPeriod(nextStep.text) : 'Você chegou')}</dt>
+      </div>
+    </dl>
+
+    <!-- Actions -->
+    <div class="sg-nav-actions">
+      <button type="button" class="sg-nav-next" id="nav-next"
+        ${isLast ? 'disabled' : ''} aria-disabled="${isLast}"
+        aria-label="${isLast ? 'Chegou ao destino' : 'Próxima instrução'}">
+        ${isLast ? 'Chegou!' : 'Próximo'}${navIcon('chevron', 'sg-ico--sm')}
+      </button>
+      <button type="button" class="sg-nav-steps" id="instr-steps-btn" aria-haspopup="dialog">
+        ${navIcon('list')}Ver etapas
+      </button>
+    </div>
+
+    <!-- Upcoming steps -->
+    ${upcoming.length ? `
+      <h3 class="sg-next-steps__title">Próximas etapas</h3>
+      <ul class="sg-next-steps">
+        ${upcoming.map((s, i) => {
+          const d = formatMeters(s.distanceMeters ?? 0);
+          return `<li class="sg-next-step">
+            <span class="sg-next-step__icon">${navIcon(getStepIconName(s))}</span>
+            <div class="sg-next-step__body">
+              <p class="sg-next-step__text">${esc(stripPeriod(s.text))}</p>
+              ${d ? `<p class="sg-next-step__dist">${esc(d)}</p>` : ''}
+            </div>
+          </li>`;
+        }).join('')}
+      </ul>
+    ` : ''}
+  `;
+}
+
+function stripPeriod(t) {
+  return String(t ?? '').replace(/\.\s*$/, '');
+}
+
 function renderFloorControl() {
-  if (appData.floors.length <= 1) return '';
   const cur = appData.floors.find(f => f.id === mapState.selectedFloorId) ?? appData.floors[0];
-  const isOpen = uiState.floorMenuOpen;
+  const isOpen = uiState.floorMenuOpen && appData.floors.length > 1;
 
   return `<div class="sg-floor-ctrl ${isOpen ? 'is-open' : ''}" id="floor-ctrl">
-    <button type="button" class="sg-floor-trigger" id="floor-trigger-btn"
+    <button type="button" class="sg-map-fab" id="floor-trigger-btn"
       aria-haspopup="true" aria-expanded="${isOpen}"
-      aria-label="Piso atual: ${esc(cur.name)}. Toque para mudar.">
-      <iconify-icon icon="solar:layers-minimalistic-bold" aria-hidden="true"></iconify-icon>
-      <span>${esc(cur.name)}</span>
-      ${navState.routeFloorIds.has(cur.id) ? `<span class="sg-floor-trigger__dot" aria-hidden="true"></span>` : ''}
-      <iconify-icon icon="solar:alt-arrow-down-bold" class="sg-floor-trigger__chevron" aria-hidden="true"></iconify-icon>
+      aria-label="Piso atual: ${esc(cur?.name ?? getFloorLabel(mapState.selectedFloorId))}. Toque para mudar.">
+      ${navIcon('layers')}
+      ${navState.routeFloorIds.has(cur?.id) ? `<span class="sg-floor-trigger__dot" aria-hidden="true"></span>` : ''}
     </button>
     ${isOpen ? `<div class="sg-floor-menu" role="menu" aria-label="Escolher piso">
       ${appData.floors.map(f => {
@@ -2193,15 +2380,16 @@ function startNavigation() {
 
   render();
 
-  // After render: animate route in and fit view
+  // After render: animate the route in and frame the whole journey, so the
+  // "you are here → destination" overview matches the reference screen.
   if (!prefersReducedMotion()) {
     requestAnimationFrame(() => {
       const routeEl = document.querySelector('.sg-route-active');
       if (routeEl) { routeEl.classList.add('sg-route-draw'); }
-      setTimeout(() => fitStepToView(0), 100);
+      setTimeout(fitFullRoute, 100);
     });
   } else {
-    requestAnimationFrame(() => fitStepToView(0));
+    requestAnimationFrame(fitFullRoute);
   }
   bindInstructionSwipe();
 }
@@ -2249,60 +2437,11 @@ function advanceStep(delta) {
 function updateInstructionCard() {
   const card = $('instruction-card');
   if (!card) return;
-  const steps   = navState.semanticSteps;
-  const stepIdx = navState.activeStepIndex;
-  const total   = steps.length;
-  const curStep = steps[stepIdx];
-  const isFirst = stepIdx === 0;
-  const isLast  = stepIdx >= total - 1;
-  const fid     = mapState.selectedFloorId;
-  const accessible = planState.routeMode === 'accessible';
 
-  card.innerHTML = `
-    <div class="sg-instr-progress" aria-hidden="true">
-      <div class="sg-instr-progress__bar" style="width:${Math.round(((stepIdx + 1) / total) * 100)}%"></div>
-    </div>
-    <div class="sg-instr-meta">
-      <span class="sg-instr-meta__text">
-        <span>${esc(getFloorLabel(fid))}</span>
-        <span aria-hidden="true">·</span>
-        <span>Passo ${stepIdx + 1} de ${total}</span>
-        ${accessible ? `<span class="sg-instr-access-badge">
-          <iconify-icon icon="solar:accessibility-bold" aria-hidden="true"></iconify-icon>
-          Acessível
-        </span>` : ''}
-      </span>
-      <button type="button" class="sg-instr-steps-btn" id="instr-steps-btn" aria-haspopup="dialog">
-        <iconify-icon icon="solar:list-bold" aria-hidden="true"></iconify-icon>
-        Ver etapas
-      </button>
-    </div>
-    <p class="sg-instr-text" id="instr-text">${esc(curStep?.text ?? '')}</p>
-    ${curStep?.isTransition && curStep?.toFloor ? `<p class="sg-instr-floor-hint">
-      <iconify-icon icon="solar:layers-minimalistic-linear" aria-hidden="true" style="font-size:11px"></iconify-icon>
-      Indo para ${esc(getFloorLabel(curStep.toFloor))}
-    </p>` : ''}
-    <div class="sg-instr-controls">
-      <button type="button" class="sg-instr-prev" id="nav-prev"
-        ${isFirst ? 'disabled' : ''} aria-label="Instrução anterior">
-        <iconify-icon icon="solar:arrow-left-bold" aria-hidden="true"></iconify-icon>
-        Anterior
-      </button>
-      <div class="sg-instr-dots" aria-hidden="true">
-        ${total <= 10 ? Array.from({ length: total }, (_, i) =>
-          `<span class="sg-instr-dot ${i < stepIdx ? 'is-done' : i === stepIdx ? 'is-active' : ''}"></span>`
-        ).join('') : `<span class="sg-instr-counter">${stepIdx + 1}/${total}</span>`}
-      </div>
-      <button type="button" class="sg-instr-next" id="nav-next"
-        ${isLast ? 'disabled' : ''} aria-label="${isLast ? 'Chegou ao destino' : 'Próxima instrução'}">
-        ${isLast ? 'Chegou!' : 'Próximo'}
-        <iconify-icon icon="${isLast ? 'solar:check-circle-bold' : 'solar:arrow-right-bold'}" aria-hidden="true"></iconify-icon>
-      </button>
-    </div>
-  `;
+  card.innerHTML = renderInstructionCardInner();
+  card.scrollTop = 0;
 
-  // Re-bind buttons
-  $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
+  // Re-bind the controls the sheet owns
   $('nav-next')?.addEventListener('click', () => advanceStep(1));
   $('instr-steps-btn')?.addEventListener('click', openOverview);
   bindInstructionSwipe();
@@ -2356,7 +2495,7 @@ async function handleCalculate() {
     navState.routeFloorIds = new Set(
       (route.segments ?? []).filter(s => s.type === 'floor').map(s => s.floorId)
     );
-    navState.semanticSteps = buildSemanticSteps(route);
+    navState.semanticSteps = attachStepDistances(buildSemanticSteps(route), route.path);
     navState.activeStepIndex = 0;
     mapState.manualFloor = false;
 
