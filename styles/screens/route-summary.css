@@ -109,6 +109,14 @@
   padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
 }
 
+/* CRITICAL: the scroll is a flex column, so by default its children shrink to
+   fit before the container scrolls. Children with `overflow:hidden` (the
+   mini-map and the steps accordion) have an automatic flex min-height of 0,
+   so they were being squashed — the map flattened and the steps list clipped
+   to a single visible row when expanded. Pinning shrink to 0 keeps every
+   block at its natural height and lets the container SCROLL instead. */
+.sg-rs__scroll > * { flex-shrink: 0; }
+
 /* Group breaks — extra air before the block that opens each new group. */
 .sg-rs__metrics { margin-top: var(--space-5); }   /* start of group B */
 .sg-rs__steps   { margin-top: var(--space-6); }   /* start of group C */
@@ -174,6 +182,7 @@
   position: relative;
   display: block;
   width: 100%;
+  min-height: 168px;   /* never let the schematic flatten, whatever expands below */
   padding: 0;
   overflow: hidden;
   cursor: pointer;
@@ -291,26 +300,46 @@
 .sg-rs__steps-list {
   list-style: none;
   margin: 0;
-  padding: 0 var(--space-4) var(--space-2);
+  padding: var(--space-2) var(--space-4) var(--space-3);
   border-top: 1px solid var(--border);
 }
+/* More vertical breathing between steps; the numbers align to the top so a
+   two-line step never knocks the timeline out of place. */
 .sg-rs__step {
+  position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-3) 0;
+  padding: var(--space-4) 0;
 }
-.sg-rs__step + .sg-rs__step { border-top: 1px solid var(--border); }
+/* Timeline connector — a turquoise line joining each number to the next,
+   so the steps read as one trajectory (1 → 2 → 3). It runs from this
+   number's centre to the next number's centre and is hidden behind the
+   opaque circles at both ends. Not drawn after the last step. */
+.sg-rs__step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 13px;                                      /* number centre (26px / 2) */
+  top: calc(var(--space-4) + 13px);                /* this number's centre */
+  bottom: calc((var(--space-4) + 13px) * -1);      /* next number's centre */
+  width: 2.5px;
+  transform: translateX(-50%);
+  background: var(--sky-500);
+  opacity: .5;
+  z-index: 0;
+}
 .sg-rs__step-num {
+  position: relative;
+  z-index: 1;
   flex: 0 0 auto;
   width: 26px;
   height: 26px;
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: var(--surface-2);
-  border: 1.5px solid var(--border);
-  color: var(--navy-900);
+  background: var(--surface);
+  border: 2px solid var(--sky-ink);
+  color: var(--sky-ink);
   font-size: var(--text-xs);
   font-weight: var(--weight-bold);
 }
@@ -322,12 +351,14 @@
 .sg-rs__step-text {
   flex: 1 1 auto;
   min-width: 0;
+  padding-top: 3px;                                /* optical centre with the number */
   font-size: var(--text-sm);
   line-height: var(--leading-snug);
   color: var(--text);
 }
 .sg-rs__step-floor {
   flex: 0 0 auto;
+  padding-top: 4px;                                /* align with the number/text row */
   font-size: var(--text-xs);
   font-weight: var(--weight-semibold);
   color: var(--sky-ink);
