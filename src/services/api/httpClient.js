@@ -1,4 +1,4 @@
-import { APP_CONFIG, getApiBaseUrl } from '../config/appConfig.js';
+import { APP_CONFIG, getApiBaseUrl } from '../../app/config/appConfig.js';
 
 export class SkyGateApiError extends Error {
   constructor(message, { kind = 'http', status = 0, body = null, cause = null } = {}) {

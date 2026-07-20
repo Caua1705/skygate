@@ -1,0 +1,197 @@
+import { $ } from '../utils/dom.js';
+import { advanceStep, clearLocation, closeLocationDetail, closeOverview, closeSearch, editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail, openOverview, openSearch, returnToCurrentStep, selectLocation, setRouteMode, showHelp, startNavigation, swapLocations, toggleAccessibleRoute, traceRouteToLocation } from './actions.js';
+import { handleCalculate } from './routeController.js';
+import { init } from './bootstrap.js';
+import { app, navState, uiState } from '../state/appState.js';
+import { render, updateSearchChips_, updateSearchResults_ } from './router.js';
+import { fitStepToView } from '../map/mapFit.js';
+import { zoomAt } from '../map/mapPanZoom.js';
+import { renderFloorControl } from '../screens/navigation/NavigationScreen.js';
+import { switchFloor } from '../map/floorSwitch.js';
+import { DEBOUNCE_MS } from './constants.js';
+
+/* ============================================================
+   13. EVENT BINDING
+   ============================================================ */
+
+export let _searchDebounce = null;
+
+export function bindEvents() {
+  // Planning
+  document.querySelectorAll('.open-search').forEach(btn =>
+    btn.addEventListener('click', () => openSearch(btn.dataset.kind))
+  );
+  document.querySelectorAll('.clear-loc').forEach(btn =>
+    btn.addEventListener('click', () => clearLocation(btn.dataset.kind))
+  );
+  $('swap-btn')?.addEventListener('click', swapLocations);
+  document.querySelectorAll('[data-mode]').forEach(btn =>
+    btn.addEventListener('click', () => setRouteMode(btn.dataset.mode))
+  );
+  $('calc-btn')?.addEventListener('click', handleCalculate);
+  $('help-btn')?.addEventListener('click', showHelp);
+  $('retry-btn')?.addEventListener('click', init);
+  $('dismiss-error')?.addEventListener('click', () => { uiState.error = ''; render(); });
+
+  // Accessible route toggle (compact replacement for two big mode cards)
+  $('accessible-toggle')?.addEventListener('click', toggleAccessibleRoute);
+
+  // Quick category shortcuts — open destination search pre-filtered by category
+  document.querySelectorAll('.sg-quick__item, .sg-quick-item, .sg-quick-card').forEach(btn =>
+    btn.addEventListener('click', () => openCategorySearch(btn.dataset.catKey))
+  );
+
+  // Clear-location spans (role=button, keyboard accessible)
+  document.querySelectorAll('.sg-journey-clear').forEach(el => {
+    el.addEventListener('click', e => { e.stopPropagation(); clearLocation(el.dataset.kind); });
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); clearLocation(el.dataset.kind); } });
+  });
+
+  // Summary
+  $('start-nav-btn')?.addEventListener('click', startNavigation);
+  $('view-map-btn')?.addEventListener('click', startNavigation); // same action, enters nav mode
+  $('back-to-planning-btn')?.addEventListener('click', () => { app.mode = 'planning'; render(); });
+  $('edit-route-btn')?.addEventListener('click', editRoute);
+
+  // Navigation
+  $('exit-nav-btn')?.addEventListener('click', exitNavigation);
+  $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
+  $('nav-next')?.addEventListener('click', () => advanceStep(1));
+  $('fit-segment-btn')?.addEventListener('click', () => fitStepToView(navState.activeStepIndex));
+  $('zoom-in-btn')?.addEventListener('click', () => zoomAt(0.4));
+  $('zoom-out-btn')?.addEventListener('click', () => zoomAt(-0.4));
+  $('overview-btn')?.addEventListener('click', openOverview);
+  $('instr-steps-btn')?.addEventListener('click', openOverview);
+  $('return-btn')?.addEventListener('click', returnToCurrentStep);
+
+  // Floor control
+  bindFloorControlEvents();
+
+  // Overview
+  $('close-overview')?.addEventListener('click', closeOverview);
+  $('overview-backdrop')?.addEventListener('click', closeOverview);
+  document.querySelectorAll('.sg-overview-item__btn').forEach(btn =>
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.stepIndex, 10);
+      if (!isNaN(idx)) { closeOverview(); goToStep(idx); }
+    })
+  );
+
+  // Search
+  bindSearchOverlayEvents();
+
+  // Location detail sheet
+  $('detail-backdrop')?.addEventListener('click', closeLocationDetail);
+  $('close-detail')?.addEventListener('click', closeLocationDetail);
+  $('detail-route-btn')?.addEventListener('click', e => {
+    const code = e.currentTarget.dataset.code;
+    if (code) traceRouteToLocation(code);
+  });
+}
+
+export function bindFloorControlEvents() {
+  $('floor-trigger-btn')?.addEventListener('click', e => {
+    e.stopPropagation();
+    uiState.floorMenuOpen = !uiState.floorMenuOpen;
+    if (app.mode === 'navigation') {
+      const fc = $('floor-ctrl');
+      if (fc) { fc.outerHTML = renderFloorControl(); bindFloorControlEvents(); }
+    } else {
+      render();
+    }
+  });
+  document.querySelectorAll('.sg-floor-item').forEach(btn =>
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      uiState.floorMenuOpen = false;
+      switchFloor(btn.dataset.floorId, true);
+    })
+  );
+  document.addEventListener('click', closeFloorMenuOnOutside);
+}
+
+export function closeFloorMenuOnOutside(e) {
+  if (!uiState.floorMenuOpen) return;
+  if (!e.target.closest('#floor-ctrl')) {
+    uiState.floorMenuOpen = false;
+    const fc = $('floor-ctrl');
+    if (fc) { fc.outerHTML = renderFloorControl(); bindFloorControlEvents(); }
+    document.removeEventListener('click', closeFloorMenuOnOutside);
+  }
+}
+
+export function bindSearchOverlayEvents() {
+  $('search-backdrop')?.addEventListener('click', closeSearch);
+  $('close-search')?.addEventListener('click', closeSearch);
+  const input = $('search-input');
+  if (input) {
+    input.addEventListener('input', e => {
+      uiState.searchQuery = e.target.value;
+      // Typing exits category-filter mode — text search and chip filters are mutually exclusive
+      if (uiState.searchCategory) {
+        uiState.searchCategory = '';
+        updateSearchChips_();
+      }
+      clearTimeout(_searchDebounce);
+      _searchDebounce = setTimeout(updateSearchResults_, DEBOUNCE_MS);
+    });
+    requestAnimationFrame(() => input.focus({ preventScroll: true }));
+  }
+  bindSearchItemEvents();
+  document.querySelectorAll('.sg-chip').forEach(btn =>
+    btn.addEventListener('click', () => {
+      const key = btn.dataset.catKey;
+      uiState.searchCategory = uiState.searchCategory === key ? '' : key;
+      uiState.searchQuery = '';
+      const inp = $('search-input');
+      if (inp) inp.value = '';
+      updateSearchChips_();
+      updateSearchResults_();
+    })
+  );
+}
+
+export function bindSearchItemEvents() {
+  document.querySelectorAll('.sg-search-item').forEach(btn =>
+    btn.addEventListener('click', () => selectLocation(btn.dataset.kind, btn.dataset.code))
+  );
+  document.querySelectorAll('.sg-search-item__info').forEach(btn =>
+    btn.addEventListener('click', e => { e.stopPropagation(); openLocationDetail(btn.dataset.code); })
+  );
+}
+
+// Carousel swipe for instruction card
+export let _instrSwipeStart = null;
+export function bindInstructionSwipe() {
+  const card = $('instruction-card');
+  if (!card) return;
+  card.addEventListener('touchstart', e => {
+    if (e.touches.length !== 1) return;
+    _instrSwipeStart = { x: e.touches[0].clientX, t: Date.now() };
+  }, { passive: true });
+  card.addEventListener('touchend', e => {
+    if (!_instrSwipeStart) return;
+    const dx = e.changedTouches[0].clientX - _instrSwipeStart.x;
+    const dt = Date.now() - _instrSwipeStart.t;
+    _instrSwipeStart = null;
+    if (Math.abs(dx) < 40 || dt > 500) return;
+    if (dx < 0) advanceStep(1);
+    else advanceStep(-1);
+  }, { passive: true });
+}
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (uiState.modalNodeCode) { closeLocationDetail(); return; }
+    if (uiState.showOverview)  { closeOverview(); return; }
+    if (uiState.searchOpenFor) { e.preventDefault(); closeSearch(); return; }
+    if (uiState.floorMenuOpen) { uiState.floorMenuOpen = false; document.getElementById('floor-ctrl')?.querySelector('button')?.focus(); return; }
+    if (app.mode === 'navigation') { exitNavigation(); return; }
+  }
+  if (app.mode === 'navigation' && !uiState.searchOpenFor && !uiState.showOverview) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); advanceStep(1); }
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { e.preventDefault(); advanceStep(-1); }
+  }
+});
+
