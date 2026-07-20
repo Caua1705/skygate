@@ -100,6 +100,7 @@ const uiState = {
   error: '',
   searchOpenFor: '',    // 'origin'|'destination'|''
   searchQuery: '',
+  searchCategory: '',   // SEARCH_CATEGORIES key or '' — active quick-filter chip
   showOverview: false,
   modalNodeCode: '',
   floorMenuOpen: false,
@@ -921,12 +922,18 @@ function bindMapPan() {
    9. SEARCH HELPERS
    ============================================================ */
 
-function filterNodes(q, exceptCode = '') {
+function filterNodes(q, exceptCode = '', categoryKey = '') {
   const t = q ? norm(q) : '';
+  const cat = categoryKey ? SEARCH_CATEGORIES.find(c => c.key === categoryKey) : null;
   return appData.nodes
     .filter(n => {
       if (n.code === exceptCode) return false;
-      // Use presentation layer visibility rules
+      if (INTERNAL_TYPES.has(n.type)) return false; // never surface technical corridor/waypoint/transition nodes
+      // An active category chip is authoritative — it can surface circulation
+      // types (elevator/stairs/escalator) that are hidden from the default,
+      // query-less view. Otherwise fall back to the presentation layer's
+      // text/default visibility rules.
+      if (cat) return cat.types.includes(n.type);
       return t
         ? isNodeVisibleInTextSearch(n, t)
         : isNodeVisibleInDefaultSearch(n);
@@ -985,6 +992,12 @@ function renderPlanning() {
   // Journey rail filled state (both locations chosen)
   const railFilled = (oNode && dNode) ? ' is-filled' : '';
 
+  // Floor + category pill shown under a selected origin/destination value
+  const metaPill = (node) => !node ? '' : `<span class="sg-journey-field__meta">
+    <iconify-icon icon="${getNodeMeta(node.type).icon}" aria-hidden="true"></iconify-icon>
+    <span>${esc(getFloorLabel(node.floorId))} · ${esc(getPublicNodeCategory(node))}</span>
+  </span>`;
+
   return `
     <div class="sg-planning" id="planning-root">
 
@@ -1005,7 +1018,9 @@ function renderPlanning() {
       <!-- ░░ BRAND UTILITY ROW ░░ -->
       <header class="sg-brandbar" role="banner">
         <div class="sg-brandbar__left">
-          <img src="assets/logo.jpeg" alt="" class="sg-brandbar__logo" aria-hidden="true">
+          <span class="sg-brandbar__logo-tile" aria-hidden="true">
+            <img src="assets/logo.png" alt="" class="sg-brandbar__logo">
+          </span>
           <span class="sg-brandbar__wordmark">SkyGate</span>
         </div>
         <button
@@ -1084,6 +1099,7 @@ function renderPlanning() {
                       <span class="sg-journey-field__value${oNode ? '' : ' is-ph'}">
                         ${oNode ? esc(getPublicNodeLabel(oNode)) : 'Onde você está?'}
                       </span>
+                      ${metaPill(oNode)}
                     </div>
                     ${oNode ? `<span class="sg-journey-clear clear-loc" data-kind="origin" id="clear-origin" role="button" tabindex="0" aria-label="Limpar ponto de partida">
                       <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
@@ -1114,6 +1130,7 @@ function renderPlanning() {
                       <span class="sg-journey-field__value${dNode ? '' : ' is-ph'}">
                         ${dNode ? esc(getPublicNodeLabel(dNode)) : 'Para onde deseja ir?'}
                       </span>
+                      ${metaPill(dNode)}
                     </div>
                     ${dNode ? `<span class="sg-journey-clear clear-loc" data-kind="destination" id="clear-dest" role="button" tabindex="0" aria-label="Limpar destino">
                       <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
@@ -1287,7 +1304,8 @@ function renderSummary() {
         <details class="sg-summary-steps">
           <summary class="sg-summary-steps__toggle">
             <iconify-icon icon="solar:list-bold" aria-hidden="true"></iconify-icon>
-            Ver todos os ${steps.length} passos
+            Ver etapas
+            <span class="sg-summary-steps__count">${steps.length}</span>
             <iconify-icon icon="solar:alt-arrow-down-bold" class="sg-summary-steps__chevron" aria-hidden="true"></iconify-icon>
           </summary>
           <ol class="sg-summary-steps__list">
@@ -1301,7 +1319,7 @@ function renderSummary() {
 
         <button type="button" class="sg-edit-btn" id="edit-route-btn">
           <iconify-icon icon="solar:pen-bold" aria-hidden="true"></iconify-icon>
-          Editar rota
+          Alterar rota
         </button>
       </main>
     </div>
@@ -1398,9 +1416,19 @@ function renderNavigation() {
 
         <!-- Step meta -->
         <div class="sg-instr-meta">
-          <span>${esc(getFloorLabel(fid))}</span>
-          <span aria-hidden="true">·</span>
-          <span>Passo ${stepIdx + 1} de ${total}</span>
+          <span class="sg-instr-meta__text">
+            <span>${esc(getFloorLabel(fid))}</span>
+            <span aria-hidden="true">·</span>
+            <span>Passo ${stepIdx + 1} de ${total}</span>
+            ${accessible ? `<span class="sg-instr-access-badge">
+              <iconify-icon icon="solar:accessibility-bold" aria-hidden="true"></iconify-icon>
+              Acessível
+            </span>` : ''}
+          </span>
+          <button type="button" class="sg-instr-steps-btn" id="instr-steps-btn" aria-haspopup="dialog">
+            <iconify-icon icon="solar:list-bold" aria-hidden="true"></iconify-icon>
+            Ver etapas
+          </button>
         </div>
 
         <!-- Instruction text -->
@@ -1512,6 +1540,12 @@ function renderOverlayOverview() {
   </div>`;
 }
 
+// Curated, direction-appropriate subsets of the real SEARCH_CATEGORIES —
+// chips are genuine filters (they narrow appData.nodes by type), never
+// free-text shortcuts and never invented categories.
+const ORIGIN_CHIP_KEYS = ['access', 'gates', 'restrooms', 'services', 'circulation'];
+const DEST_CHIP_KEYS   = ['gates', 'food', 'shops', 'restrooms', 'services'];
+
 function renderSearchOverlay() {
   const kind = uiState.searchOpenFor;
   if (!kind) return '';
@@ -1521,12 +1555,10 @@ function renderSearchOverlay() {
     ? 'Portão, banheiro, café, check-in…'
     : 'Portão 7, câmbio, sala VIP, farmácia…';
   const except = isOrigin ? planState.destinationCode : planState.originCode;
-  const results = filterNodes(uiState.searchQuery, except);
+  const results = filterNodes(uiState.searchQuery, except, uiState.searchCategory);
   const grouped = groupByCategory(results);
-  // Chips use passenger-friendly categories — no internal terminology
-  const chips = kind === 'origin'
-    ? ['Entrada', 'Check-in', 'Banheiro', 'Serviços']
-    : ['Portão', 'Banheiro', 'Alimentação', 'Farmácia', 'Câmbio'];
+  const chipKeys = isOrigin ? ORIGIN_CHIP_KEYS : DEST_CHIP_KEYS;
+  const chips = chipKeys.map(key => SEARCH_CATEGORIES.find(c => c.key === key)).filter(Boolean);
   // Announce result count for screen readers
   const totalResults = Array.from(grouped.values()).reduce((a, b) => a + b.length, 0);
 
@@ -1547,8 +1579,12 @@ function renderSearchOverlay() {
           autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search"
           aria-label="${esc(title)}" aria-controls="search-results" data-kind="${kind}">
       </div>
-      <div class="sg-quick-chips" aria-label="Sugestões rápidas">
-        ${chips.map(c => `<button type="button" class="sg-chip" data-label="${esc(c)}" data-kind="${kind}">${esc(c)}</button>`).join('')}
+      <div class="sg-quick-chips" role="group" aria-label="Filtrar por categoria">
+        ${chips.map(c => `<button type="button" class="sg-chip${c.key === uiState.searchCategory ? ' is-active' : ''}"
+          data-cat-key="${c.key}" aria-pressed="${c.key === uiState.searchCategory}">
+          <iconify-icon icon="${c.icon}" aria-hidden="true"></iconify-icon>
+          <span>${esc(c.label)}</span>
+        </button>`).join('')}
       </div>
       <div id="search-results" class="sg-search-results"
         role="listbox"
@@ -1556,7 +1592,7 @@ function renderSearchOverlay() {
         aria-label="Resultados de busca"
         aria-relevant="additions text">
         <span class="sr-only" aria-live="assertive" aria-atomic="true">
-          ${totalResults > 0 ? `${totalResults} resultado${totalResults > 1 ? 's' : ''}` : uiState.searchQuery ? 'Nenhum resultado' : ''}
+          ${totalResults > 0 ? `${totalResults} resultado${totalResults > 1 ? 's' : ''}` : (uiState.searchQuery || uiState.searchCategory) ? 'Nenhum resultado' : ''}
         </span>
         ${renderSearchResults(grouped, kind)}
       </div>
@@ -1566,11 +1602,11 @@ function renderSearchOverlay() {
 
 function renderSearchResults(grouped, kind) {
   if (!grouped.size) {
-    const isEmpty = !uiState.searchQuery;
+    const isEmpty = !uiState.searchQuery && !uiState.searchCategory;
     return `<div class="sg-search-empty" role="status">
       <iconify-icon icon="${isEmpty ? 'solar:magnifer-linear' : 'solar:map-point-wave-linear'}" aria-hidden="true"></iconify-icon>
       <p>${isEmpty ? 'Escolha uma categoria ou busque acima' : 'Nenhum resultado encontrado'}</p>
-      <p class="sg-search-empty__sub">${isEmpty ? 'Ex: "Portão 18", "banheiro", "café"' : 'Tente outro termo. Ex: "banheiro", "elevador".'}</p>
+      <p class="sg-search-empty__sub">${isEmpty ? 'Ex: "Portão 18", "banheiro", "café"' : 'Tente outro termo ou outra categoria.'}</p>
     </div>`;
   }
 
@@ -1582,24 +1618,112 @@ function renderSearchResults(grouped, kind) {
         const pubLabel   = getPublicNodeLabel(n);         // passenger-facing name
         const pubSub     = getPublicNodeSubtitle(n);      // floor + category
         const accessible = CIRCULATION_TYPES.has(n.type);
-        return `<button type="button" class="sg-search-item" data-kind="${kind}" data-code="${esc(n.code)}"
-          role="option"
-          aria-label="${esc(pubLabel)} — ${esc(pubSub)}${accessible ? ' — Acessibilidade' : ''}"
-          aria-selected="false">
-          <span class="sg-search-item__icon" style="color:${meta.color}" aria-hidden="true">
-            <iconify-icon icon="${meta.icon}"></iconify-icon>
-          </span>
-          <span class="sg-search-item__body">
-            <span class="sg-search-item__name">${esc(pubLabel)}</span>
-            <span class="sg-search-item__meta">${esc(pubSub)}</span>
-          </span>
-          ${accessible ? `<span class="sg-search-item__arrow" aria-label="Acessibilidade">
-            <iconify-icon icon="solar:accessibility-bold" style="font-size:13px;color:var(--teal-600)"></iconify-icon>
-          </span>` : `<iconify-icon icon="solar:alt-arrow-right-linear" class="sg-search-item__arrow" aria-hidden="true"></iconify-icon>`}
-        </button>`;
+        return `<div class="sg-search-row">
+          <button type="button" class="sg-search-item" data-kind="${kind}" data-code="${esc(n.code)}"
+            role="option"
+            aria-label="${esc(pubLabel)} — ${esc(pubSub)}${accessible ? ' — Acessibilidade' : ''}"
+            aria-selected="false">
+            <span class="sg-search-item__icon" style="color:${meta.color};background:${meta.color}1f" aria-hidden="true">
+              <iconify-icon icon="${meta.icon}"></iconify-icon>
+            </span>
+            <span class="sg-search-item__body">
+              <span class="sg-search-item__name">${esc(pubLabel)}</span>
+              <span class="sg-search-item__meta">${esc(pubSub)}</span>
+            </span>
+            ${accessible ? `<span class="sg-search-item__arrow" aria-label="Acessibilidade">
+              <iconify-icon icon="solar:accessibility-bold" style="font-size:13px;color:var(--sg-teal-600)"></iconify-icon>
+            </span>` : `<iconify-icon icon="solar:alt-arrow-right-linear" class="sg-search-item__arrow" aria-hidden="true"></iconify-icon>`}
+          </button>
+          <button type="button" class="sg-search-item__info" data-code="${esc(n.code)}"
+            aria-label="Ver detalhes de ${esc(pubLabel)}">
+            <iconify-icon icon="solar:info-circle-linear" aria-hidden="true"></iconify-icon>
+          </button>
+        </div>`;
       }).join('')}
     </div>
   `).join('');
+}
+
+/* Location / business details sheet — shows only fields the API actually
+   returned; every field is hidden individually when missing rather than
+   leaving an empty row. */
+function renderLocationDetail() {
+  const code = uiState.modalNodeCode;
+  if (!code) return '';
+  const node = findNode(code);
+  if (!node) return '';
+
+  const meta       = getNodeMeta(node.type);
+  const label      = getPublicNodeLabel(node);
+  const category   = getPublicNodeCategory(node);
+  const floorLabel = getFloorLabel(node.floorId);
+  const accessible = CIRCULATION_TYPES.has(node.type);
+  const canRoute   = node.code !== planState.destinationCode;
+
+  const rows = [
+    node.hours && { icon: 'solar:clock-circle-bold', text: esc(node.hours) },
+    node.phone && { icon: 'solar:phone-bold', text: esc(node.phone) },
+    node.website && {
+      icon: 'solar:global-bold',
+      html: `<a href="${esc(node.website)}" target="_blank" rel="noopener noreferrer">${esc(node.website.replace(/^https?:\/\//, ''))}</a>`,
+    },
+  ].filter(Boolean);
+
+  return `<div class="sg-detail-overlay" id="detail-overlay" role="dialog" aria-modal="true" aria-labelledby="detail-title">
+    <button type="button" class="sg-detail-backdrop" id="detail-backdrop" tabindex="-1" aria-label="Fechar detalhes"></button>
+    <div class="sg-detail-sheet">
+      <div class="sg-detail-handle" aria-hidden="true"></div>
+      <button type="button" class="sg-icon-btn sg-detail-close" id="close-detail" aria-label="Fechar detalhes">
+        <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
+      </button>
+
+      ${node.image ? `<div class="sg-detail-image">
+        <img src="${esc(node.image)}" alt="" loading="lazy">
+      </div>` : ''}
+
+      <div class="sg-detail-body">
+        <div class="sg-detail-identity">
+          ${node.logo
+            ? `<img src="${esc(node.logo)}" alt="" class="sg-detail-logo" loading="lazy">`
+            : `<span class="sg-detail-icon" style="color:${meta.color};background:${meta.color}1f" aria-hidden="true">
+                 <iconify-icon icon="${meta.icon}"></iconify-icon>
+               </span>`}
+          <div class="sg-detail-identity__text">
+            <h2 class="sg-detail-name" id="detail-title">${esc(label)}</h2>
+            <p class="sg-detail-category">${esc(category)}</p>
+          </div>
+        </div>
+
+        <div class="sg-detail-meta-row">
+          <span class="sg-detail-meta-pill">
+            <iconify-icon icon="solar:layers-minimalistic-bold" aria-hidden="true"></iconify-icon>
+            ${esc(floorLabel)}
+          </span>
+          ${accessible ? `<span class="sg-detail-meta-pill sg-detail-meta-pill--access">
+            <iconify-icon icon="solar:accessibility-bold" aria-hidden="true"></iconify-icon>
+            Acessibilidade e circulação
+          </span>` : ''}
+        </div>
+
+        ${rows.length ? `<div class="sg-detail-rows">
+          ${rows.map(r => `<div class="sg-detail-row">
+            <iconify-icon icon="${r.icon}" aria-hidden="true"></iconify-icon>
+            ${r.html ?? `<span>${r.text}</span>`}
+          </div>`).join('')}
+        </div>` : ''}
+
+        ${node.description ? `<p class="sg-detail-description">${esc(node.description)}</p>` : ''}
+      </div>
+
+      <div class="sg-detail-actions">
+        <button type="button" class="sg-btn-primary sg-btn-primary--large" id="detail-route-btn"
+          data-code="${esc(node.code)}" ${canRoute ? '' : 'disabled'}>
+          <iconify-icon icon="solar:routing-2-bold" aria-hidden="true"></iconify-icon>
+          Traçar rota
+        </button>
+      </div>
+    </div>
+  </div>`;
 }
 
 /* ============================================================
@@ -1610,9 +1734,9 @@ const root = document.getElementById('app');
 
 function render() {
   switch (appMode) {
-    case 'planning':   root.innerHTML = renderPlanning() + renderSearchOverlay(); break;
-    case 'summary':    root.innerHTML = renderSummary() + renderSearchOverlay(); break;
-    case 'navigation': root.innerHTML = renderNavigation() + renderSearchOverlay(); break;
+    case 'planning':   root.innerHTML = renderPlanning() + renderSearchOverlay() + renderLocationDetail(); break;
+    case 'summary':    root.innerHTML = renderSummary() + renderSearchOverlay() + renderLocationDetail(); break;
+    case 'navigation': root.innerHTML = renderNavigation() + renderSearchOverlay() + renderLocationDetail(); break;
   }
   bindEvents();
   if (appMode === 'navigation') {
@@ -1660,10 +1784,18 @@ function updateSearchResults_() {
   const el = $('search-results');
   if (!el || !uiState.searchOpenFor) return;
   const except = uiState.searchOpenFor === 'origin' ? planState.destinationCode : planState.originCode;
-  const results = filterNodes(uiState.searchQuery, except);
+  const results = filterNodes(uiState.searchQuery, except, uiState.searchCategory);
   const grouped = groupByCategory(results);
   el.innerHTML = renderSearchResults(grouped, uiState.searchOpenFor);
   bindSearchItemEvents();
+}
+
+function updateSearchChips_() {
+  document.querySelectorAll('.sg-chip').forEach(btn => {
+    const active = btn.dataset.catKey === uiState.searchCategory;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-pressed', String(active));
+  });
 }
 
 /* ============================================================
@@ -1741,6 +1873,7 @@ function bindEvents() {
   $('zoom-in-btn')?.addEventListener('click', () => zoomAt(0.4));
   $('zoom-out-btn')?.addEventListener('click', () => zoomAt(-0.4));
   $('overview-btn')?.addEventListener('click', openOverview);
+  $('instr-steps-btn')?.addEventListener('click', openOverview);
   $('return-btn')?.addEventListener('click', returnToCurrentStep);
 
   // Floor control
@@ -1758,6 +1891,14 @@ function bindEvents() {
 
   // Search
   bindSearchOverlayEvents();
+
+  // Location detail sheet
+  $('detail-backdrop')?.addEventListener('click', closeLocationDetail);
+  $('close-detail')?.addEventListener('click', closeLocationDetail);
+  $('detail-route-btn')?.addEventListener('click', e => {
+    const code = e.currentTarget.dataset.code;
+    if (code) traceRouteToLocation(code);
+  });
 }
 
 function bindFloorControlEvents() {
@@ -1798,6 +1939,11 @@ function bindSearchOverlayEvents() {
   if (input) {
     input.addEventListener('input', e => {
       uiState.searchQuery = e.target.value;
+      // Typing exits category-filter mode — text search and chip filters are mutually exclusive
+      if (uiState.searchCategory) {
+        uiState.searchCategory = '';
+        updateSearchChips_();
+      }
       clearTimeout(_searchDebounce);
       _searchDebounce = setTimeout(updateSearchResults_, DEBOUNCE_MS);
     });
@@ -1806,11 +1952,13 @@ function bindSearchOverlayEvents() {
   bindSearchItemEvents();
   document.querySelectorAll('.sg-chip').forEach(btn =>
     btn.addEventListener('click', () => {
-      uiState.searchQuery = btn.dataset.label;
+      const key = btn.dataset.catKey;
+      uiState.searchCategory = uiState.searchCategory === key ? '' : key;
+      uiState.searchQuery = '';
       const inp = $('search-input');
-      if (inp) inp.value = btn.dataset.label;
+      if (inp) inp.value = '';
+      updateSearchChips_();
       updateSearchResults_();
-      inp?.focus({ preventScroll: true });
     })
   );
 }
@@ -1818,6 +1966,9 @@ function bindSearchOverlayEvents() {
 function bindSearchItemEvents() {
   document.querySelectorAll('.sg-search-item').forEach(btn =>
     btn.addEventListener('click', () => selectLocation(btn.dataset.kind, btn.dataset.code))
+  );
+  document.querySelectorAll('.sg-search-item__info').forEach(btn =>
+    btn.addEventListener('click', e => { e.stopPropagation(); openLocationDetail(btn.dataset.code); })
   );
 }
 
@@ -1844,6 +1995,7 @@ function bindInstructionSwipe() {
 // Keyboard
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
+    if (uiState.modalNodeCode) { closeLocationDetail(); return; }
     if (uiState.showOverview)  { closeOverview(); return; }
     if (uiState.searchOpenFor) { e.preventDefault(); closeSearch(); return; }
     if (uiState.floorMenuOpen) { uiState.floorMenuOpen = false; document.getElementById('floor-ctrl')?.querySelector('button')?.focus(); return; }
@@ -1864,6 +2016,7 @@ function openSearch(kind) {
   clearTimeout(_searchDebounce);
   uiState.searchOpenFor = kind;
   uiState.searchQuery = '';
+  uiState.searchCategory = '';
   render();
 }
 
@@ -1872,9 +2025,34 @@ function closeSearch() {
   const prev = uiState.searchOpenFor;
   uiState.searchOpenFor = '';
   uiState.searchQuery = '';
+  uiState.searchCategory = '';
   clearTimeout(_searchDebounce);
   render();
   requestAnimationFrame(() => $(`${prev}-btn`)?.focus({ preventScroll: true }));
+}
+
+let _detailTriggerEl = null;
+
+function openLocationDetail(code) {
+  if (!code || !findNode(code)) return;
+  _detailTriggerEl = document.activeElement;
+  uiState.modalNodeCode = code;
+  render();
+  requestAnimationFrame(() => $('close-detail')?.focus({ preventScroll: true }));
+}
+
+function closeLocationDetail() {
+  if (!uiState.modalNodeCode) return;
+  uiState.modalNodeCode = '';
+  render();
+  const trigger = _detailTriggerEl;
+  _detailTriggerEl = null;
+  requestAnimationFrame(() => trigger?.focus?.({ preventScroll: true }));
+}
+
+function traceRouteToLocation(code) {
+  uiState.modalNodeCode = '';
+  selectLocation('destination', code);
 }
 
 function selectLocation(kind, code) {
@@ -1885,6 +2063,7 @@ function selectLocation(kind, code) {
   navState.route = null;
   uiState.searchOpenFor = '';
   uiState.searchQuery = '';
+  uiState.searchCategory = '';
   uiState.error = '';
   clearTimeout(_searchDebounce);
   if (appMode !== 'planning') { appMode = 'planning'; }
@@ -1950,14 +2129,9 @@ function openCategorySearch(catKey) {
   if (!cat) return;
   clearTimeout(_searchDebounce);
   uiState.searchOpenFor = 'destination';
-  uiState.searchQuery = cat.label;  // pre-seed the query with the category label
+  uiState.searchQuery = '';
+  uiState.searchCategory = cat.key;
   render();
-  // Update results after render
-  requestAnimationFrame(() => {
-    const inp = $('search-input');
-    if (inp) { inp.value = cat.label; inp.select(); }
-    updateSearchResults_();
-  });
 }
 
 function editRoute() {
@@ -2082,15 +2256,26 @@ function updateInstructionCard() {
   const isFirst = stepIdx === 0;
   const isLast  = stepIdx >= total - 1;
   const fid     = mapState.selectedFloorId;
+  const accessible = planState.routeMode === 'accessible';
 
   card.innerHTML = `
     <div class="sg-instr-progress" aria-hidden="true">
       <div class="sg-instr-progress__bar" style="width:${Math.round(((stepIdx + 1) / total) * 100)}%"></div>
     </div>
     <div class="sg-instr-meta">
-      <span>${esc(getFloorLabel(fid))}</span>
-      <span aria-hidden="true">·</span>
-      <span>Passo ${stepIdx + 1} de ${total}</span>
+      <span class="sg-instr-meta__text">
+        <span>${esc(getFloorLabel(fid))}</span>
+        <span aria-hidden="true">·</span>
+        <span>Passo ${stepIdx + 1} de ${total}</span>
+        ${accessible ? `<span class="sg-instr-access-badge">
+          <iconify-icon icon="solar:accessibility-bold" aria-hidden="true"></iconify-icon>
+          Acessível
+        </span>` : ''}
+      </span>
+      <button type="button" class="sg-instr-steps-btn" id="instr-steps-btn" aria-haspopup="dialog">
+        <iconify-icon icon="solar:list-bold" aria-hidden="true"></iconify-icon>
+        Ver etapas
+      </button>
     </div>
     <p class="sg-instr-text" id="instr-text">${esc(curStep?.text ?? '')}</p>
     ${curStep?.isTransition && curStep?.toFloor ? `<p class="sg-instr-floor-hint">
@@ -2119,6 +2304,7 @@ function updateInstructionCard() {
   // Re-bind buttons
   $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
   $('nav-next')?.addEventListener('click', () => advanceStep(1));
+  $('instr-steps-btn')?.addEventListener('click', openOverview);
   bindInstructionSwipe();
 }
 
