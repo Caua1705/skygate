@@ -190,9 +190,12 @@ button.ds-chip { cursor: pointer; min-height: var(--tap-min); }
 .ds-header--gradient { background: var(--brand-gradient); border-bottom-color: transparent; color: #FFFFFF; }
 .ds-header__brand { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .ds-header__logo  { height: 32px; width: auto; flex: none; }
-/* White treatment for the dark header until a real white SVG lands. */
-.ds-header--dark .ds-header__logo,
-.ds-header--gradient .ds-header__logo { filter: brightness(0) invert(1); }
+
+/* Wordmark mode: the logo replaces the text title, so it stacks above the
+   subtitle and is sized to read as the brand rather than as an icon. The
+   art is already trimmed and transparent — height only, never padding. */
+.ds-header__brand--wordmark { flex-direction: column; align-items: flex-start; gap: var(--space-1); }
+.ds-header__logo--wordmark  { height: 40px; }
 .ds-header__title { font-family: var(--font-display); font-size: var(--text-lg);
   font-weight: var(--weight-extra); line-height: var(--leading-tight);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

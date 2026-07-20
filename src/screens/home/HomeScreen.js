@@ -194,6 +194,7 @@ export function renderPlanning() {
         subtitleIcon: 'solar:map-point-bold',
         onHelp: true,
         helpId: 'help-btn',
+        wordmark: true,   // the real lockup spells "SkyGate" — no text title
         className: 'sg-home__header',
       })}
 

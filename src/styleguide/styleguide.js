@@ -118,10 +118,14 @@ export function renderStyleguide() {
       </p>
     </div>
 
-    ${section('Marca', `A logo abaixo é <code class="sgd-code">assets/logo.png</code>. Não há SVG no repositório: a versão branca é o mesmo PNG com <code class="sgd-code">filter: brightness(0) invert(1)</code>, ou seja, uma silhueta chapada — substituto temporário. Troque em <code class="sgd-code">src/components/ds/Header.js</code> (constante <code class="sgd-code">LOGO_SRC</code>).`, `
+    ${section('Marca', `Dois lockups reais, definidos em <code class="sgd-code">src/components/ds/Header.js</code> (<code class="sgd-code">LOGO_SRC</code> / <code class="sgd-code">LOGO_SRC_WHITE</code>): a versão colorida para superfícies claras e uma <strong>branca de verdade</strong> para fundos escuros — não é mais silhueta filtrada. Para espaços pequenos existem <code class="sgd-code">logo-symbol.png</code> e <code class="sgd-code">logo-symbol-white.png</code>. A arte já vem aparada e transparente: só dimensione, nunca adicione padding.`, `
       ${row(`
-        <div class="sgd-logo-tile"><img src="assets/logo.png" alt="Logo SkyGate" style="height:44px"></div>
-        <div class="sgd-logo-tile sgd-logo-tile--dark"><img src="assets/logo.png" alt="Logo SkyGate em branco" style="height:44px;filter:brightness(0) invert(1)"></div>
+        <div class="sgd-logo-tile"><img src="assets/logo-skygate.png" alt="Logo SkyGate" style="height:44px"></div>
+        <div class="sgd-logo-tile sgd-logo-tile--dark"><img src="assets/logo-skygate-white.png" alt="Logo SkyGate em branco" style="height:44px"></div>
+      `)}
+      ${row(`
+        <div class="sgd-logo-tile"><img src="assets/logo-symbol.png" alt="Símbolo SkyGate" style="height:44px"></div>
+        <div class="sgd-logo-tile sgd-logo-tile--dark"><img src="assets/logo-symbol-white.png" alt="Símbolo SkyGate em branco" style="height:44px"></div>
       `)}
       <div class="sgd-grad" style="background:var(--brand-gradient)">--brand-gradient</div>
     `)}
