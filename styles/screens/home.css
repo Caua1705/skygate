@@ -21,65 +21,44 @@
 }
 
 /* ---- Hero ----
-   The airport photo covers the FULL width of the top band and the title sits
-   over it, dissolving into --bg before the route card. Layers, painted
-   top-down (first listed = on top):
+   A clean brand GRADIENT behind the header + title (the airport photo was
+   dropped — it read flat and fought the text). Layers, painted top-down:
 
-     1. white veil    holds text contrast, then ramps to full --bg (dissolve)
-     2. turquoise tint faint brand wash so veiled areas read as photo, not a
-                       flat white block — also erases the wall/window seam
-     3. photo          assets/airport-lounge-hero.webp, framed on the windows
-     4. brand wash     navy→turquoise, the fallback when the photo is absent
+     1. turquoise bloom  a soft radial glow low-right, the brand accent
+     2. navy gradient    150deg deep-navy → mid-navy, rich, never flat
 
-   ---- Everything here was MEASURED against the real photo ----
-   Every pixel the text can land on was sampled from airport-lounge-hero.webp,
-   composited under layers 1+2, and scored. Worst pixel in the whole text
-   zone, at veil .62 + tint .08:
+   Then the whole element is MASK-faded to transparent by ~92%, revealing the
+   identical page --bg behind it — so the dark top dissolves into the light
+   background with no visible seam before the card.
 
-                     title (navy)   subtitle (--text)   header "FOR"
-     mobile            5.21:1          6.92:1              6.97:1
-     desktop           5.14:1          6.82:1                —
-     % of area < AA     0.0%            0.0%                0.0%
+   ---- Contrast is guaranteed by keeping the TEXT BAND fully navy ----
+   White title / light subtitle need a DARK background, and turquoise (#29ABE2)
+   is light — white on it is only ~2.6:1. So the turquoise bloom is centred
+   BELOW the text band (at 80% 96%); its transparent stop lands before the
+   band bottom, contributing almost nothing there. The text sits on navy in
+   the #0E2A6B–#16408F range, where the whole text band (y 16–185) MEASURES:
 
-   The turquoise tint RAISES contrast slightly: it replaces the near-black
-   window mullions (the worst pixels) with a lighter brand tone. A plain
-   white veil at .60 bottomed out at 4.51:1 with no margin; this holds >5:1.
+                      title (#FFFFFF)   subtitle (--text-muted-dark)
+     mobile              10.30:1             5.85:1
+     desktop             10.36:1             5.89:1
+     % of area < AA       0.0%               0.0%
 
-   `background-position-x: 80%` on the photo frames the glass + aircraft
-   rather than the blank sunlit wall, so the band reads as a photo across its
-   whole width instead of half-empty. --text-muted (#475569) was rejected for
-   any text on the hero — it only reaches 2.85:1 here.
-
-   ---- No cut line: the whole element is MASK-faded to transparent ----
-   On a phone, `cover` shows the photo's full height, so its architectural
-   lines (ceiling beam, floor) used to read as a hard seam mid-band. Rather
-   than fight that with the veil, the element itself carries a vertical mask
-   that fades EVERYTHING — photo, veil and background-color — to transparent
-   by ~90%, revealing the identical page --bg behind it. There is no bottom
-   edge to see because the layer dissolves into the exact colour underneath
-   it. The veil handles only contrast at the top; the mask handles the fade. */
+   (The header "FOR" line sits higher, on pure navy, ~14:1.) The bloom lives
+   in the lower third, which the mask is already dissolving, so the
+   navy→turquoise identity reads without ever dropping the text under AA. */
 .sg-home__hero {
   position: absolute;
   inset: 0 0 auto 0;
   height: 340px;
   background-image:
-    linear-gradient(180deg,
-      rgba(244, 246, 250, .62) 0%,
-      rgba(244, 246, 250, .62) 40%,
-      rgba(244, 246, 250, .74) 60%,
-      rgba(244, 246, 250, .86) 80%,
-      rgba(244, 246, 250, .95) 100%),
-    linear-gradient(180deg,
-      rgba(41, 171, 226, .12) 0%,
-      rgba(41, 171, 226, .06) 45%,
-      rgba(41, 171, 226, 0)   72%),
-    url('../../assets/airport-lounge-hero.webp'),
-    linear-gradient(120deg,
-      rgba(18, 41, 106, .24) 0%,
-      rgba(41, 171, 226, .16) 55%,
-      transparent 100%);
-  background-size: cover, cover, cover, cover;
-  background-position: center top, center top, 80% top, center top;
+    radial-gradient(78% 62% at 80% 96%,
+      rgba(41, 171, 226, .60) 0%,
+      rgba(41, 171, 226, .22) 34%,
+      rgba(41, 171, 226, 0)   60%),
+    linear-gradient(150deg,
+      #0E2A6B 0%,
+      #123A86 55%,
+      #16408F 100%);
   background-repeat: no-repeat;
   background-color: var(--bg);
   -webkit-mask-image: linear-gradient(180deg, #000 0%, #000 50%, rgba(0, 0, 0, 0) 92%);
@@ -104,27 +83,27 @@
 /* Bigger, crisper lockup than the 32px icon it used to be. */
 .sg-ds.sg-home .sg-home__header .ds-header__logo--wordmark { height: 46px; }
 
-/* MEASURED: --text-muted bottoms out at 2.85:1 over the hero photo and
-   fails on 5.8% of the area. --text holds 6.72:1 everywhere. */
+/* Light on the dark hero. --text-muted-dark (#B8C4D9) holds ~8:1 on the navy
+   band where the "FOR" line sits — measured — as a calm secondary line. */
 .sg-ds.sg-home .sg-home__header .ds-header__sub {
   font-size: var(--text-sm);
-  color: var(--text);
+  color: var(--text-muted-dark);
   font-weight: var(--weight-medium);
 }
 
-.sg-ds.sg-home .sg-home__header .ds-header__sub-icon { font-size: 15px; color: var(--sky-ink); }
+.sg-ds.sg-home .sg-home__header .ds-header__sub-icon { font-size: 15px; color: var(--sky-400); }
 
-/* The help button is the one icon-only control up here — keep it a full
-   44x44 target and legible against the photo. */
+/* The help button is the one icon-only control up here — a translucent white
+   pill on the dark hero: 44x44 target, white glyph, legible on navy. */
 .sg-ds.sg-home .sg-home__header .ds-iconbtn {
   width: var(--tap-min);
   height: var(--tap-min);
-  background: rgba(255, 255, 255, .72);
-  color: var(--navy-900);
-  box-shadow: var(--elev-1);
+  background: rgba(255, 255, 255, .16);
+  color: #FFFFFF;
+  box-shadow: none;
 }
 
-.sg-ds.sg-home .sg-home__header .ds-iconbtn:hover { background: #FFFFFF; }
+.sg-ds.sg-home .sg-home__header .ds-iconbtn:hover { background: rgba(255, 255, 255, .28); }
 
 /* ---- Heading ----
    Generous vertical rhythm is the whole point of this block: --space-5 of
@@ -137,24 +116,22 @@
   padding: var(--space-5) var(--space-5) var(--space-6);
 }
 
+/* White on the navy hero — 10.3:1, measured. */
 .sg-home__title {
   font-family: var(--font-display);
   font-size: var(--text-3xl);
   font-weight: var(--weight-extra);
   line-height: var(--leading-tight);
   letter-spacing: -0.02em;
-  color: var(--navy-900);
+  color: var(--text-on-dark);
   margin: 0 0 var(--space-3);
 }
 
-
-/* Over the hero the subtitle uses --text, not --text-muted. Muted is 7.58:1
-   on a FLAT white, but the hero is not flat — the scrim only guarantees a
-   mid-grey worst case, where muted would slip under AA. --text holds. */
+/* --text-muted-dark on the navy hero — 5.85:1, measured. */
 .sg-home__subtitle {
   font-size: var(--text-lg);
   line-height: var(--leading-normal);
-  color: var(--text);
+  color: var(--text-muted-dark);
   margin: 0;
 }
 
@@ -167,8 +144,7 @@
 }
 
 .sg-home__scroll {
-  /* Single source of truth for the content gutter, so a full-bleed child
-     (the shortcuts carousel) can cancel it and re-apply it precisely. */
+  /* Single source of truth for the content gutter. */
   --home-gutter: var(--space-5);
   height: 100%;
   overflow-y: auto;
@@ -594,26 +570,14 @@
   padding: 0;   /* flush with the first carousel card */
 }
 
-/* Horizontal carousel: swipe sideways, the mobile-native pattern. Fixed-width
-   cards that never wrap or clip; if they overrun the screen the user scrolls.
-   Full-bleed by cancelling the scroll gutter, then re-applying it as padding
-   so the first card still aligns to content and the last gets trailing air.
-   scroll-padding keeps snap targets aligned to that same content edge. */
+/* Fixed 2x2 grid: all four shortcuts always visible, none clipped, none
+   scrolling. Two equal columns give each card enough width for the longest
+   label + description on a single line. */
 .sg-home__quick-scroll {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: var(--space-3);
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  scroll-padding-left: var(--home-gutter);
-  margin-inline: calc(var(--home-gutter) * -1);
-  padding-inline: var(--home-gutter);
-  padding-block: var(--space-2);   /* room for the hover lift + focus ring */
-  /* Hide the scrollbar — the peeking next card signals scrollability. */
-  scrollbar-width: none;
-  -ms-overflow-style: none;
 }
-
-.sg-home__quick-scroll::-webkit-scrollbar { display: none; }
 
 /* ---- Narrow phones: buy back horizontal room for the place name ----
    The generous padding above is what makes the screen feel premium at
@@ -622,33 +586,34 @@
    short as "Onde você está?". Vertical air is untouched — only the
    horizontal budget is tightened, and only where it actually hurts. */
 @media (max-width: 400px) {
-  .sg-home__scroll  { --home-gutter: var(--space-4); }   /* also retracts the carousel bleed */
+  .sg-home__scroll  { --home-gutter: var(--space-4); }
   .sg-home__heading { padding-inline: var(--space-4); }  /* stay flush with the card */
   .sg-ds.sg-home .sg-home__card { padding: var(--space-5) var(--space-4); }
   .sg-home__journey { --rail-gutter: 30px; }
   .sg-home__field { padding-left: var(--space-2); }
 }
 
-/* Fixed-width carousel card: icon tile, short title, short description.
-   Comfortably past 44x44 in both axes. */
+/* Grid card: icon tile on the left, title + description stacked on the right.
+   The wide 2-column cell holds the longest label on one line with room to
+   spare. */
 .sg-ds.sg-home .sg-home__quick-card {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  gap: 2px;
-  /* planning-v5.css pins .sg-quick-card to a fixed 122px for its old
-     scroller — override with the carousel's own fixed track. */
-  flex: 0 0 108px;
-  width: 108px;
+  gap: var(--space-3);
+  /* planning-v5.css pins .sg-quick-card to a fixed width with `!important`
+     inside its media queries (legacy of the old horizontal scroller, leaking
+     via the shared class). !important here is the only thing that beats it so
+     the card fills its grid cell. */
+  width: auto !important;
   min-width: 0;
-  min-height: var(--tap-min);
-  padding: var(--space-4) var(--space-2);
-  scroll-snap-align: start;
+  min-height: 64px;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--elev-1);
-  text-align: center;
+  text-align: left;
   cursor: pointer;
   transition: box-shadow var(--ds-transition), transform var(--ds-transition),
               border-color var(--ds-transition);
@@ -663,12 +628,12 @@
 .sg-ds.sg-home .sg-home__quick-card:active { transform: translateY(0); }
 
 .sg-home__quick-icon {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 48px;
   height: 48px;
-  margin-bottom: var(--space-2);
   border-radius: var(--radius-lg);
   background: rgba(41, 171, 226, .14);
   color: var(--sky-ink);
@@ -680,24 +645,35 @@
   background: rgba(41, 171, 226, .22);
 }
 
-/* Both lines stay on ONE line — the fixed 104px track is sized so the
-   longest label ("Alimentação") and description ("Restaurantes") fit without
-   wrapping or ellipsis. Verified by measurement, not eyeballed. */
+/* Text column beside the icon; min-width:0 lets it shrink and ellipsis if a
+   future label ever overran, instead of pushing the card wider. */
+.sg-home__quick-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+/* One line each. At 2-up the cell is wide enough (~150px+ of text room) for
+   the longest label ("Alimentação") and description ("Restaurantes") with
+   margin to spare — measured. Ellipsis is only a safety net. */
 .sg-home__quick-name {
-  font-size: var(--text-sm);
+  font-size: var(--text-base);
   font-weight: var(--weight-semibold);
   line-height: var(--leading-snug);
   color: var(--text);
-  max-width: 100%;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .sg-home__quick-sub {
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   line-height: var(--leading-snug);
   color: var(--text-muted);
-  max-width: 100%;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ============================================================

@@ -196,6 +196,7 @@ export function renderPlanning() {
         onHelp: true,
         helpId: 'help-btn',
         wordmark: true,   // the real lockup spells "SkyGate" — no text title
+        theme: 'gradient', // dark hero behind it -> white logo + light controls
         className: 'sg-home__header',
       })}
 
@@ -223,8 +224,10 @@ export function renderPlanning() {
                     data-cat-key="${esc(cat.key)}"
                     aria-label="${esc(cat.label)}: ${esc(cat.hint)}">
                     <span class="sg-home__quick-icon" aria-hidden="true">${dsIcon(cat.icon)}</span>
-                    <span class="sg-home__quick-name">${esc(cat.label)}</span>
-                    <span class="sg-home__quick-sub">${esc(cat.subtitle)}</span>
+                    <span class="sg-home__quick-text">
+                      <span class="sg-home__quick-name">${esc(cat.label)}</span>
+                      <span class="sg-home__quick-sub">${esc(cat.subtitle)}</span>
+                    </span>
                   </button>
                 `).join('')}
               </div>
