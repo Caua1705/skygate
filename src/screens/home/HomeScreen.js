@@ -182,10 +182,11 @@ export function renderPlanning() {
   return `
     <div class="sg-ds sg-home" id="planning-root">
 
-      <!-- HERO: purely decorative photo + brand wash behind the header and
-           title. home.css already points at assets/airport-lounge-hero.webp —
-           until that file exists the photo layer simply fails to load and the
-           brand gradient shows alone, which is a designed state, not a bug. -->
+      <!-- HERO: purely decorative airport photo + brand overlay behind the
+           header and title. The photo, framing and measured contrast live in
+           styles/screens/home.css (.sg-home__hero). If the image is ever
+           missing, the photo layer just fails to load and the brand gradient
+           carries the band — a designed fallback, not a bug. -->
       <div class="sg-home__hero" aria-hidden="true" role="presentation"></div>
 
       ${Header({
