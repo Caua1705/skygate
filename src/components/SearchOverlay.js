@@ -23,7 +23,7 @@ export function renderSearchOverlay() {
   // Announce result count for screen readers
   const totalResults = Array.from(grouped.values()).reduce((a, b) => a + b.length, 0);
 
-  return `<div class="sg-search-overlay" id="search-overlay" role="dialog" aria-modal="true" aria-labelledby="search-title">
+  return `<div class="sg-ds sg-search-overlay" id="search-overlay" role="dialog" aria-modal="true" aria-labelledby="search-title">
     <button type="button" class="sg-search-backdrop" id="search-backdrop" tabindex="-1" aria-label="Fechar busca"></button>
     <div class="sg-search-sheet">
       <div class="sg-search-handle" aria-hidden="true"></div>
@@ -82,18 +82,20 @@ export function renderSearchResults(grouped, kind) {
         return `<div class="sg-search-row">
           <button type="button" class="sg-search-item" data-kind="${kind}" data-code="${esc(n.code)}"
             role="option"
-            aria-label="${esc(pubLabel)} — ${esc(pubSub)}${accessible ? ' — Acessibilidade' : ''}"
+            aria-label="${esc(pubLabel)} — ${esc(pubSub)}${accessible ? ' — Acessível' : ''}"
             aria-selected="false">
-            <span class="sg-search-item__icon" style="color:${meta.color};background:${meta.color}1f" aria-hidden="true">
+            <span class="sg-search-item__icon" aria-hidden="true">
               <iconify-icon icon="${meta.icon}"></iconify-icon>
             </span>
             <span class="sg-search-item__body">
               <span class="sg-search-item__name">${esc(pubLabel)}</span>
-              <span class="sg-search-item__meta">${esc(pubSub)}</span>
+              <span class="sg-search-item__meta">
+                <span class="sg-search-item__floor">${esc(pubSub)}</span>
+                ${accessible ? `<span class="sg-search-item__access">
+                  <iconify-icon icon="solar:accessibility-bold" aria-hidden="true"></iconify-icon>Acessível
+                </span>` : ''}
+              </span>
             </span>
-            ${accessible ? `<span class="sg-search-item__arrow" aria-label="Acessibilidade">
-              <iconify-icon icon="solar:accessibility-bold" style="font-size:13px;color:var(--sg-teal-600)"></iconify-icon>
-            </span>` : `<iconify-icon icon="solar:alt-arrow-right-linear" class="sg-search-item__arrow" aria-hidden="true"></iconify-icon>`}
           </button>
           <button type="button" class="sg-search-item__info" data-code="${esc(n.code)}"
             aria-label="Ver detalhes de ${esc(pubLabel)}">

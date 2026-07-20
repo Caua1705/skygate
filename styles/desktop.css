@@ -35,7 +35,7 @@
   /* Overlay overlays: centered */
   .sg-search-overlay { justify-content: center; align-items: center; }
   .sg-search-sheet {
-    border-radius: var(--sg-radius-card);
+    border-radius: var(--radius-2xl);
     width: min(600px, calc(100vw - 32px)); max-height: 80dvh;
   }
   .sg-search-handle { display: none; }
