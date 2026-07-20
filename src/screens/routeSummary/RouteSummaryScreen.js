@@ -4,6 +4,98 @@ import { renderPlanning } from '../home/HomeScreen.js';
 import { findNode, getFloorLabel, getModeLabel } from '../../state/selectors.js';
 import { getNodeMeta } from '../../app/constants.js';
 import { esc, fmtMin } from '../../utils/format.js';
+import { Button, Chip, Metric, MetricGroup, dsIcon } from '../../components/ds/index.js';
+
+/* ============================================================
+   MINI-MAP — a simplified, schematic drawing of the route.
+   ------------------------------------------------------------
+   We do NOT render the raw floor SVG here (too noisy at this size).
+   Instead we take the ACTUAL route path node coordinates, normalise
+   them into a small viewBox and draw one smooth turquoise line with a
+   soft glow, a hollow origin dot and a filled destination dot.
+
+   It degrades safely: if the path has fewer than two usable points
+   (missing coordinates, single-node route) it falls back to an elegant
+   schematic curve so the card never looks broken.
+
+   TODO(map phase): when the real interactive map lands, this card can
+   swap its SVG for a cropped live map view. The card is already the
+   "open full map" trigger (id=view-map-btn), so only the inner drawing
+   needs replacing — the interaction stays.
+   ============================================================ */
+const MAP_W = 320, MAP_H = 168, MAP_PAD = 26;
+
+function routePoints(route) {
+  const pts = (route.path ?? [])
+    .map(code => findNode(code))
+    .filter(n => n && Number.isFinite(n.x) && Number.isFinite(n.y))
+    .map(n => ({ x: n.x, y: n.y }));
+  // Drop consecutive duplicates so the smoothing has real segments.
+  return pts.filter((p, i) => i === 0 || p.x !== pts[i - 1].x || p.y !== pts[i - 1].y);
+}
+
+/** Scale raw points into the viewBox, preserving aspect where possible. */
+function fitPoints(pts) {
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const spanX = maxX - minX || 1, spanY = maxY - minY || 1;
+  const iw = MAP_W - 2 * MAP_PAD, ih = MAP_H - 2 * MAP_PAD;
+  const s = Math.min(iw / spanX, ih / spanY);           // uniform scale, keep shape
+  const ox = (MAP_W - spanX * s) / 2, oy = (MAP_H - spanY * s) / 2;
+  return pts.map(p => ({ x: ox + (p.x - minX) * s, y: oy + (p.y - minY) * s }));
+}
+
+/** Smooth path through points using quadratic segments between midpoints. */
+function smoothD(pts) {
+  if (pts.length < 2) return '';
+  let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mx = (pts[i].x + pts[i + 1].x) / 2, my = (pts[i].y + pts[i + 1].y) / 2;
+    d += ` Q ${pts[i].x.toFixed(1)} ${pts[i].y.toFixed(1)} ${mx.toFixed(1)} ${my.toFixed(1)}`;
+  }
+  const last = pts[pts.length - 1];
+  return `${d} L ${last.x.toFixed(1)} ${last.y.toFixed(1)}`;
+}
+
+/** Elegant fallback when real coordinates are unavailable. */
+function fallbackPoints() {
+  return [
+    { x: MAP_PAD, y: MAP_H - MAP_PAD },
+    { x: MAP_W * 0.34, y: MAP_H * 0.44 },
+    { x: MAP_W * 0.62, y: MAP_H * 0.64 },
+    { x: MAP_W - MAP_PAD, y: MAP_PAD },
+  ];
+}
+
+function miniMapSvg(route) {
+  const raw = routePoints(route);
+  const usingReal = raw.length >= 2;
+  const pts = usingReal ? fitPoints(raw) : fallbackPoints();
+  const d = smoothD(pts);
+  const a = pts[0], b = pts[pts.length - 1];
+  return `<svg class="sg-rs-map__svg" viewBox="0 0 ${MAP_W} ${MAP_H}" preserveAspectRatio="xMidYMid meet"
+      role="img" aria-label="Prévia esquemática da rota${usingReal ? '' : ' (ilustrativa)'}" focusable="false">
+    <defs>
+      <pattern id="rsGrid" width="20" height="20" patternUnits="userSpaceOnUse">
+        <circle cx="1" cy="1" r="1" fill="var(--sky-ink)" opacity=".08"></circle>
+      </pattern>
+      <filter id="rsGlow" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur stdDeviation="3.5" result="b"></feGaussianBlur>
+        <feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge>
+      </filter>
+    </defs>
+    <rect x="0" y="0" width="${MAP_W}" height="${MAP_H}" fill="url(#rsGrid)"></rect>
+    <path d="${d}" fill="none" stroke="var(--sky-500)" stroke-width="9" stroke-linecap="round"
+      stroke-linejoin="round" opacity=".22"></path>
+    <path d="${d}" fill="none" stroke="var(--sky-500)" stroke-width="3.5" stroke-linecap="round"
+      stroke-linejoin="round" filter="url(#rsGlow)"></path>
+    <circle cx="${a.x.toFixed(1)}" cy="${a.y.toFixed(1)}" r="7" fill="var(--surface)"
+      stroke="var(--sky-ink)" stroke-width="3.5"></circle>
+    <circle cx="${b.x.toFixed(1)}" cy="${b.y.toFixed(1)}" r="7" fill="var(--sky-ink)"
+      stroke="var(--surface)" stroke-width="2.5"></circle>
+  </svg>`;
+}
 
 export function renderSummary() {
   const route = navState.route;
@@ -13,108 +105,108 @@ export function renderSummary() {
   const origin  = findNode(planState.originCode);
   const fids    = [...navState.routeFloorIds];
   const steps   = navState.semanticSteps;
-  const transitions = (route.segments ?? []).filter(s => s.type === 'transition').length;
   const destMeta = getNodeMeta(dest?.type ?? 'service');
 
+  const originName = origin ? getPublicNodeLabel(origin) : 'Origem';
+  const destName   = dest ? getPublicNodeLabel(dest) : 'Destino';
+  const destFloor  = getPublicNodeSubtitle(dest) || getFloorLabel(dest?.floorId ?? '');
+  const isAccessible = planState.routeMode === 'accessible';
+
   return `
-    <div class="sg-summary-screen">
-      <header class="sg-planning-header" role="banner">
-        <button type="button" class="sg-icon-btn" id="back-to-planning-btn" aria-label="Voltar ao planejamento">
-          <iconify-icon icon="solar:arrow-left-bold" aria-hidden="true"></iconify-icon>
+    <div class="sg-ds sg-rs" id="summary-root">
+
+      <!-- 1. HEADER (light) -->
+      <header class="sg-rs__header" role="banner">
+        <button type="button" class="sg-rs__back" id="back-to-planning-btn" aria-label="Voltar ao planejamento">
+          ${dsIcon('solar:arrow-left-linear')}
         </button>
-        <div class="sg-planning-brand" style="flex:1">
-          <span class="sg-planning-name">Rota calculada</span>
-          <span class="sg-planning-loc" style="color:var(--teal-600)">
-            ${esc(origin ? getPublicNodeLabel(origin) : 'Origem')} → ${esc(dest ? getPublicNodeLabel(dest) : 'Destino')}
+        <div class="sg-rs__headtext">
+          <span class="sg-rs__eyebrow">Rota calculada</span>
+          <span class="sg-rs__route" title="${esc(originName)} → ${esc(destName)}">
+            <span class="sg-rs__route-o">${esc(originName)}</span>
+            ${dsIcon('solar:arrow-right-linear', 'sg-rs__route-arrow')}
+            <span class="sg-rs__route-d">${esc(destName)}</span>
           </span>
         </div>
       </header>
 
-      <main class="sg-summary-body">
-        <!-- Destination hero -->
-        <div class="sg-summary-hero">
-          <div class="sg-summary-dest-icon" style="background:${destMeta.color}18;color:${destMeta.color}">
-            <iconify-icon icon="${destMeta.icon}" aria-hidden="true"></iconify-icon>
+      <div class="sg-rs__scroll">
+        <!-- 2. DESTINATION CARD -->
+        <div class="ds-card sg-rs__dest">
+          <span class="sg-rs__dest-icon" aria-hidden="true">${dsIcon(destMeta.icon)}</span>
+          <div class="sg-rs__dest-text">
+            <span class="sg-rs__dest-floor">${esc(destFloor)}</span>
+            <h1 class="sg-rs__dest-name">${esc(destName)}</h1>
           </div>
-          <div>
-            <p class="sg-summary-dest-floor">${esc(getPublicNodeSubtitle(dest) || getFloorLabel(dest?.floorId ?? ''))}</p>
-            <h1 class="sg-summary-dest-name">${esc(dest ? getPublicNodeLabel(dest) : 'Destino')}</h1>
-          </div>
-          <span class="sg-mode-pill sg-mode-pill--${planState.routeMode}">
-            <iconify-icon icon="${planState.routeMode === 'accessible' ? 'solar:accessibility-bold' : 'solar:bolt-bold'}" aria-hidden="true"></iconify-icon>
-            ${getModeLabel(planState.routeMode)}
+          ${Chip({
+            label: getModeLabel(planState.routeMode),
+            variant: 'outline',
+            icon: isAccessible ? 'solar:accessibility-bold' : 'solar:bolt-bold',
+            className: 'sg-rs__mode',
+          })}
+        </div>
+
+        <!-- 3. MINI-MAP (tap to open full map) -->
+        <button type="button" class="ds-card sg-rs-map" id="view-map-btn"
+          aria-label="Ver a rota no mapa completo">
+          ${miniMapSvg(route)}
+          <span class="sg-rs-map__hint">
+            ${dsIcon('solar:map-point-wave-bold')}<span>Ver no mapa</span>
           </span>
+        </button>
+
+        <!-- 4. METRICS -->
+        <div class="ds-card sg-rs__metrics">
+          ${MetricGroup([
+            Metric({ icon: 'solar:clock-circle-bold', value: fmtMin(route.estimatedMinutes), unit: 'min', label: 'Tempo estimado' }),
+            Metric({ icon: 'solar:map-arrow-square-bold', value: steps.length, label: steps.length === 1 ? 'Passo' : 'Passos' }),
+            Metric({ icon: 'solar:layers-bold', value: fids.length || 1, label: (fids.length || 1) === 1 ? 'Piso' : 'Pisos' }),
+          ])}
         </div>
 
-        <!-- Stats row -->
-        <div class="sg-summary-stats" role="list">
-          <div class="sg-stat" role="listitem">
-            <span class="sg-stat__value">${fmtMin(route.estimatedMinutes)}<span class="sg-stat__unit">min</span></span>
-            <span class="sg-stat__label">Estimado</span>
-          </div>
-          <div class="sg-stat-div" aria-hidden="true"></div>
-          <div class="sg-stat" role="listitem">
-            <span class="sg-stat__value">${steps.length}</span>
-            <span class="sg-stat__label">${steps.length === 1 ? 'passo' : 'passos'}</span>
-          </div>
-          <div class="sg-stat-div" aria-hidden="true"></div>
-          <div class="sg-stat" role="listitem">
-            <span class="sg-stat__value">${fids.length || 1}</span>
-            <span class="sg-stat__label">${(fids.length || 1) === 1 ? 'piso' : 'pisos'}</span>
-          </div>
-          ${transitions > 0 ? `
-          <div class="sg-stat-div" aria-hidden="true"></div>
-          <div class="sg-stat" role="listitem">
-            <span class="sg-stat__value">${transitions}</span>
-            <span class="sg-stat__label">${transitions === 1 ? 'conexão' : 'conexões'}</span>
-          </div>` : ''}
-        </div>
-
-        <!-- First step preview -->
-        ${steps[0] ? `<div class="sg-summary-preview">
-          <div class="sg-summary-preview__icon">
-            <iconify-icon icon="${steps[0].icon ?? 'solar:arrow-right-bold'}" aria-hidden="true"></iconify-icon>
-          </div>
-          <div>
-            <p class="sg-summary-preview__label">Primeiro passo</p>
-            <p class="sg-summary-preview__text">${esc(steps[0].text)}</p>
+        <!-- 5. FIRST STEP (light, not a competing dark block) -->
+        ${steps[0] ? `<div class="sg-rs__firststep">
+          <span class="sg-rs__firststep-icon" aria-hidden="true">${dsIcon(steps[0].icon ?? 'solar:arrow-right-bold')}</span>
+          <div class="sg-rs__firststep-text">
+            <span class="sg-rs__firststep-label">Primeiro passo</span>
+            <p class="sg-rs__firststep-body">${esc(steps[0].text)}</p>
           </div>
         </div>` : ''}
 
-        <!-- Actions -->
-        <div class="sg-summary-actions">
-          <button type="button" class="sg-btn-primary sg-btn-primary--large" id="start-nav-btn">
-            <iconify-icon icon="solar:play-bold" aria-hidden="true"></iconify-icon>
-            Iniciar navegação
-          </button>
-          <button type="button" class="sg-btn-secondary" id="view-map-btn">
-            <iconify-icon icon="solar:map-bold" aria-hidden="true"></iconify-icon>
-            Ver mapa
-          </button>
-        </div>
-
-        <!-- Route overview preview (semantic only) -->
-        <details class="sg-summary-steps">
-          <summary class="sg-summary-steps__toggle">
-            <iconify-icon icon="solar:list-bold" aria-hidden="true"></iconify-icon>
-            Ver etapas
-            <span class="sg-summary-steps__count">${steps.length}</span>
-            <iconify-icon icon="solar:alt-arrow-down-bold" class="sg-summary-steps__chevron" aria-hidden="true"></iconify-icon>
+        <!-- 6. STEPS accordion (native <details>, styled) -->
+        <details class="sg-rs__steps">
+          <summary class="sg-rs__steps-toggle">
+            ${dsIcon('solar:list-bold', 'sg-rs__steps-lead')}
+            <span>Ver etapas</span>
+            <span class="sg-rs__steps-count">${steps.length}</span>
+            ${dsIcon('solar:alt-arrow-down-linear', 'sg-rs__steps-chevron')}
           </summary>
-          <ol class="sg-summary-steps__list">
-            ${steps.map((s, i) => `<li class="sg-summary-step ${s.isTransition ? 'sg-summary-step--transition' : ''}">
-              <span class="sg-summary-step__num" aria-hidden="true">${i + 1}</span>
-              <span class="sg-summary-step__text">${esc(s.text)}</span>
-              ${s.floorId ? `<span class="sg-summary-step__floor">${esc(getFloorLabel(s.floorId))}</span>` : ''}
+          <ol class="sg-rs__steps-list">
+            ${steps.map((s, i) => `<li class="sg-rs__step${s.isTransition ? ' is-transition' : ''}">
+              <span class="sg-rs__step-num" aria-hidden="true">${i + 1}</span>
+              <span class="sg-rs__step-text">${esc(s.text)}</span>
+              ${s.floorId ? `<span class="sg-rs__step-floor">${esc(getFloorLabel(s.floorId))}</span>` : ''}
             </li>`).join('')}
           </ol>
         </details>
 
-        <button type="button" class="sg-edit-btn" id="edit-route-btn">
-          <iconify-icon icon="solar:pen-bold" aria-hidden="true"></iconify-icon>
-          Alterar rota
+        <!-- 7. Change route (discreet ghost) -->
+        <button type="button" class="sg-rs__edit" id="edit-route-btn">
+          ${dsIcon('solar:pen-2-linear')}<span>Alterar rota</span>
         </button>
-      </main>
+      </div>
+
+      <!-- FIXED FOOTER — the single hero action -->
+      <div class="sg-rs__footer">
+        ${Button({
+          label: 'Iniciar navegação',
+          variant: 'primary',
+          icon: 'solar:play-bold',
+          block: true,
+          id: 'start-nav-btn',
+          className: 'sg-rs__cta',
+        })}
+      </div>
     </div>
   `;
 }
