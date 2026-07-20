@@ -7,6 +7,7 @@ import { getStepIconName, navIcon } from '../../components/Icon.js';
 import { render } from '../../app/router.js';
 import { countFloorChanges, formatMeters } from '../../services/routeSteps.js';
 import { getNodeMeta } from '../../app/constants.js';
+import { Button, Chip, Metric, MetricGroup, StepRail, dsIcon } from '../../components/ds/index.js';
 
 export function renderNavigation() {
   const fid = mapState.selectedFloorId;
@@ -28,22 +29,23 @@ export function renderNavigation() {
           </div>
         </div>
 
-        <!-- Brand block (doubles as "back to route summary") -->
-        <header class="sg-nav-brand" role="banner">
-          <button type="button" class="sg-nav-brand__btn" id="exit-nav-btn" aria-label="Voltar ao resumo da rota">
-            <span class="sg-nav-brand__row">
-              <span class="sg-nav-brand__logo">${navIcon('plane')}</span>
-              <span class="sg-nav-brand__name">SkyGate</span>
+        <!-- Header bar (over the dark map): exit · white lockup · help.
+             A soft scrim behind it guarantees AA on any map content. -->
+        <header class="sg-ds sg-navhdr" role="banner">
+          <button type="button" class="sg-navhdr__btn" id="exit-nav-btn" aria-label="Voltar ao resumo da rota">
+            ${dsIcon('solar:arrow-left-linear')}
+          </button>
+          <div class="sg-navhdr__brand">
+            <img class="sg-navhdr__logo" src="assets/logo-skygate-white.png" alt="SkyGate">
+            <span class="sg-navhdr__loc">
+              ${dsIcon('solar:map-point-bold', 'sg-navhdr__pin')}
+              <span>FOR · Aeroporto de Fortaleza</span>
             </span>
-            <span class="sg-nav-brand__loc">
-              ${navIcon('pin')}
-              <span>FOR • Aeroporto de Fortaleza</span>
-            </span>
+          </div>
+          <button type="button" class="sg-navhdr__btn" id="help-btn" aria-label="Ajuda">
+            ${dsIcon('solar:question-circle-linear')}
           </button>
         </header>
-
-        <!-- Help -->
-        <button type="button" class="sg-nav-help" id="help-btn" aria-label="Ajuda">?</button>
 
         <!-- Right-side floating controls: floors + recenter -->
         <div class="sg-map-fabs" aria-label="Controles do mapa">
@@ -67,7 +69,7 @@ export function renderNavigation() {
 
       <!-- Bottom sheet -->
       <div
-        class="sg-instruction-card"
+        class="sg-ds sg-navsheet sg-instruction-card"
         id="instruction-card"
         role="region"
         aria-label="Instrução de navegação"
@@ -99,79 +101,74 @@ export function renderInstructionCardInner() {
   const nextDist = formatMeters(curStep?.distanceMeters ?? 0);
 
   return `
-    <div class="sg-sheet-handle" aria-hidden="true"></div>
+    <div class="ds-sheet__grip" aria-hidden="true"></div>
 
-    <!-- Step rail -->
-    <div class="sg-step-rail">
-      <span class="sg-step-rail__label">Passo ${stepIdx + 1} de ${total}</span>
-      ${total <= 10 ? `<div class="sg-step-rail__track" aria-hidden="true">
-        ${Array.from({ length: total }, (_, i) => {
-          const state = i < stepIdx ? 'is-done' : i === stepIdx ? 'is-active' : '';
-          const seg = i === 0 ? '' : `<span class="sg-step-rail__seg ${i <= stepIdx ? 'is-done' : ''}"></span>`;
-          return `${seg}<span class="sg-step-rail__dot ${state}"></span>`;
-        }).join('')}
-      </div>` : `<span class="sg-step-rail__counter" aria-hidden="true">${stepIdx + 1}/${total}</span>`}
-    </div>
+    <!-- Step rail (DS): done → turquoise, current → bright --sky-500, future → grey -->
+    ${StepRail({ current: stepIdx + 1, total, className: 'sg-navsheet__rail' })}
 
-    <!-- Headline -->
-    <div class="sg-instr-head">
-      <span class="sg-instr-head__icon">${navIcon(getStepIconName(curStep))}</span>
-      <h2 class="sg-instr-head__title" id="instr-text">${esc(curStep?.text ?? '')}</h2>
+    <!-- Current instruction -->
+    <div class="sg-navsheet__head">
+      <span class="sg-navsheet__head-icon" aria-hidden="true">${navIcon(getStepIconName(curStep))}</span>
+      <h2 class="sg-navsheet__head-title" id="instr-text">${esc(curStep?.text ?? '')}</h2>
     </div>
 
     <!-- Context chips -->
-    <div class="sg-nav-chips">
-      <span class="sg-nav-chip">${navIcon('layers')}${esc(getFloorLabel(fid))}</span>
-      ${accessible
-        ? `<span class="sg-nav-chip sg-nav-chip--teal">${navIcon('wheelchair')}Rota acessível</span>`
-        : `<span class="sg-nav-chip sg-nav-chip--teal">${navIcon('navigate')}Rota mais rápida</span>`}
+    <div class="sg-navsheet__chips">
+      ${Chip({ label: getFloorLabel(fid), variant: 'outline', icon: 'solar:layers-bold' })}
+      ${Chip({
+        label: accessible ? 'Rota acessível' : 'Rota mais rápida',
+        variant: 'outline',
+        icon: accessible ? 'solar:accessibility-bold' : 'solar:bolt-bold',
+      })}
     </div>
-
-    <div class="sg-nav-divider" role="presentation"></div>
 
     <!-- Metrics -->
-    <dl class="sg-metrics">
-      <div class="sg-metric">
-        <div class="sg-metric__top">${navIcon('clock')}<dd class="sg-metric__value">${fmtMin(navState.route?.estimatedMinutes ?? 0)} min</dd></div>
-        <dt class="sg-metric__label">Tempo estimado</dt>
-      </div>
-      <div class="sg-metric">
-        <div class="sg-metric__top">${navIcon('stairs')}<dd class="sg-metric__value">${countFloorChanges()}</dd></div>
-        <dt class="sg-metric__label">Andares</dt>
-      </div>
-      <div class="sg-metric">
-        <div class="sg-metric__top">${navIcon(getStepIconName(nextStep))}<dd class="sg-metric__value">${nextStep && nextDist ? `Em ${esc(nextDist)}` : 'Chegada'}</dd></div>
-        <dt class="sg-metric__label">${esc(nextStep ? stripPeriod(nextStep.text) : 'Você chegou')}</dt>
-      </div>
-    </dl>
-
-    <!-- Actions -->
-    <div class="sg-nav-actions">
-      <button type="button" class="sg-nav-next" id="nav-next"
-        ${isLast ? 'disabled' : ''} aria-disabled="${isLast}"
-        aria-label="${isLast ? 'Chegou ao destino' : 'Próxima instrução'}">
-        ${isLast ? 'Chegou!' : 'Próximo'}${navIcon('chevron', 'sg-ico--sm')}
-      </button>
-      <button type="button" class="sg-nav-steps" id="instr-steps-btn" aria-haspopup="dialog">
-        ${navIcon('list')}Ver etapas
-      </button>
+    <div class="sg-navsheet__metrics">
+      ${MetricGroup([
+        Metric({ icon: 'solar:clock-circle-bold', value: fmtMin(navState.route?.estimatedMinutes ?? 0), unit: 'min', label: 'Tempo estimado' }),
+        Metric({ icon: 'solar:layers-bold', value: countFloorChanges(), label: 'Andares' }),
+        Metric({
+          icon: nextStep ? 'solar:arrow-right-linear' : 'solar:flag-2-bold',
+          value: nextStep && nextDist ? `Em ${nextDist}` : 'Chegada',
+          label: nextStep ? stripPeriod(nextStep.text) : 'Você chegou',
+        }),
+      ])}
     </div>
 
-    <!-- Upcoming steps -->
+    <!-- Actions: Próximo is the hero -->
+    <div class="sg-navsheet__actions">
+      ${Button({
+        label: isLast ? 'Chegou!' : 'Próximo',
+        variant: 'primary',
+        iconRight: 'solar:arrow-right-linear',
+        id: 'nav-next',
+        disabled: isLast,
+        className: 'sg-navsheet__next',
+      })}
+      ${Button({
+        label: 'Ver etapas',
+        variant: 'outline',
+        icon: 'solar:list-bold',
+        id: 'instr-steps-btn',
+        className: 'sg-navsheet__steps',
+      })}
+    </div>
+
+    <!-- Upcoming steps — turquoise timeline, numbered from the next step -->
     ${upcoming.length ? `
-      <h3 class="sg-next-steps__title">Próximas etapas</h3>
-      <ul class="sg-next-steps">
+      <h3 class="sg-navsheet__next-title">Próximas etapas</h3>
+      <ol class="sg-navsheet__next">
         ${upcoming.map((s, i) => {
           const d = formatMeters(s.distanceMeters ?? 0);
-          return `<li class="sg-next-step">
-            <span class="sg-next-step__icon">${navIcon(getStepIconName(s))}</span>
-            <div class="sg-next-step__body">
-              <p class="sg-next-step__text">${esc(stripPeriod(s.text))}</p>
-              ${d ? `<p class="sg-next-step__dist">${esc(d)}</p>` : ''}
+          return `<li class="sg-navsheet__step">
+            <span class="sg-navsheet__step-num" aria-hidden="true">${stepIdx + 2 + i}</span>
+            <div class="sg-navsheet__step-body">
+              <p class="sg-navsheet__step-text">${esc(stripPeriod(s.text))}</p>
+              ${d ? `<p class="sg-navsheet__step-dist">${esc(d)}</p>` : ''}
             </div>
           </li>`;
         }).join('')}
-      </ul>
+      </ol>
     ` : ''}
   `;
 }

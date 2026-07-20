@@ -17,3 +17,5 @@
 @import url('./screens/home.css');
 /* Route summary rebuilt on the DS — own sg-rs* classes, tokens only. */
 @import url('./screens/route-summary.css');
+/* Navigation header + bottom sheet on the DS — own classes, tokens only. */
+@import url('./screens/navigation-sheet.css');
