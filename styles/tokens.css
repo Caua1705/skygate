@@ -113,3 +113,122 @@ a { text-decoration: none; color: inherit; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================================================
+   SKYGATE — OFFICIAL DESIGN SYSTEM (v5)
+   ------------------------------------------------------------
+   SCOPED ON PURPOSE. These tokens live under `.sg-ds`, not `:root`.
+
+   Why: the legacy v4 palette above still styles the live app, and two
+   names collide with different values:
+       --navy-900   v4 #0e2038   vs   DS #0E2A6B
+       --navy-800   v4 #132d4a   vs   DS #12296A
+   Promoting the DS to :root today would silently repaint the app.
+
+   MIGRATION (phase 3): add class="sg-ds" to <body>, migrate the screens,
+   then delete the v4 block above and unscope this one.
+
+   Usage:
+     <body class="sg-ds">            -> light theme (home, summary, lists)
+     <div class="sg-ds-dark">        -> dark theme island (map / navigation)
+   ============================================================ */
+
+.sg-ds {
+  /* ---- Brand ---- */
+  --navy-900: #0E2A6B;   /* primary: solid buttons, headings, dark header */
+  --navy-800: #12296A;
+  --sky-500:  #29ABE2;   /* brand turquoise: routes, active states */
+  --sky-400:  #2DBFE8;
+  --brand-gradient: linear-gradient(135deg, #12296A 0%, #29ABE2 100%);
+
+  /* --sky-ink: accessible companion to --sky-500.
+     #29ABE2 only reaches 2.62:1 against white, so it can NEVER carry white
+     text or be small text on a light surface. --sky-ink is the darkened
+     brand teal used for those cases (5.98:1 both ways). Verified in
+     the contrast audit; see the styleguide "Contraste" panel. */
+  --sky-ink:  #0F6A94;
+
+  /* ---- Neutrals (light) ---- */
+  --bg:         #F4F6FA;
+  --surface:    #FFFFFF;
+  --surface-2:  #FAFBFD;
+  --text:       #0F172A;
+  --text-muted: #475569;   /* 7.58:1 on white — deliberately not a light grey */
+  --border:     #E2E8F0;   /* decorative dividers only (1.23:1) */
+  --border-strong: #6B7A90; /* interactive control borders — meets 3:1 */
+
+  /* ---- Neutrals (dark / map) ---- */
+  --bg-dark:         #0A192F;
+  --surface-dark:    #0F2540;
+  --text-on-dark:    #FFFFFF;
+  --text-muted-dark: #B8C4D9;  /* 10:1 on --bg-dark */
+
+  /* ---- Semantic (all >= 4.5:1 on --surface and --bg) ---- */
+  --success: #15803D;
+  --warning: #B45309;
+  --danger:  #B91C1C;
+  --success-soft: #E7F6EC;
+  --warning-soft: #FDF3E7;
+  --danger-soft:  #FBEAEA;
+
+  /* ---- Typography ---- */
+  --font-display: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-body:    'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --text-xs:   0.75rem;   /* 12px */
+  --text-sm:   0.875rem;  /* 14px */
+  --text-base: 1rem;      /* 16px */
+  --text-lg:   1.125rem;  /* 18px */
+  --text-xl:   1.375rem;  /* 22px */
+  --text-2xl:  1.75rem;   /* 28px */
+  --text-3xl:  2.25rem;   /* 36px */
+
+  --leading-tight:  1.15;
+  --leading-snug:   1.3;
+  --leading-normal: 1.5;
+  --leading-relaxed:1.65;
+
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+  --weight-extra:    800;
+
+  /* ---- Spacing (4px base) ---- */
+  --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
+  --space-5: 24px;  --space-6: 32px;  --space-7: 48px;  --space-8: 64px;
+
+  /* ---- Radius ---- */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;   /* cards */
+  --radius-2xl: 28px;  /* bottom sheet */
+  --radius-pill: 999px;
+
+  /* ---- Elevation ---- */
+  --elev-1: 0 1px 2px rgba(15, 23, 42, .06), 0 1px 3px rgba(15, 23, 42, .08);
+  --elev-2: 0 4px 12px rgba(15, 23, 42, .08), 0 2px 4px rgba(15, 23, 42, .04);
+  --elev-3: 0 12px 32px rgba(15, 23, 42, .12), 0 4px 8px rgba(15, 23, 42, .06);
+
+  /* ---- Interaction ---- */
+  --focus-ring: 0 0 0 3px #FFFFFF, 0 0 0 5px var(--sky-ink);
+  --tap-min: 44px;    /* minimum touch target */
+  --ds-transition: 160ms cubic-bezier(.4, 0, .2, 1);
+}
+
+/* Dark island: same token NAMES remap to the dark scale, so any DS
+   component dropped inside simply inherits the dark theme. */
+.sg-ds-dark {
+  --bg:         var(--bg-dark);
+  --surface:    var(--surface-dark);
+  --surface-2:  #143053;
+  --text:       var(--text-on-dark);
+  --text-muted: var(--text-muted-dark);
+  --border:     #1E3A5F;
+  --border-strong: #8FA3BF;
+  --sky-ink:    var(--sky-400);   /* on navy, the bright teal is the readable one */
+  --focus-ring: 0 0 0 3px var(--bg-dark), 0 0 0 5px var(--sky-400);
+  color: var(--text);
+  background: var(--bg);
+}
