@@ -370,9 +370,13 @@
   border-radius: var(--radius-md); padding: 0 var(--space-4); flex-shrink: 0;
   transition: border-color var(--ds-transition), box-shadow var(--ds-transition), background var(--ds-transition);
 }
+/* ONE focus ring, drawn by the wrapper only. The border turns turquoise and
+   a soft same-hue halo hugs it — a single cohesive ring, not the two-layer
+   --focus-ring (which has a white gap and, stacked with the input's own
+   ring below, produced the doubled outline). */
 .sg-search-input-wrap:focus-within {
   border-color: var(--sky-ink);
-  box-shadow: var(--focus-ring);
+  box-shadow: 0 0 0 3px rgba(15, 106, 148, .18);
   background: var(--surface);
 }
 .sg-search-input-wrap > iconify-icon { font-size: 19px; color: var(--text-muted); flex-shrink: 0; }
@@ -382,6 +386,9 @@
   font-size: var(--text-base); font-weight: var(--weight-medium); color: var(--text);
 }
 .sg-search-input::placeholder { color: var(--text-muted); }
+/* The wrapper's :focus-within IS the focus indicator, so the input must not
+   also draw the global `.sg-ds :focus-visible` ring — that was the 2nd ring. */
+.sg-search-overlay .sg-search-input:focus-visible { outline: none; box-shadow: none; }
 
 /* ---- Category chips (horizontal scroll, hidden bar, next peeks in) ---- */
 .sg-quick-chips {
