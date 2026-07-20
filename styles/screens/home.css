@@ -11,6 +11,18 @@
    legacy width:122px!important that class still carries in planning-v5.css.
    ============================================================ */
 
+/* The Home is a SINGLE bounded scroller, not a fixed box with a nested one.
+   - height: 100dvh bounds it to the dynamic viewport (respects mobile
+     browser bars), so when the content fits there is nothing to scroll and
+     no elastic bounce.
+   - overflow-y: auto means the content is NEVER trapped: the moment it grows
+     past the viewport (origin+destination chips, a short screen, a large
+     font) this same element scrolls and every shortcut + the CTA stay
+     reachable. This replaces the old nested `.sg-home__scroll`, whose
+     `height:100%` could collapse under `100dvh` on mobile Safari and let the
+     outer `overflow:hidden` clip the grown card.
+   - overscroll-behavior: none kills the rubber-band that revealed the page
+     behind the screen. */
 .sg-ds.sg-home {
   position: relative;
   display: flex;
@@ -19,7 +31,10 @@
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ---- Header ----
@@ -87,24 +102,22 @@
   margin: 0;
 }
 
-/* ---- Scroll region ---- */
+/* ---- Content region ----
+   No longer an independent scroller — .sg-home is the single scroller now.
+   `flex: 1 0 auto` lets this grow to fill the viewport when the content is
+   short (so the shortcuts sit at a natural height, not floating mid-screen),
+   while `flex-shrink: 0` stops it from being squeezed when the card grows —
+   instead the whole page scrolls. */
 .sg-home__main {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1 0 auto;
 }
 
 .sg-home__scroll {
   /* Single source of truth for the content gutter. */
   --home-gutter: var(--space-5);
-  height: 100%;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
   /* --space-8 of tail, PLUS the home-bar inset on phones that have one, so
      the last shortcut never sits flush against the bottom edge. */
   padding: 0 var(--home-gutter) calc(var(--space-8) + env(safe-area-inset-bottom, 0px));
-  /* iOS momentum scrolling can clip the final row without this. */
-  scroll-padding-bottom: var(--space-8);
-  overscroll-behavior: contain;
 }
 
 /* ============================================================
