@@ -4,7 +4,7 @@ import { handleCalculate } from './routeController.js';
 import { init } from './bootstrap.js';
 import { app, navState, uiState } from '../state/appState.js';
 import { render, updateSearchChips_, updateSearchResults_ } from './router.js';
-import { fitStepToView } from '../map/mapFit.js';
+import { autoFitRoute } from '../map/mapFit.js';
 import { zoomAt } from '../map/mapPanZoom.js';
 import { renderFloorControl } from '../screens/navigation/NavigationScreen.js';
 import { switchFloor } from '../map/floorSwitch.js';
@@ -56,7 +56,7 @@ export function bindEvents() {
   $('exit-nav-btn')?.addEventListener('click', exitNavigation);
   $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
   $('nav-next')?.addEventListener('click', () => advanceStep(1));
-  $('fit-segment-btn')?.addEventListener('click', () => fitStepToView(navState.activeStepIndex));
+  $('fit-segment-btn')?.addEventListener('click', () => autoFitRoute());
   $('zoom-in-btn')?.addEventListener('click', () => zoomAt(0.4));
   $('zoom-out-btn')?.addEventListener('click', () => zoomAt(-0.4));
   $('overview-btn')?.addEventListener('click', openOverview);

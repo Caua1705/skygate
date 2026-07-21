@@ -5,7 +5,7 @@ import { render, updateRouteOverlay } from './router.js';
 import { findNode } from '../state/selectors.js';
 import { renderInstructionCardInner, renderOverlayOverview } from '../screens/navigation/NavigationScreen.js';
 import { switchFloor } from '../map/floorSwitch.js';
-import { fitFullRoute, fitStepToView } from '../map/mapFit.js';
+import { autoFitRoute, fitStepToView } from '../map/mapFit.js';
 import { prefersReducedMotion , $ } from '../utils/dom.js';
 import { hasPlaceDetails } from '../components/PlaceDetailSheet.js';
 import { formatMeters, pathMeters, segmentMeters } from '../services/routeSteps.js';
@@ -306,7 +306,7 @@ export function returnToCurrentStep() {
   mapState.manualFloor = false;
   const rb = $('return-btn');
   if (rb) rb.classList.add('is-hidden');
-  requestAnimationFrame(() => fitStepToView(navState.activeStepIndex));
+  requestAnimationFrame(() => autoFitRoute());
 }
 
 export function startNavigation() {
@@ -321,17 +321,18 @@ export function startNavigation() {
 
   render();
 
-  // After render: animate the route in and frame the whole journey, so the
-  // "you are here → destination" overview matches the reference screen.
+  // After render: animate the route in and frame the CURRENT LEG close up.
+  // The old whole-route overview left the route as a small squiggle in a
+  // large dark field on a phone; autoFitRoute zooms to the leg being walked.
   if (!prefersReducedMotion()) {
     requestAnimationFrame(() => {
       // Class renamed with the map restyle: .sg-route-active → the active leg
       const routeEl = document.querySelector('.sg-route__line.is-active');
       if (routeEl) { routeEl.classList.add('sg-route-draw'); }
-      setTimeout(fitFullRoute, 100);
+      setTimeout(() => autoFitRoute(), 100);
     });
   } else {
-    requestAnimationFrame(fitFullRoute);
+    requestAnimationFrame(() => autoFitRoute(0));
   }
   bindInstructionSwipe();
 }
@@ -370,9 +371,9 @@ export function advanceStep(delta) {
   // Update only changed parts (no full re-render)
   updateInstructionCard();
   updateRouteOverlay();
-  requestAnimationFrame(() => {
-    if (!prefersReducedMotion()) fitStepToView(next);
-  });
+  // Always re-frame; fitStepToView itself drops the animation to 0ms under
+  // prefers-reduced-motion, so skipping it entirely just left the map behind.
+  requestAnimationFrame(() => fitStepToView(next));
   announceStep(next, step);
 }
 

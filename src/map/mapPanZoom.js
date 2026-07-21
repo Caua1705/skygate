@@ -14,7 +14,11 @@ export function applyMapTransform(duration = 0) {
   const { x, y, scale } = getFloorTransform(mapState.selectedFloorId);
   const inner = wrapper.querySelector('.sg-map-inner');
   if (inner) {
-    inner.style.transition = duration > 0 ? `transform ${duration}ms ease` : 'none';
+    // Decelerating curve, not `ease`: re-framing between steps should glide
+    // to a stop rather than snap.
+    inner.style.transition = duration > 0
+      ? `transform ${duration}ms cubic-bezier(.22, .61, .36, 1)`
+      : 'none';
     inner.style.transform = `translate(${x}px,${y}px) scale(${scale})`;
     // POI markers counter-scale off this so they keep a constant on-screen
     // size: at scale 6 a 32px tap target would otherwise become ~190px and

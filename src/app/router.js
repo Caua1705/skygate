@@ -8,6 +8,7 @@ import { renderSummary } from '../screens/routeSummary/RouteSummaryScreen.js';
 import { renderFloorControl, renderNavigation } from '../screens/navigation/NavigationScreen.js';
 import { bindEvents, bindFloorControlEvents, bindMapPoiEvents, bindSearchItemEvents } from './events.js';
 import { applyMapTransform, bindMapPan } from '../map/mapPanZoom.js';
+import { autoFitRoute } from '../map/mapFit.js';
 import { buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../map/floorMapBuilder.js';
 import { getFloorLabel } from '../state/selectors.js';
 import { filterNodes, groupByCategory } from '../services/nodeSearch.js';
@@ -59,6 +60,9 @@ export function updateMapForFloor(floorId) {
     routeEl.innerHTML = buildRouteOverlaySvg(floorId);
     updatePoiLayer();
     applyMapTransform(0);
+    // Re-frame on the new floor: the stored per-floor transform is usually
+    // a stale frame from a different leg, which lands the user on empty plan.
+    if (navState.route) autoFitRoute(260);
     // Brief floor label flash
     const ann = $('floor-announce');
     if (ann) {

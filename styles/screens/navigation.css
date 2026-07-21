@@ -64,8 +64,15 @@
   display: flex; align-items: center; justify-content: center;
 }
 
+/* flex-shrink:0 is load-bearing. .sg-map-wrapper is a flex container, so on
+   any viewport narrower than 900px this box was being SHRUNK to the
+   container width — the SVG then letterboxed its 900-unit viewBox into
+   ~400px, scaling the whole map down by another ~0.44 on a phone. Every
+   fit calculation assumes 1 map unit == 1px here, so that silent shrink is
+   what made the map open "zoomed way out" on mobile and nowhere else. */
 .sg-map-inner {
   position: relative;
+  flex: 0 0 auto;
   width: 900px; height: 600px;
   transform-origin: center center;
   will-change: transform;
