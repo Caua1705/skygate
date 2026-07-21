@@ -58,9 +58,11 @@ export function fitFullRoute() {
   const bounds = getFloorBounds(fid);
   const pts = nodes.map(n => nodeToSvg(n, bounds));
   const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
-  // Asymmetric padding: pins rise above their anchor and captions sit beside
-  // it, so the raw node bounds are not what actually has to fit on screen.
-  const padL = 150, padR = 190, padT = 80, padB = 70;
+  // Padding for the pins (which rise ~34 above their anchor) and captions.
+  // It used to reserve 150/190 horizontally for captions placed blind; they
+  // now go through layoutLabels, which clamps them inside the viewBox, so
+  // that much slack only zoomed the plan out until nothing was readable.
+  const padL = 70, padR = 80, padT = 60, padB = 50;
   const bX1 = Math.min(...xs) - padL, bX2 = Math.max(...xs) + padR;
   const bY1 = Math.min(...ys) - padT, bY2 = Math.max(...ys) + padB;
 

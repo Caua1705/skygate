@@ -77,13 +77,59 @@
 
 /* ============================================================
    BOTTOM SHEET (light) — .sg-instruction-card keeps its position
-   from overlays.css; here we only repaint the contents.
+   from overlays.css; here we own its internal layout and paint.
    ============================================================ */
-.sg-ds.sg-navsheet { background: var(--surface); color: var(--text); }
+
+/* THREE BANDS, one scroller.
+   overlays.css makes the whole card a single `overflow-y:auto` box. On a
+   phone the sheet is ~340px tall against ~600px of content, so scrolling
+   dragged the step counter and the instruction off the top while the last
+   rows of "Próximas etapas" sat past the bottom edge. The card is now a
+   flex column that does NOT scroll itself:
+     __pinned  step counter + current instruction — always on screen
+     __scroll  chips, metrics, upcoming steps — the only scrolling part
+     __foot    Próximo / Ver etapas — never scrolls out of reach
+   Horizontal padding moves to the bands so the scrollbar hugs the edge. */
+.sg-ds.sg-navsheet {
+  background: var(--surface);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: none;
+  padding: var(--space-3) 0 0;
+}
+
+.sg-navsheet__pinned {
+  flex: 0 0 auto;
+  padding: 0 var(--nav-sheet-pad);
+}
+
+.sg-navsheet__scroll {
+  flex: 1 1 auto;
+  min-height: 0;              /* lets the band shrink instead of overflowing */
+  overflow-y: auto;
+  overscroll-behavior: none;  /* no rubber-band onto the map behind */
+  -webkit-overflow-scrolling: touch;
+  padding: 0 var(--nav-sheet-pad) var(--space-2);
+  scrollbar-width: none;
+}
+.sg-navsheet__scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+.sg-navsheet__foot {
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--nav-sheet-pad)
+           max(var(--space-4), env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+.sg-navsheet__foot .sg-navsheet__actions { margin-bottom: 0; }
 
 /* ---- Step rail: done → deep turquoise, current → bright --sky-500
    (taller for emphasis), future → grey. One clean progression. ---- */
-.sg-navsheet .sg-navsheet__rail { margin-bottom: var(--space-5); }
+/* Tighter than --space-5: the rail sits in the pinned band, so every pixel
+   here is taken straight out of the scrollable area below it. */
+.sg-navsheet .sg-navsheet__rail { margin-bottom: var(--space-3); }
 .sg-navsheet .ds-steprail__label { color: var(--sky-ink); font-weight: var(--weight-bold); }
 .sg-navsheet .ds-steprail__dot { height: 6px; }
 .sg-navsheet .ds-steprail__dot--done   { background: var(--sky-ink); }

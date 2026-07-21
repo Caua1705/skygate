@@ -104,18 +104,25 @@ export function renderInstructionCardInner() {
 
   const nextDist = formatMeters(curStep?.distanceMeters ?? 0);
 
+  // Three bands: a pinned head, a scrolling middle and a pinned foot. The
+  // sheet is shorter than its content on a phone, and when it was one flat
+  // scroller the step counter and the instruction scrolled away — the two
+  // things the traveller always needs on screen.
   return `
-    <div class="ds-sheet__grip" aria-hidden="true"></div>
+    <div class="sg-navsheet__pinned">
+      <div class="ds-sheet__grip" aria-hidden="true"></div>
 
-    <!-- Step rail (DS): done → turquoise, current → bright --sky-500, future → grey -->
-    ${StepRail({ current: stepIdx + 1, total, className: 'sg-navsheet__rail' })}
+      <!-- Step rail (DS): done → turquoise, current → bright --sky-500, future → grey -->
+      ${StepRail({ current: stepIdx + 1, total, className: 'sg-navsheet__rail' })}
 
-    <!-- Current instruction -->
-    <div class="sg-navsheet__head">
-      <span class="sg-navsheet__head-icon" aria-hidden="true">${navIcon(getStepIconName(curStep))}</span>
-      <h2 class="sg-navsheet__head-title" id="instr-text">${esc(curStep?.text ?? '')}</h2>
+      <!-- Current instruction -->
+      <div class="sg-navsheet__head">
+        <span class="sg-navsheet__head-icon" aria-hidden="true">${navIcon(getStepIconName(curStep))}</span>
+        <h2 class="sg-navsheet__head-title" id="instr-text">${esc(curStep?.text ?? '')}</h2>
+      </div>
     </div>
 
+    <div class="sg-navsheet__scroll">
     <!-- Context chips -->
     <div class="sg-navsheet__chips">
       ${Chip({ label: getFloorLabel(fid), variant: 'outline', icon: 'solar:layers-bold' })}
@@ -139,25 +146,6 @@ export function renderInstructionCardInner() {
       ])}
     </div>
 
-    <!-- Actions: Próximo is the hero -->
-    <div class="sg-navsheet__actions">
-      ${Button({
-        label: isLast ? 'Chegou!' : 'Próximo',
-        variant: 'primary',
-        iconRight: 'solar:arrow-right-linear',
-        id: 'nav-next',
-        disabled: isLast,
-        className: 'sg-navsheet__next',
-      })}
-      ${Button({
-        label: 'Ver etapas',
-        variant: 'outline',
-        icon: 'solar:list-bold',
-        id: 'instr-steps-btn',
-        className: 'sg-navsheet__steps',
-      })}
-    </div>
-
     <!-- Upcoming steps — turquoise timeline, numbered from the next step -->
     ${upcoming.length ? `
       <h3 class="sg-navsheet__next-title">Próximas etapas</h3>
@@ -174,6 +162,29 @@ export function renderInstructionCardInner() {
         }).join('')}
       </ol>
     ` : ''}
+    </div>
+
+    <!-- Actions pinned to the foot: "Próximo" is the primary action of the
+         whole screen and must never require scrolling to reach. -->
+    <div class="sg-navsheet__foot">
+      <div class="sg-navsheet__actions">
+        ${Button({
+          label: isLast ? 'Chegou!' : 'Próximo',
+          variant: 'primary',
+          iconRight: 'solar:arrow-right-linear',
+          id: 'nav-next',
+          disabled: isLast,
+          className: 'sg-navsheet__next',
+        })}
+        ${Button({
+          label: 'Ver etapas',
+          variant: 'outline',
+          icon: 'solar:list-bold',
+          id: 'instr-steps-btn',
+          className: 'sg-navsheet__steps',
+        })}
+      </div>
+    </div>
   `;
 }
 

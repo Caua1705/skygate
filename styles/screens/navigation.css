@@ -4,8 +4,16 @@
    white bottom sheet below.
    ============================================================ */
 
+/* height:100dvh, not inset:0. A fixed inset:0 box is sized by the LARGE
+   viewport on mobile, so its bottom sits underneath the browser toolbar and
+   the sheet's last rows were being clipped off-screen. 100dvh tracks the
+   visible viewport instead — same fix the Home screen already uses. */
 .sg-nav-screen {
-  position: fixed; inset: 0;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: auto;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
   display: flex; flex-direction: column;
   background: var(--map-bg);
 
@@ -17,8 +25,19 @@
   --map-accent-soft: rgba(41, 171, 226, .16);
   --map-accent-deep: #0F6A94;              /* --sky-ink, AA on white */
   --map-bg:          #0A192F;
-  --map-surface:     #0F2540;
-  --map-line:        rgba(255, 255, 255, .07);
+  /* The plan reads as architecture only if the terminal body separates from
+     the page behind it — at #0F2540 on #0A192F the edge was invisible and
+     the map looked like an empty black screen. */
+  --map-surface:     #16324F;
+  --map-line:        rgba(140, 200, 235, .22);
+  --map-ink:         #06263A;              /* glyph colour ON turquoise, 7.4:1 */
+}
+
+/* On a short screen 55% of the height for the map leaves the sheet with a
+   sliver to scroll in. Give the sheet the difference — the map still frames
+   the route because fitFullRoute scales to whatever box it gets. */
+@media (max-height: 800px) {
+  .sg-nav-screen { --nav-map-h: 48%; }
 }
 
 /* ── Map area ───────────────────────────────────────── */
@@ -76,22 +95,25 @@
 }
 .sg-map-base { background: var(--map-bg); overflow: hidden; }
 
-/* ── Base plan: quiet context, never the subject ────── */
+/* ── Base plan: quiet context, but it has to be legible ──
+   Still clearly secondary to the route; the previous alphas (.028 zones,
+   .085 dividers) were below the threshold where anything reads as a plan
+   at all on a phone in daylight. */
 .sg-map__bg        { fill: var(--map-bg); }
-.sg-map__terminal  { fill: var(--map-surface); stroke: var(--map-line); stroke-width: 1.5; }
-.sg-map__zone      { fill: rgba(255, 255, 255, .028); }
-.sg-map__divider   { stroke: rgba(255, 255, 255, .085); stroke-width: 1; stroke-dasharray: 4 7; }
+.sg-map__terminal  { fill: var(--map-surface); stroke: var(--map-line); stroke-width: 2; }
+.sg-map__zone      { fill: rgba(41, 171, 226, .07); stroke: rgba(140, 200, 235, .13); stroke-width: 1; }
+.sg-map__divider   { stroke: rgba(140, 200, 235, .26); stroke-width: 1.2; stroke-dasharray: 5 7; }
 
-.sg-map__vert-disc  { fill: rgba(255, 255, 255, .06); stroke: rgba(255, 255, 255, .16); stroke-width: 1.2; }
-.sg-map__vert-glyph { fill: none; stroke: rgba(216, 232, 245, .62); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.sg-map__vert-disc  { fill: rgba(10, 25, 47, .55); stroke: rgba(140, 200, 235, .5); stroke-width: 1.4; }
+.sg-map__vert-glyph { fill: none; stroke: #BFE4F7; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
-.sg-map__gate-chip  { fill: rgba(255, 255, 255, .07); }
+.sg-map__gate-chip  { fill: rgba(140, 200, 235, .16); stroke: rgba(140, 200, 235, .3); stroke-width: .8; }
 .sg-map__gate-label {
-  fill: rgba(255, 255, 255, .62);
+  fill: #DCEEF9;                       /* 12:1 on the chip over the plan */
   font-family: Inter, system-ui, sans-serif; font-size: 7.5px; font-weight: 700;
 }
 .sg-map__watermark {
-  fill: rgba(255, 255, 255, .16);
+  fill: rgba(200, 226, 242, .3);
   font-family: Inter, system-ui, sans-serif; font-size: 11px; font-weight: 600;
 }
 
@@ -104,10 +126,10 @@
 
 /* Two stacked translucent strokes fake the bloom that feGaussianBlur used
    to draw, at a fraction of the paint cost. */
-.sg-route__halo  { stroke: var(--map-accent); stroke-width: 22;  opacity: .13; }
-.sg-route__halo2 { stroke: var(--map-accent); stroke-width: 13;  opacity: .22; }
-.sg-route__line  { stroke: var(--map-accent); stroke-width: 6.5; }
-.sg-route__core  { stroke: #EAF8FF;           stroke-width: 2;   opacity: .9; }
+.sg-route__halo  { stroke: var(--map-accent); stroke-width: 24;  opacity: .14; }
+.sg-route__halo2 { stroke: var(--map-accent); stroke-width: 15;  opacity: .24; }
+.sg-route__line  { stroke: var(--map-accent); stroke-width: 7.5; }
+.sg-route__core  { stroke: #EAF8FF;           stroke-width: 2.2; opacity: .9; }
 
 .sg-route__halo.is-completed  { stroke-width: 13; opacity: .05; }
 .sg-route__halo2.is-completed { stroke-width: 8;  opacity: .08; }
@@ -208,18 +230,25 @@
   justify-content: center;
 }
 
+/* Filled turquoise disc with a dark glyph: reads as a tappable point at a
+   glance. The outline is a dark ring, not a light one — it separates the
+   dot from the plan whatever happens to sit behind it. */
 .sg-poi__dot {
   display: grid; place-items: center;
-  width: 22px; height: 22px;
+  width: 26px; height: 26px;
   border-radius: 50%;
-  background: var(--map-surface);
-  border: 2px solid var(--map-accent);
-  color: var(--map-accent);
-  font-size: 12px;
-  box-shadow: 0 2px 6px rgba(4, 14, 26, .45);
-  transition: transform var(--t-fast), background var(--t-fast);
+  background: var(--map-accent);
+  border: 2px solid rgba(6, 26, 45, .7);
+  color: var(--map-ink);              /* #06263A on #29ABE2 → 7.4:1 */
+  font-size: 14px;
+  box-shadow: 0 0 0 1px rgba(140, 200, 235, .45), 0 2px 8px rgba(3, 12, 22, .6);
+  transition: transform var(--t-fast), box-shadow var(--t-fast);
 }
-.sg-poi.is-on-route .sg-poi__dot { background: var(--map-accent); color: #06263A; }
+/* On the route: same disc, brighter halo ring so it stands out from the
+   POIs that merely happen to be nearby. */
+.sg-poi.is-on-route .sg-poi__dot {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, .85), 0 2px 10px rgba(3, 12, 22, .65);
+}
 
 .sg-poi:hover  .sg-poi__dot,
 .sg-poi:focus  .sg-poi__dot { transform: scale(1.14); }

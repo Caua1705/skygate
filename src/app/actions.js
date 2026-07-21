@@ -381,7 +381,8 @@ export function updateInstructionCard() {
   if (!card) return;
 
   card.innerHTML = renderInstructionCardInner();
-  card.scrollTop = 0;
+  // The card itself no longer scrolls — its middle band does.
+  card.querySelector('.sg-navsheet__scroll')?.scrollTo(0, 0);
 
   // Re-bind the controls the sheet owns
   $('nav-next')?.addEventListener('click', () => advanceStep(1));
