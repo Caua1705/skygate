@@ -33,6 +33,8 @@ export const uiState = {
   showOverview: false,
   modalNodeCode: '',    // legacy node-based detail sheet (LocationDetail)
   placeDetailId: '',    // rich business detail sheet (PlaceDetailSheet)
+  placeRouteContext: null, // { text } when the card was opened from an active route
+
   floorMenuOpen: false,
   routeAnimating: false,
 };

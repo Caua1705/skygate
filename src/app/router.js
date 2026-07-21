@@ -6,9 +6,9 @@ import { renderLocationDetail } from '../components/LocationDetail.js';
 import { renderPlaceDetailSheet } from '../components/PlaceDetailSheet.js';
 import { renderSummary } from '../screens/routeSummary/RouteSummaryScreen.js';
 import { renderFloorControl, renderNavigation } from '../screens/navigation/NavigationScreen.js';
-import { bindEvents, bindFloorControlEvents, bindSearchItemEvents } from './events.js';
+import { bindEvents, bindFloorControlEvents, bindMapPoiEvents, bindSearchItemEvents } from './events.js';
 import { applyMapTransform, bindMapPan } from '../map/mapPanZoom.js';
-import { buildRouteOverlaySvg, getBaseFloorSvg } from '../map/floorMapBuilder.js';
+import { buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../map/floorMapBuilder.js';
 import { getFloorLabel } from '../state/selectors.js';
 import { filterNodes, groupByCategory } from '../services/nodeSearch.js';
 
@@ -36,7 +36,17 @@ export function updateRouteOverlay() {
   if (!routeEl) return;
   requestAnimationFrame(() => {
     routeEl.innerHTML = buildRouteOverlaySvg(mapState.selectedFloorId);
+    updatePoiLayer();
   });
+}
+
+/* POIs depend on the active step (what is still ahead), so they refresh
+   with the route overlay and need their listeners re-attached. */
+export function updatePoiLayer() {
+  const el = $('map-pois');
+  if (!el) return;
+  el.innerHTML = buildPoiLayerHtml(mapState.selectedFloorId);
+  bindMapPoiEvents();
 }
 
 /* Full map swap on floor change */
@@ -47,6 +57,7 @@ export function updateMapForFloor(floorId) {
   requestAnimationFrame(() => {
     baseEl.innerHTML  = getBaseFloorSvg(floorId);
     routeEl.innerHTML = buildRouteOverlaySvg(floorId);
+    updatePoiLayer();
     applyMapTransform(0);
     // Brief floor label flash
     const ann = $('floor-announce');

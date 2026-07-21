@@ -1,5 +1,5 @@
 import { $ } from '../utils/dom.js';
-import { advanceStep, clearLocation, closeLocationDetail, closePlaceDetail, closeOverview, closeSearch, editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail, openPlaceOrLocationDetail, openOverview, openSearch, returnToCurrentStep, selectLocation, setRouteMode, showHelp, startNavigation, swapLocations, toggleAccessibleRoute, traceRouteToLocation, tracePlaceRoute } from './actions.js';
+import { advanceStep, clearLocation, closeLocationDetail, closePlaceDetail, closeOverview, closeSearch, editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail, openPlaceFromMap, openPlaceOrLocationDetail, openOverview, openSearch, returnToCurrentStep, selectLocation, setRouteMode, showHelp, startNavigation, swapLocations, toggleAccessibleRoute, traceRouteToLocation, tracePlaceRoute } from './actions.js';
 import { handleCalculate } from './routeController.js';
 import { init } from './bootstrap.js';
 import { app, navState, uiState } from '../state/appState.js';
@@ -66,6 +66,9 @@ export function bindEvents() {
   // Floor control
   bindFloorControlEvents();
 
+  // POIs on the map — same detail card as search, plus route context
+  bindMapPoiEvents();
+
   // Overview
   $('close-overview')?.addEventListener('click', closeOverview);
   $('overview-backdrop')?.addEventListener('click', closeOverview);
@@ -114,6 +117,19 @@ export function bindFocusTrap(container) {
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
+}
+
+/**
+ * POI markers live in their own layer that is re-rendered on every step and
+ * floor change, so this is exported and called again after those updates.
+ */
+export function bindMapPoiEvents() {
+  document.querySelectorAll('.sg-poi').forEach(btn =>
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      openPlaceFromMap(btn.dataset.code);
+    })
+  );
 }
 
 export function bindFloorControlEvents() {

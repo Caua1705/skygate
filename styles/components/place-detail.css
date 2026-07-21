@@ -206,6 +206,22 @@
 .sg-place__status.is-open   { color: var(--success); }
 .sg-place__status.is-closed { color: var(--danger); }
 
+/* ---- Route context: one quiet line, only when the card was opened from
+   an active route (map POI). Never rendered from the search flow. ---- */
+.sg-place__routectx {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgba(41, 171, 226, .10);
+  color: var(--sky-ink);            /* 5.98:1 on the tint */
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+}
+.sg-place__routectx iconify-icon { font-size: 17px; flex: 0 0 auto; }
+
 /* ---- Identity (over the hero scrim) ---- */
 .sg-place__name {
   font-family: var(--font-display);

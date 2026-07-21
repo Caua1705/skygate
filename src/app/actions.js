@@ -8,6 +8,7 @@ import { switchFloor } from '../map/floorSwitch.js';
 import { fitFullRoute, fitStepToView } from '../map/mapFit.js';
 import { prefersReducedMotion , $ } from '../utils/dom.js';
 import { hasPlaceDetails } from '../components/PlaceDetailSheet.js';
+import { formatMeters, pathMeters, segmentMeters } from '../services/routeSteps.js';
 
 /* ============================================================
    14. ACTIONS
@@ -88,13 +89,59 @@ export function openPlaceOrLocationDetail(code) {
   return openLocationDetail(code);
 }
 
-export function openPlaceDetail(id) {
+export function openPlaceDetail(id, routeContext = null) {
   if (!hasPlaceDetails(id)) return;
   _placeTriggerEl = document.activeElement;
   _placeTriggerSel = placeTriggerSelector(_placeTriggerEl);
   uiState.placeDetailId = id;
+  uiState.placeRouteContext = routeContext;
   render();
   requestAnimationFrame(() => $('place-detail-close')?.focus({ preventScroll: true }));
+}
+
+/**
+ * Tapping a POI on the navigation map. Same card as everywhere else — it
+ * just receives the extra route context, which the search flow never has.
+ */
+export function openPlaceFromMap(code) {
+  if (!code) return;
+  if (!hasPlaceDetails(code)) return openLocationDetail(code);
+  return openPlaceDetail(code, buildRouteContext(code));
+}
+
+/**
+ * The one contextual line the card gets when it is opened from an active
+ * route. Deliberately conservative: distances are measured, never guessed.
+ *
+ * TODO(rota): show minutes instead of metres once we have a walking speed
+ * we actually trust. The API gives a total time for the whole route, so a
+ * per-leg estimate today would be a made-up number dressed as a fact.
+ */
+function buildRouteContext(code) {
+  if (app.mode !== 'navigation' || !navState.route) return null;
+  const path = navState.route.path ?? [];
+  const target = findNode(code);
+  if (!target || !path.length) return null;
+
+  const here = navState.semanticSteps[navState.activeStepIndex]?.rawFrom ?? 0;
+  const idx  = path.indexOf(code);
+
+  // On the route, still ahead of the traveller: distance along the path.
+  if (idx >= 0) {
+    if (idx < here) return { text: 'No seu caminho · já passou' };
+    const d = formatMeters(pathMeters(path, here, idx));
+    return { text: d ? `No seu caminho · a ${d}` : 'No seu caminho' };
+  }
+
+  // Off the path: straight-line distance to the closest node of the route.
+  let best = Infinity;
+  path.forEach(c => {
+    const n = findNode(c);
+    if (n && n.floorId === target.floorId) best = Math.min(best, segmentMeters(n, target));
+  });
+  if (!Number.isFinite(best)) return null;
+  const d = formatMeters(best);
+  return { text: d ? `Perto da sua rota · a ${d}` : 'Perto da sua rota' };
 }
 
 /**
@@ -113,6 +160,7 @@ export function closePlaceDetail() {
 function unmountPlaceDetail() {
   _placeClosing = false;
   uiState.placeDetailId = '';
+  uiState.placeRouteContext = null;
   render();
   const trigger = _placeTriggerEl, sel = _placeTriggerSel;
   _placeTriggerEl = null;
@@ -131,6 +179,7 @@ function unmountPlaceDetail() {
 /** "Traçar rota até aqui" — close the card and set it as the destination. */
 export function tracePlaceRoute(code) {
   uiState.placeDetailId = '';
+  uiState.placeRouteContext = null;
   selectLocation('destination', code);
 }
 
@@ -276,7 +325,8 @@ export function startNavigation() {
   // "you are here → destination" overview matches the reference screen.
   if (!prefersReducedMotion()) {
     requestAnimationFrame(() => {
-      const routeEl = document.querySelector('.sg-route-active');
+      // Class renamed with the map restyle: .sg-route-active → the active leg
+      const routeEl = document.querySelector('.sg-route__line.is-active');
       if (routeEl) { routeEl.classList.add('sg-route-draw'); }
       setTimeout(fitFullRoute, 100);
     });

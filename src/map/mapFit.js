@@ -1,6 +1,9 @@
 import { mapState, navState } from '../state/appState.js';
 import { findNode } from '../state/selectors.js';
-import { MAP_W, getFloorBounds, nodeToSvg } from './floorMapBuilder.js';
+// MAP_H was used by both fit functions but never imported — every call to
+// fitStepToView/fitFullRoute threw ReferenceError, which silently killed the
+// recenter FAB and the auto-fit on step change.
+import { MAP_H, MAP_W, getFloorBounds, nodeToSvg } from './floorMapBuilder.js';
 import { clamp } from '../utils/format.js';
 import { MAX_SCALE, MIN_SCALE } from '../app/constants.js';
 import { setTransform } from './mapPanZoom.js';

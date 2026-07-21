@@ -7,7 +7,18 @@
 .sg-nav-screen {
   position: fixed; inset: 0;
   display: flex; flex-direction: column;
-  background: var(--nav-map-bg);
+  background: var(--map-bg);
+
+  /* Map palette — navy + brand turquoise, scoped here on purpose.
+     --nav-teal (#2dd4bf) is a green-leaning teal still used by the legacy
+     overview overlay in overlays.css, so it is left alone rather than
+     repointed globally. Everything inside the map reads these instead. */
+  --map-accent:      #29ABE2;              /* --sky-500, brand turquoise */
+  --map-accent-soft: rgba(41, 171, 226, .16);
+  --map-accent-deep: #0F6A94;              /* --sky-ink, AA on white */
+  --map-bg:          #0A192F;
+  --map-surface:     #0F2540;
+  --map-line:        rgba(255, 255, 255, .07);
 }
 
 /* ── Map area ───────────────────────────────────────── */
@@ -16,7 +27,7 @@
   top: 0; left: 0; right: 0;
   height: var(--nav-map-h);
   overflow: hidden;
-  background: var(--nav-map-bg);
+  background: var(--map-bg);
   touch-action: none; cursor: grab;
 }
 .sg-map-area.is-grabbing { cursor: grabbing; }
@@ -46,25 +57,112 @@
   width: 100%; height: 100%;
 }
 
-/* The floor plan itself is tilted into perspective; the route overlay
-   stays flat so pins and captions read upright, as in the reference. */
-/* Scaled up so the plan always bleeds past every edge of the map frame —
-   it is a backdrop, not something the user needs to see in full. */
-.sg-map-layer--base {
-  transform: perspective(1000px) rotateX(38deg) scale(1.75);
-  transform-origin: 50% 46%;
-}
-
+/* FLAT 2D. The base used to be tilted (perspective + rotateX(38deg)) while
+   the route stayed flat, so the plan and the line lived in two different
+   spaces and nothing could line up. All three layers now share one
+   coordinate system: 1 SVG unit == 1 px in .sg-map-inner, which is what
+   lets the HTML POI markers land exactly on the plan. */
+.sg-map-layer--base  { transform: none; }
 .sg-map-layer--route { pointer-events: none; }
+
+/* POI layer: only the markers take pointer events, so dragging the gaps
+   between them still pans the map. */
+.sg-map-layer--pois  { pointer-events: none; }
+.sg-map-layer--pois .sg-poi { pointer-events: auto; }
 
 .sg-map-svg {
   display: block; width: 100%; height: 100%;
   user-select: none; -webkit-user-select: none;
 }
-.sg-map-base { background: var(--nav-map-bg); overflow: hidden; }
+.sg-map-base { background: var(--map-bg); overflow: hidden; }
 
-/* Route reveal + pulsing "you are here" ring */
-.sg-route-active { stroke-dasharray: none; }
+/* ── Base plan: quiet context, never the subject ────── */
+.sg-map__bg        { fill: var(--map-bg); }
+.sg-map__terminal  { fill: var(--map-surface); stroke: var(--map-line); stroke-width: 1.5; }
+.sg-map__zone      { fill: rgba(255, 255, 255, .028); }
+.sg-map__divider   { stroke: rgba(255, 255, 255, .085); stroke-width: 1; stroke-dasharray: 4 7; }
+
+.sg-map__vert-disc  { fill: rgba(255, 255, 255, .06); stroke: rgba(255, 255, 255, .16); stroke-width: 1.2; }
+.sg-map__vert-glyph { fill: none; stroke: rgba(216, 232, 245, .62); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+
+.sg-map__gate-chip  { fill: rgba(255, 255, 255, .07); }
+.sg-map__gate-label {
+  fill: rgba(255, 255, 255, .62);
+  font-family: Inter, system-ui, sans-serif; font-size: 7.5px; font-weight: 700;
+}
+.sg-map__watermark {
+  fill: rgba(255, 255, 255, .16);
+  font-family: Inter, system-ui, sans-serif; font-size: 11px; font-weight: 600;
+}
+
+/* ── Route: the subject ─────────────────────────────── */
+.sg-route__halo,
+.sg-route__halo2,
+.sg-route__line,
+.sg-route__core,
+.sg-route__flow { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Two stacked translucent strokes fake the bloom that feGaussianBlur used
+   to draw, at a fraction of the paint cost. */
+.sg-route__halo  { stroke: var(--map-accent); stroke-width: 22;  opacity: .13; }
+.sg-route__halo2 { stroke: var(--map-accent); stroke-width: 13;  opacity: .22; }
+.sg-route__line  { stroke: var(--map-accent); stroke-width: 6.5; }
+.sg-route__core  { stroke: #EAF8FF;           stroke-width: 2;   opacity: .9; }
+
+.sg-route__halo.is-completed  { stroke-width: 13; opacity: .05; }
+.sg-route__halo2.is-completed { stroke-width: 8;  opacity: .08; }
+.sg-route__line.is-completed  { stroke-width: 4;  opacity: .34; }
+.sg-route__core.is-completed  { stroke-width: 1.2; opacity: .28; }
+
+.sg-route__halo.is-upcoming   { stroke-width: 17; opacity: .08; }
+.sg-route__halo2.is-upcoming  { stroke-width: 10; opacity: .12; }
+.sg-route__line.is-upcoming   { stroke-width: 5;  opacity: .62; }
+.sg-route__core.is-upcoming   { stroke-width: 1.5; opacity: .55; }
+
+.sg-route__spot { fill: var(--map-accent); stroke: #EAF8FF; stroke-width: 2; }
+
+/* Flow: a short bright dash travelling along the active leg, in the
+   direction of travel. One element, so the non-composited dashoffset
+   animation stays cheap even on a mid-range phone. */
+.sg-route__flow {
+  stroke: #EAF8FF; stroke-width: 3; opacity: .85;
+  stroke-dasharray: 26 190;
+}
+
+/* ── Markers ────────────────────────────────────────── */
+.sg-map-pin__body { fill: #FFFFFF; stroke: rgba(9, 24, 42, .3); stroke-width: .8; }
+.sg-map-pin__core { fill: var(--map-surface); }
+
+.sg-map-pin--dest .sg-map-pin__body { fill: var(--map-accent); stroke: rgba(9, 24, 42, .35); }
+.sg-map-pin--dest .sg-map-pin__core { fill: #FFFFFF; }
+.sg-map-pin--step .sg-map-pin__body { fill: #DCEEF9; }
+.sg-map-pin--step .sg-map-pin__core { fill: var(--map-accent-deep); }
+
+/* Halos use the radial gradient from <defs> — no filter, no blur region. */
+.sg-map-dest__halo { fill: url(#sgHalo); }
+
+/* "Você está aqui" — turquoise dot, soft halo, breathing ring */
+.sg-map-here__halo   { fill: url(#sgHalo); }
+.sg-map-here__dot    { fill: var(--map-accent); stroke: #FFFFFF; stroke-width: 3; }
+.sg-map-here__center { fill: #FFFFFF; }
+/* fill-box origin: the circle sits at 0,0 inside a translated <g>, and the
+   default view-box origin would scale it from the map's top-left corner. */
+.sg-map-here__pulse  {
+  fill: none; stroke: var(--map-accent); stroke-width: 2.5; opacity: 0;
+  transform-box: fill-box; transform-origin: center;
+}
+
+/* ── Captions (placed by layoutLabels — never overlapping) ── */
+.sg-map-label__box  { fill: #071A2E; opacity: .94; }
+.sg-map-label__text { font-family: Inter, system-ui, sans-serif; font-size: 12.5px; }
+/* #FFFFFF on #071A2E ≈ 17:1; the muted line still clears 8:1. */
+.sg-map-label__text.is-title { fill: #FFFFFF; font-weight: 700; }
+.sg-map-label__text.is-sub   { fill: rgba(255, 255, 255, .74); font-weight: 500; }
+.sg-map-label--here .sg-map-label__box { fill: #08243C; }
+
+/* ── Route landmarks (doors, lifts on the way) ──────── */
+.sg-route-mark__ring { fill: #FFFFFF; stroke: var(--map-accent); stroke-width: 2; }
+.sg-route-mark__core { fill: var(--map-accent); }
 
 @media not (prefers-reduced-motion: reduce) {
   .sg-route-draw {
@@ -77,15 +175,78 @@
     to   { stroke-dashoffset: 0; }
   }
 
-  .sg-here-ring {
-    animation: herePulse 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  .sg-route__flow { animation: routeFlow 2.6s linear infinite; }
+  @keyframes routeFlow {
+    from { stroke-dashoffset: 216; }
+    to   { stroke-dashoffset: 0; }
   }
+
+  .sg-map-here__pulse { animation: herePulse 2.4s cubic-bezier(.4, 0, .2, 1) infinite; }
   @keyframes herePulse {
-    0%   { transform: scale(0.72); opacity: .95; }
-    70%  { transform: scale(1.28); opacity: 0; }
-    100% { transform: scale(1.28); opacity: 0; }
+    0%   { transform: scale(.55); opacity: .8; }
+    70%  { transform: scale(1.5); opacity: 0; }
+    100% { transform: scale(1.5); opacity: 0; }
   }
 }
+
+/* Static fallback: no travelling dash, no breathing ring. */
+@media (prefers-reduced-motion: reduce) {
+  .sg-route__flow { display: none; }
+  .sg-map-here__pulse { opacity: .32; }
+}
+
+/* ── POI markers (HTML, positioned in SVG units) ────── */
+.sg-poi {
+  position: absolute;
+  /* Counter-scale the map zoom (--map-zoom is set by applyMapTransform) so
+     the marker is the same size on screen at every zoom level. */
+  transform: translate(-50%, -50%) scale(calc(1 / var(--map-zoom, 1)));
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 0; background: none; border: none;
+  /* Comfortable tap target without inflating the visible dot. */
+  min-width: 34px; min-height: 34px;
+  justify-content: center;
+}
+
+.sg-poi__dot {
+  display: grid; place-items: center;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--map-surface);
+  border: 2px solid var(--map-accent);
+  color: var(--map-accent);
+  font-size: 12px;
+  box-shadow: 0 2px 6px rgba(4, 14, 26, .45);
+  transition: transform var(--t-fast), background var(--t-fast);
+}
+.sg-poi.is-on-route .sg-poi__dot { background: var(--map-accent); color: #06263A; }
+
+.sg-poi:hover  .sg-poi__dot,
+.sg-poi:focus  .sg-poi__dot { transform: scale(1.14); }
+.sg-poi:active .sg-poi__dot { transform: scale(.94); }
+.sg-poi:focus { outline: none; }
+.sg-poi:focus .sg-poi__dot { outline: 2px solid #FFFFFF; outline-offset: 2px; }
+
+/* Label is opt-in: hover or keyboard focus only. Showing every name at
+   once is what turns a map into noise. On touch, the tap opens the card,
+   which leads with the name anyway. */
+.sg-poi__label {
+  position: absolute; top: calc(100% + 3px);
+  max-width: 132px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: #071A2E;
+  color: #FFFFFF;                 /* ~17:1 on that navy */
+  font-size: 11px; font-weight: 600; line-height: 1.3;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--t-fast);
+}
+/* :focus as well as :focus-visible — a POI reached by Tab must name itself
+   even in the browsers/heuristics where focus-visible does not kick in. */
+.sg-poi:hover .sg-poi__label,
+.sg-poi:focus .sg-poi__label,
+.sg-poi:focus-visible .sg-poi__label { opacity: 1; }
 
 /* ── Inline icon sizing ─────────────────────────────── */
 .sg-ico { width: 1em; height: 1em; flex-shrink: 0; display: block; }
@@ -104,13 +265,13 @@
   transition: background var(--t-fast);
 }
 .sg-nav-brand__btn:hover { background: rgba(255,255,255,.07); }
-.sg-nav-brand__btn:focus-visible { outline: 2px solid var(--nav-teal); outline-offset: 2px; }
+.sg-nav-brand__btn:focus-visible { outline: 2px solid var(--map-accent); outline-offset: 2px; }
 
 .sg-nav-brand__row { display: flex; align-items: center; gap: 12px; }
 
 .sg-nav-brand__logo {
   display: grid; place-items: center;
-  font-size: 30px; color: var(--nav-teal); flex-shrink: 0;
+  font-size: 30px; color: var(--map-accent); flex-shrink: 0;
 }
 
 .sg-nav-brand__name {
@@ -124,7 +285,7 @@
   font-size: 14.5px; font-weight: 500;
   color: rgba(255,255,255,.88);
 }
-.sg-nav-brand__loc .sg-ico { font-size: 17px; color: var(--nav-teal); }
+.sg-nav-brand__loc .sg-ico { font-size: 17px; color: var(--map-accent); }
 
 /* ── Help button (top-right) ────────────────────────── */
 .sg-nav-help {
@@ -140,7 +301,7 @@
 }
 .sg-nav-help:hover { background: #16355a; }
 .sg-nav-help:active { transform: scale(.94); }
-.sg-nav-help:focus-visible { outline: 2px solid var(--nav-teal); outline-offset: 3px; }
+.sg-nav-help:focus-visible { outline: 2px solid var(--map-accent); outline-offset: 3px; }
 
 /* ── Floating map controls (right edge) ─────────────── */
 .sg-map-fabs {
@@ -161,14 +322,14 @@
 }
 .sg-map-fab:hover { background: #16355a; }
 .sg-map-fab:active { transform: scale(.94); }
-.sg-map-fab:focus-visible { outline: 2px solid var(--nav-teal); outline-offset: 3px; }
+.sg-map-fab:focus-visible { outline: 2px solid var(--map-accent); outline-offset: 3px; }
 
 .sg-floor-ctrl { position: relative; }
 
 .sg-floor-trigger__dot {
   position: absolute; top: 4px; right: 4px;
   width: 9px; height: 9px; border-radius: 50%;
-  background: var(--nav-teal);
+  background: var(--map-accent);
   border: 2px solid var(--nav-navy);
 }
 
@@ -196,10 +357,10 @@
 }
 .sg-floor-item:last-child { border-bottom: none; }
 .sg-floor-item:hover { background: rgba(255,255,255,.09); color: #ffffff; }
-.sg-floor-item.is-active { background: rgba(45,212,191,.18); color: var(--nav-teal); }
-.sg-floor-item:focus-visible { outline: 2px solid var(--nav-teal); outline-offset: -2px; }
+.sg-floor-item.is-active { background: var(--map-accent-soft); color: var(--map-accent); }
+.sg-floor-item:focus-visible { outline: 2px solid var(--map-accent); outline-offset: -2px; }
 .sg-floor-item iconify-icon { font-size: 16px; flex-shrink: 0; }
-.sg-floor-item__badge { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--nav-teal); }
+.sg-floor-item__badge { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--map-accent); }
 
 /* ── Return-to-step + floor announcement ────────────── */
 .sg-return-btn {
@@ -207,14 +368,14 @@
   bottom: 18px; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 7px;
   height: 40px; padding: 0 18px;
-  background: var(--nav-teal-deep); color: #ffffff;
+  background: var(--map-accent-deep); color: #ffffff;
   border-radius: 20px; font-size: 13px; font-weight: 700;
   box-shadow: var(--nav-fab-shadow);
   transition: opacity var(--t-base), background var(--t-fast);
   white-space: nowrap;
 }
 .sg-return-btn .sg-ico { font-size: 15px; }
-.sg-return-btn:hover { background: #0b8078; }
+.sg-return-btn:hover { background: #12587a; }
 .sg-return-btn:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }
 .sg-return-btn.is-hidden { opacity: 0; pointer-events: none; }
 
@@ -230,4 +391,4 @@
   box-shadow: var(--nav-fab-shadow);
 }
 .sg-floor-announce.is-visible { opacity: 1; transform: translateX(-50%) translateY(0); }
-.sg-floor-announce--manual { background: var(--nav-teal-deep); }
+.sg-floor-announce--manual { background: var(--map-accent-deep); }

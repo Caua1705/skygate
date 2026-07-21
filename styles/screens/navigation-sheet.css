@@ -38,7 +38,10 @@
   gap: var(--space-1);
   pointer-events: none;   /* brand is display-only; buttons handle taps */
 }
-.sg-navhdr__logo { height: 30px; width: auto; display: block; }
+/* align-self is load-bearing: .sg-navhdr__brand is a column flex container,
+   so the default align-items:stretch was stretching the logo to the full
+   header width (width:auto + stretch), smearing it across the top. */
+.sg-navhdr__logo { height: 30px; width: auto; display: block; align-self: flex-start; }
 .sg-navhdr__loc {
   display: flex;
   align-items: center;

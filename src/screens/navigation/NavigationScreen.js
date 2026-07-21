@@ -2,7 +2,7 @@ import { getPublicNodeLabel, SEARCH_CATEGORIES } from '../../services/nodePresen
 import { appData, mapState, navState, planState, uiState } from '../../state/appState.js';
 import { esc, fmtMin } from '../../utils/format.js';
 import { findNode, getFloorLabel } from '../../state/selectors.js';
-import { buildRouteOverlaySvg, getBaseFloorSvg } from '../../map/floorMapBuilder.js';
+import { buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../../map/floorMapBuilder.js';
 import { getStepIconName, navIcon } from '../../components/Icon.js';
 import { render } from '../../app/router.js';
 import { countFloorChanges, formatMeters } from '../../services/routeSteps.js';
@@ -25,6 +25,10 @@ export function renderNavigation() {
             <!-- Route overlay SVG (rebuilt on step change only) -->
             <div id="map-route" class="sg-map-layer sg-map-layer--route">
               ${buildRouteOverlaySvg(fid)}
+            </div>
+            <!-- POIs along the route: HTML buttons in the same 900x600 space -->
+            <div id="map-pois" class="sg-map-layer sg-map-layer--pois">
+              ${buildPoiLayerHtml(fid)}
             </div>
           </div>
         </div>

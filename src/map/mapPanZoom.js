@@ -16,6 +16,10 @@ export function applyMapTransform(duration = 0) {
   if (inner) {
     inner.style.transition = duration > 0 ? `transform ${duration}ms ease` : 'none';
     inner.style.transform = `translate(${x}px,${y}px) scale(${scale})`;
+    // POI markers counter-scale off this so they keep a constant on-screen
+    // size: at scale 6 a 32px tap target would otherwise become ~190px and
+    // swallow half the map, and at 0.25 it would be untappable.
+    inner.style.setProperty('--map-zoom', String(scale));
   }
 }
 
@@ -56,7 +60,9 @@ export function bindMapPan() {
     window.removeEventListener('mouseup',   _panHandlers.mu);
   }
 
-  const isCtrl = e => e.target.closest('button,a,.sg-floor-ctrl,.sg-map-fab,.sg-instruction-card');
+  // .sg-poi is listed explicitly: without it a tap on a POI marker would be
+  // swallowed as the start of a pan instead of opening the place card.
+  const isCtrl = e => e.target.closest('button,a,.sg-poi,.sg-floor-ctrl,.sg-map-fab,.sg-instruction-card');
 
   const onMD = e => {
     if (e.button !== 0 || isCtrl(e)) return;
