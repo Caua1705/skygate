@@ -53,39 +53,46 @@ export function renderPlaceDetailSheet() {
     <button type="button" class="sg-place-backdrop" id="place-detail-backdrop" tabindex="-1" aria-label="Fechar detalhes"></button>
     <div class="sg-place-sheet" role="document">
 
-      <!-- Photo + close -->
-      <div class="sg-place__photo${place.photo_url ? '' : ' is-placeholder'}">
-        ${place.photo_url ? `<img src="${esc(place.photo_url)}" alt="" loading="lazy">` : dsIcon('solar:buildings-2-bold', 'sg-place__photo-glyph')}
+      <!-- Immersive hero: photo (Ken Burns) + scrim + identity over it.
+           The scrim is what lets white text clear AA on any photograph. -->
+      <div class="sg-place__hero${place.photo_url ? '' : ' is-placeholder'}">
+        <div class="sg-place__photo">
+          ${place.photo_url ? `<img src="${esc(place.photo_url)}" alt="" decoding="async">` : dsIcon('solar:buildings-2-bold', 'sg-place__photo-glyph')}
+        </div>
+        <div class="sg-place__scrim" aria-hidden="true"></div>
+
         <button type="button" class="sg-place__close" id="place-detail-close" aria-label="Fechar detalhes">
           ${dsIcon('solar:close-circle-bold')}
         </button>
+
+        <div class="sg-place__hero-info">
+          <!-- Open-now status: kept on an opaque light pill so the semantic
+               success/danger stays AA even sitting on the photo. -->
+          <span class="sg-place__status sg-place__in ${status.open ? 'is-open' : 'is-closed'}" style="--d:0">
+            <span class="sg-place__status-dot" aria-hidden="true"></span>
+            ${status.open ? 'Aberto agora' : 'Fechado'}${status.today ? ` · até ${esc(status.today.close)}` : ''}
+          </span>
+          <h2 class="sg-place__name sg-place__in" id="place-detail-title" style="--d:1">${esc(place.name)}</h2>
+        </div>
       </div>
 
       <div class="sg-place__scroll">
-        <!-- Open-now status -->
-        <span class="sg-place__status ${status.open ? 'is-open' : 'is-closed'}">
-          <span class="sg-place__status-dot" aria-hidden="true"></span>
-          ${status.open ? 'Aberto agora' : 'Fechado'}${status.today ? ` · até ${esc(status.today.close)}` : ''}
-        </span>
-
-        <!-- Identity -->
-        <h2 class="sg-place__name" id="place-detail-title">${esc(place.name)}</h2>
-        <div class="sg-place__tags">
+        <div class="sg-place__tags sg-place__in" style="--d:2">
           ${Chip({ label: place.category, variant: 'outline', className: 'sg-place__cat' })}
           <span class="sg-place__floor">${dsIcon('solar:layers-bold')}${esc(place.floor)}</span>
           ${place.is_accessible ? `<span class="sg-place__access">${dsIcon('solar:accessibility-bold')}Acessível</span>` : ''}
         </div>
 
-        ${place.description ? `<p class="sg-place__desc">${esc(place.description)}</p>` : ''}
+        ${place.description ? `<p class="sg-place__desc sg-place__in" style="--d:3">${esc(place.description)}</p>` : ''}
 
         <!-- Hours -->
-        <section class="sg-place__section" aria-label="Horário de funcionamento">
+        <section class="sg-place__section sg-place__in" style="--d:4" aria-label="Horário de funcionamento">
           <h3 class="sg-place__section-title">${dsIcon('solar:clock-circle-bold')}Horários</h3>
           <div class="sg-place__hours">${hoursRows(place.opening_hours, status.todayKey)}</div>
         </section>
 
         <!-- Contacts -->
-        ${(place.website || place.contact) ? `<section class="sg-place__section" aria-label="Contato">
+        ${(place.website || place.contact) ? `<section class="sg-place__section sg-place__in" style="--d:5" aria-label="Contato">
           <div class="sg-place__contacts">
             ${place.website ? `<a class="sg-place__contact" href="${esc(place.website)}" target="_blank" rel="noopener noreferrer">
               ${dsIcon('solar:global-linear')}<span>Visitar site</span>${dsIcon('solar:arrow-right-up-linear', 'sg-place__contact-ext')}
@@ -100,7 +107,7 @@ export function renderPlaceDetailSheet() {
       <!-- Action: route to here.
            TODO(rota): hoje reusa o fluxo de destino (selectLocation). Quando o
            card abrir de dentro da navegação, decidir se re-planeja a rota. -->
-      <div class="sg-place__actions">
+      <div class="sg-place__actions sg-place__in" style="--d:6">
         <button type="button" class="ds-btn ds-btn--primary ds-btn--block sg-place__route"
           id="place-route-btn" data-code="${esc(place.id)}"${canRoute ? '' : ' disabled'}>
           ${dsIcon('solar:routing-2-bold')}<span>${canRoute ? 'Traçar rota até aqui' : 'Já é o seu destino'}</span>

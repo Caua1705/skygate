@@ -25,6 +25,9 @@
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   cursor: pointer;
+  /* Fading the element also fades its backdrop-filter, so the blur ramps in
+     with the dim instead of snapping on. */
+  animation: sgPlaceBackdropIn 280ms ease both;
 }
 
 .sg-place-sheet {
@@ -37,27 +40,109 @@
   border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
   box-shadow: var(--elev-3);
   overflow: hidden;
-  animation: sheetUp var(--t-base) ease;
+  animation: sgPlaceSheetIn 280ms cubic-bezier(.32, .72, 0, 1) both;
 }
 
-/* ---- Photo ---- */
-.sg-place__photo {
+/* ---- Exit (JS adds .is-closing, then unmounts after the animation) ---- */
+.sg-place-overlay.is-closing .sg-place-backdrop {
+  animation: sgPlaceBackdropOut 220ms ease both;
+}
+.sg-place-overlay.is-closing .sg-place-sheet {
+  animation: sgPlaceSheetOut 240ms cubic-bezier(.4, 0, 1, 1) both;
+}
+/* Content already settled — it leaves with the sheet, not on its own. */
+.sg-place-overlay.is-closing .sg-place__in { animation: none; opacity: 1; transform: none; }
+
+/* ---- Keyframes (transform/opacity only) ---- */
+@keyframes sgPlaceBackdropIn  { from { opacity: 0 } to { opacity: 1 } }
+@keyframes sgPlaceBackdropOut { from { opacity: 1 } to { opacity: 0 } }
+
+@keyframes sgPlaceSheetIn {
+  from { transform: translateY(100%); opacity: 0; }
+  22%  { opacity: 1; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes sgPlaceSheetOut {
+  from { transform: translateY(0); opacity: 1; }
+  to   { transform: translateY(100%); opacity: 0; }
+}
+
+/* Ken Burns, once, no loop: 1.06 → 1.0 while the fade lands early. */
+@keyframes sgPlacePhotoIn {
+  from { transform: scale(1.06); opacity: 0; }
+  40%  { opacity: 1; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+/* Staggered content: 40ms apart, after the sheet has started settling. */
+@keyframes sgPlaceItemIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.sg-place__in {
+  animation: sgPlaceItemIn 300ms cubic-bezier(.22, .61, .36, 1) both;
+  animation-delay: calc(90ms + var(--d, 0) * 40ms);
+}
+
+/* ---- Hero: photo + scrim + identity ---- */
+.sg-place__hero {
   position: relative;
   flex: 0 0 auto;
-  height: 200px;
+  height: 220px;
+  overflow: hidden;
   background: var(--surface-2);
 }
-.sg-place__photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sg-place__photo { position: absolute; inset: 0; }
+.sg-place__photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transform-origin: 50% 45%;
+  animation: sgPlacePhotoIn 600ms cubic-bezier(.22, .61, .36, 1) both;
+}
 
 /* No photo → a branded gradient with a soft glyph, never a broken image. */
-.sg-place__photo.is-placeholder {
+.sg-place__hero.is-placeholder .sg-place__photo {
   display: grid;
   place-items: center;
+  /* lifts the glyph clear of the name/status block sitting at the base */
+  padding-bottom: 64px;
   background:
     radial-gradient(120% 120% at 80% 20%, rgba(41, 171, 226, .35) 0%, transparent 60%),
     var(--brand-gradient);
 }
-.sg-place__photo-glyph { font-size: 64px; color: rgba(255, 255, 255, .9); }
+.sg-place__photo-glyph {
+  font-size: 64px;
+  color: rgba(255, 255, 255, .9);
+  animation: sgPlacePhotoIn 600ms cubic-bezier(.22, .61, .36, 1) both;
+}
+
+/* Scrim: white text over it clears AA on any photograph (>=7:1 where the
+   name sits, ~15:1 at the very base). */
+.sg-place__scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    rgba(6, 18, 33, .92) 0%,
+    rgba(6, 18, 33, .74) 28%,
+    rgba(6, 18, 33, .30) 56%,
+    rgba(6, 18, 33, 0) 78%
+  );
+}
+
+.sg-place__hero-info {
+  position: absolute;
+  left: var(--space-5);
+  right: var(--space-5);
+  bottom: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
 
 .sg-place__close {
   position: absolute;
@@ -74,9 +159,10 @@
   cursor: pointer;
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
-  transition: background var(--ds-transition);
+  transition: background var(--ds-transition), transform var(--ds-transition);
 }
 .sg-place__close:hover { background: rgba(10, 25, 47, .72); }
+.sg-place__close:active { transform: scale(.92); }
 .sg-place__close iconify-icon { font-size: 24px; }
 
 /* ---- Scroll body ---- */
@@ -98,24 +184,38 @@
   border-radius: var(--radius-pill);
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
-  margin-bottom: var(--space-4);
 }
-.sg-place__status-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-/* Outline on --surface (not the soft fill): --success on soft only reaches
-   4.49:1 — a hair under AA. On white it clears 5.3:1. Dot carries the fill. */
+.sg-place__status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+/* Breathing, not blinking: a slow 2.6s scale/opacity swing, open state only. */
+.sg-place__status.is-open .sg-place__status-dot {
+  animation: sgPlaceBreathe 2600ms ease-in-out 900ms infinite;
+}
+@keyframes sgPlaceBreathe {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%      { transform: scale(1.35); opacity: .6; }
+}
+/* Opaque light pill, not the soft fill: --success on soft only reaches
+   4.49:1 — a hair under AA. On white it clears 5.3:1, and staying opaque
+   keeps that ratio even sitting on the photo. Dot carries the fill. */
 .sg-place__status { background: var(--surface); border: 1.5px solid currentColor; }
 .sg-place__status.is-open   { color: var(--success); }
 .sg-place__status.is-closed { color: var(--danger); }
 
-/* ---- Identity ---- */
+/* ---- Identity (over the hero scrim) ---- */
 .sg-place__name {
   font-family: var(--font-display);
   font-size: var(--text-2xl);
   font-weight: var(--weight-extra);
   line-height: var(--leading-tight);
   letter-spacing: -0.02em;
-  color: var(--navy-900);
-  margin: 0 0 var(--space-3);
+  color: #FFFFFF;
+  text-shadow: 0 1px 3px rgba(6, 18, 33, .55);
+  margin: 0;
 }
 
 .sg-place__tags {
@@ -193,9 +293,10 @@
   color: var(--navy-900);
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
-  transition: background var(--ds-transition), border-color var(--ds-transition);
+  transition: background var(--ds-transition), border-color var(--ds-transition), transform var(--ds-transition);
 }
 .sg-place__contact:hover { background: var(--surface-2); border-color: var(--sky-ink); }
+.sg-place__contact:active { transform: scale(.985); }
 .sg-place__contact > iconify-icon:first-child { font-size: 20px; color: var(--sky-ink); flex: 0 0 auto; }
 .sg-place__contact > span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sg-place__contact-ext { font-size: 15px; color: var(--text-muted); flex: 0 0 auto; }
@@ -211,7 +312,9 @@
   min-height: 52px;
   font-size: var(--text-base);
   font-weight: var(--weight-bold);
+  transition: transform var(--ds-transition), opacity var(--ds-transition);
 }
+.sg-ds .sg-place__route:active:not(:disabled) { transform: scale(.975); opacity: .92; }
 
 /* ---- Focus (buttons/links inside get the DS ring via .sg-ds; the close
    over the dark photo needs a lighter ring) ---- */
@@ -227,5 +330,41 @@
     width: min(460px, calc(100vw - 32px));
     max-height: 84dvh;
     border-radius: var(--radius-2xl);
+    animation-name: sgPlaceModalIn;
+  }
+  .sg-place-overlay.is-closing .sg-place-sheet { animation-name: sgPlaceModalOut; }
+
+  /* Centred modals rise a touch and settle instead of sliding a full height. */
+  @keyframes sgPlaceModalIn {
+    from { transform: translateY(14px) scale(.98); opacity: 0; }
+    to   { transform: translateY(0) scale(1);      opacity: 1; }
+  }
+  @keyframes sgPlaceModalOut {
+    from { transform: translateY(0) scale(1);       opacity: 1; }
+    to   { transform: translateY(10px) scale(.985); opacity: 0; }
   }
 }
+
+/* ---- Reduced motion: plain fades, nothing slides, zooms or pulses.
+   These !important rules are last in the cascade, so they beat the global
+   `animation-duration: .01ms !important` reset in tokens.css. ---- */
+@media (prefers-reduced-motion: reduce) {
+  .sg-place-backdrop,
+  .sg-place-sheet,
+  .sg-place__photo img,
+  .sg-place__photo-glyph,
+  .sg-place__in {
+    animation: sgPlaceFadeIn 140ms linear both !important;
+    animation-delay: 0s !important;
+    transform: none !important;
+  }
+  .sg-place-overlay.is-closing .sg-place-backdrop,
+  .sg-place-overlay.is-closing .sg-place-sheet {
+    animation: sgPlaceBackdropOut 120ms linear both !important;
+  }
+  .sg-place__status.is-open .sg-place__status-dot { animation: none !important; }
+  .sg-place__close:active,
+  .sg-place__contact:active,
+  .sg-ds .sg-place__route:active:not(:disabled) { transform: none; }
+}
+@keyframes sgPlaceFadeIn { from { opacity: 0 } to { opacity: 1 } }

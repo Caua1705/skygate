@@ -59,6 +59,25 @@ export function traceRouteToLocation(code) {
 
 /* ---- Place detail sheet (rich business card) ---- */
 let _placeTriggerEl = null;
+let _placeTriggerSel = '';
+let _placeClosing = false;
+
+/** Keep the exit here in sync with the CSS (.sg-place-overlay.is-closing). */
+const PLACE_EXIT_MS = 240;
+
+/**
+ * render() rebuilds the whole DOM, so the node that opened the card is
+ * detached by the time we close it. Remember how to find its replacement.
+ */
+function placeTriggerSelector(el) {
+  if (!el || el === document.body) return '';
+  if (el.id) return `#${el.id}`;
+  const code = el.dataset?.code;
+  if (code && el.classList.contains('sg-search-item__info')) {
+    return `.sg-search-item__info[data-code="${code}"]`;
+  }
+  return '';
+}
 
 /**
  * The "i" target. Prefers the rich place card when we have a record for the
@@ -72,22 +91,39 @@ export function openPlaceOrLocationDetail(code) {
 export function openPlaceDetail(id) {
   if (!hasPlaceDetails(id)) return;
   _placeTriggerEl = document.activeElement;
+  _placeTriggerSel = placeTriggerSelector(_placeTriggerEl);
   uiState.placeDetailId = id;
   render();
   requestAnimationFrame(() => $('place-detail-close')?.focus({ preventScroll: true }));
 }
 
+/**
+ * Close = play the exit, then unmount. The guard makes a second Escape/tap
+ * during the 240ms a no-op instead of restarting the animation.
+ */
 export function closePlaceDetail() {
-  if (!uiState.placeDetailId) return;
+  if (!uiState.placeDetailId || _placeClosing) return;
+  const overlay = $('place-detail');
+  if (!overlay || prefersReducedMotion()) return unmountPlaceDetail();
+  _placeClosing = true;
+  overlay.classList.add('is-closing');
+  setTimeout(unmountPlaceDetail, PLACE_EXIT_MS);
+}
+
+function unmountPlaceDetail() {
+  _placeClosing = false;
   uiState.placeDetailId = '';
   render();
-  const trigger = _placeTriggerEl;
+  const trigger = _placeTriggerEl, sel = _placeTriggerSel;
   _placeTriggerEl = null;
-  // render() rebuilt the DOM, so the original trigger node is detached. Return
-  // focus to it only if it survived; otherwise keep focus in context (the
-  // search field the card opened from) rather than dropping it to <body>.
+  _placeTriggerSel = '';
+  // Return focus to the element that opened the card: the node itself if it
+  // survived the re-render, else its freshly rendered twin. Falling back to
+  // the search field keeps focus in context rather than dropping it to <body>.
   requestAnimationFrame(() => {
-    const target = (trigger && document.contains(trigger)) ? trigger : $('search-input');
+    const target = (trigger && document.contains(trigger))
+      ? trigger
+      : (sel && document.querySelector(sel)) || $('search-input');
     target?.focus?.({ preventScroll: true });
   });
 }
