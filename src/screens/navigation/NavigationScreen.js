@@ -2,7 +2,7 @@ import { getPublicNodeLabel, SEARCH_CATEGORIES } from '../../services/nodePresen
 import { appData, mapState, navState, planState, uiState } from '../../state/appState.js';
 import { esc, fmtMin } from '../../utils/format.js';
 import { findNode, getFloorLabel } from '../../state/selectors.js';
-import { buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../../map/floorMapBuilder.js';
+import { buildLabelLayerHtml, buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../../map/floorMapBuilder.js';
 import { getStepIconName, navIcon } from '../../components/Icon.js';
 import { render } from '../../app/router.js';
 import { countFloorChanges, formatMeters } from '../../services/routeSteps.js';
@@ -29,6 +29,11 @@ export function renderNavigation() {
             <!-- POIs along the route: HTML buttons in the same 900x600 space -->
             <div id="map-pois" class="sg-map-layer sg-map-layer--pois">
               ${buildPoiLayerHtml(fid)}
+            </div>
+            <!-- Origin/destination captions: glass capsules, same space again.
+                 Last, so a caption is never covered by a POI dot. -->
+            <div id="map-labels" class="sg-map-layer sg-map-layer--labels">
+              ${buildLabelLayerHtml(fid)}
             </div>
           </div>
         </div>

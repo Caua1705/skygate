@@ -1,8 +1,8 @@
 import { getPublicNodeLabel } from '../services/nodePresentation.js';
 import { appData, mapState, navState, planState } from '../state/appState.js';
-import { NAV_VISIBLE_TYPES, getNodeMeta } from '../app/constants.js';
+import { NAV_VISIBLE_TYPES } from '../app/constants.js';
 import { clamp, esc } from '../utils/format.js';
-import { findNode, getFloorLabel } from '../state/selectors.js';
+import { findNode, getFloorLabel, getFloorTransform } from '../state/selectors.js';
 
 /* ============================================================
    6. FLOOR MAP BUILDER — Clean semantic map (no technical nodes)
@@ -11,14 +11,20 @@ import { findNode, getFloorLabel } from '../state/selectors.js';
    nodes (code/type/name/x/y/floor); everything drawn here is synthesised
    from those coordinates. So "the SVG" is entirely ours to restyle.
 
-   Visual design (navigation theme):
-   - Flat 2D: base and route share one coordinate space, so the route and
-     the POIs sit exactly on the plan (no perspective tilt).
-   - Dark navy background, terminal body barely lighter — the plan is
-     context, the route is the subject.
+   VISUAL PREMISE — "dark stage, lit route":
+   the plan is scenery and the route is the only thing under the spotlight.
+   Every decision below follows from that one sentence:
+   - The base floor is drawn as GHOST ARCHITECTURE — outlines at alpha
+     .06–.10, no fills, no icons, no gate chips. It suggests the building
+     without ever competing with the line.
+   - The route carries the whole visual budget: stacked glow strokes, a
+     gradient that brightens towards the destination, a travelling highlight.
+   - Markers are rationed. Origin, destination and the current landmark are
+     the only loud things; POIs are 8px dots that only grow when touched.
+   - Flat 2D: base, route and POI layers share one coordinate space, so a
+     marker at (x,y) sits exactly on the plan at (x,y).
    - Paint lives in CSS: every generated element carries a class and no
      inline fill/stroke, so the map can be re-themed without touching JS.
-   - No corridor dots, no waypoint circles, no internal labels
    ============================================================ */
 
 export const MAP_W = 900, MAP_H = 600;
@@ -84,19 +90,13 @@ export function buildBaseFloorSvg(floorId) {
     };
   }).filter(Boolean);
 
-  // Vertical connection symbols (elevator, stairs, escalator) — shown always as small icons
-  const verticals = allNodes.filter(n => n.isVertical);
-
-  // Gate labels — show gate codes only (these are meaningful to passengers)
-  const gates = allNodes.filter(n => n.type === 'gate');
-
-  // Glyphs for vertical connections: tiny geometric paths, drawn around a
-  // local origin. Platform text glyphs (▲ ≡ ╱) rendered inconsistently.
-  const VERT_GLYPH = {
-    elevator:  'M-2.6 -1.1 0 -3.7 2.6 -1.1M-2.6 1.1 0 3.7 2.6 1.1',
-    stairs:    'M-3.4 2.9h2.3V0.6h2.3v-2.3h2.3',
-    escalator: 'M-3.4 3 3.4 -3',
-  };
+  /* GHOST PLAN ONLY.
+     Vertical connections and gate chips used to be drawn here — dozens of
+     discs and labelled boxes scattered over the whole floor, all at the same
+     visual weight as everything else. That is exactly the noise the "dark
+     stage" premise removes: the lifts and stairs the traveller actually has
+     to use are on the route, and the route overlay marks those. Anything
+     else was decoration competing with the line. */
 
   return `<svg
     viewBox="0 0 ${MAP_W} ${MAP_H}"
@@ -104,48 +104,28 @@ export function buildBaseFloorSvg(floorId) {
     aria-hidden="true"
     style="overflow:visible"
   >
-    <!-- Background -->
+    <!-- Background: transparent on purpose, so the radial "stage" gradient
+         painted on .sg-map-area shows through and keeps covering the map
+         when the user pans past the edge of the 900x600 plan. -->
     <rect class="sg-map__bg" width="${MAP_W}" height="${MAP_H}"/>
 
-    <!-- Terminal body -->
+    <!-- Terminal body: contour only -->
     <rect class="sg-map__terminal" x="${tX.toFixed(1)}" y="${tY.toFixed(1)}"
-      width="${tW.toFixed(1)}" height="${tH.toFixed(1)}" rx="24"/>
+      width="${tW.toFixed(1)}" height="${tH.toFixed(1)}" rx="28"/>
 
-    <!-- Zone areas -->
+    <!-- Zone areas: contour only -->
     ${zones.map(z =>
-      `<rect class="sg-map__zone" x="${z.x.toFixed(1)}" y="${z.y.toFixed(1)}" width="${z.w.toFixed(1)}" height="${z.h.toFixed(1)}" rx="14"/>`
+      `<rect class="sg-map__zone" x="${z.x.toFixed(1)}" y="${z.y.toFixed(1)}" width="${z.w.toFixed(1)}" height="${z.h.toFixed(1)}" rx="16"/>`
     ).join('')}
 
-    <!-- Zone divider lines (very subtle) -->
+    <!-- Zone divider lines (barely there — a hint of structure) -->
     ${Array.from({ length: 3 }, (_, i) => {
       const baseX = MAP_PAD + ((i + 1) * xRange / bounds.w) * (MAP_W - MAP_PAD * 2);
-      return `<line class="sg-map__divider" x1="${baseX.toFixed(1)}" y1="${(tY + 20).toFixed(1)}" x2="${baseX.toFixed(1)}" y2="${(tY + tH - 20).toFixed(1)}"/>`;
-    }).join('')}
-
-    <!-- Vertical connections (always visible — passengers rely on these) -->
-    ${verticals.map(n => {
-      const p = toSvg(n);
-      const d = VERT_GLYPH[n.type] ?? VERT_GLYPH.stairs;
-      // aria-label uses public label — never raw node name
-      return `<g class="sg-map__vert" aria-label="${esc(getPublicNodeLabel(n))}"
-        transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})">
-        <circle class="sg-map__vert-disc" r="9"/>
-        <path class="sg-map__vert-glyph" d="${d}"/>
-      </g>`;
-    }).join('')}
-
-    <!-- Gate labels (meaningful to passengers) -->
-    ${gates.map(n => {
-      const p = toSvg(n);
-      const label = n.name.replace(/Portão\s*/i, '').trim() || n.name;
-      return `<g class="sg-map__gate" aria-label="Portão ${esc(label)}">
-        <rect class="sg-map__gate-chip" x="${(p.x - 14).toFixed(1)}" y="${(p.y - 8).toFixed(1)}" width="28" height="16" rx="4"/>
-        <text class="sg-map__gate-label" x="${p.x.toFixed(1)}" y="${p.y.toFixed(1)}" dy="0.37em" text-anchor="middle">${esc(label.length > 6 ? label.slice(0, 6) : label)}</text>
-      </g>`;
+      return `<line class="sg-map__divider" x1="${baseX.toFixed(1)}" y1="${(tY + 26).toFixed(1)}" x2="${baseX.toFixed(1)}" y2="${(tY + tH - 26).toFixed(1)}"/>`;
     }).join('')}
 
     <!-- Floor label watermark -->
-    <text class="sg-map__watermark" x="${(MAP_W / 2).toFixed(1)}" y="${(tY + tH - 14).toFixed(1)}" text-anchor="middle" aria-hidden="true">${esc(getFloorLabel(floorId))}</text>
+    <text class="sg-map__watermark" x="${(MAP_W / 2).toFixed(1)}" y="${(tY + tH - 18).toFixed(1)}" text-anchor="middle" aria-hidden="true">${esc(getFloorLabel(floorId))}</text>
   </svg>`;
 }
 
@@ -181,10 +161,18 @@ function overlaps(a, b, m = LBL.gap) {
 /**
  * Anchor offsets tried in order, as [dx, dy] of the box centre relative to
  * the marker. Sides first (they read best), then the diagonals.
+ *
+ * LEFT is tried before right, and that ordering is deliberate: the floor
+ * and recentre FABs float over the right edge of the map on every screen
+ * size. This placer works in map units and cannot see them, so a caption
+ * that defaults rightwards slides under the controls and gets chopped —
+ * which is exactly what "Você está aqui" did on a phone. Going left first
+ * costs nothing when there is room on both sides, and avoids the only
+ * fixed obstacle on screen when there is not.
  */
 const ANCHORS = [
-  [ 1,  0], [-1,  0], [ 0, -1], [ 0,  1],
-  [ 1, -1], [-1, -1], [ 1,  1], [-1,  1],
+  [-1,  0], [ 1,  0], [ 0, -1], [ 0,  1],
+  [-1, -1], [ 1, -1], [-1,  1], [ 1,  1],
 ];
 
 /**
@@ -195,11 +183,11 @@ const ANCHORS = [
  *
  * @param {Array} items   { x, y, lines, priority, cls, radius }
  * @param {Array} blocked keep-out rects for the markers themselves
- * @returns {string} SVG
+ * @returns {Array} placed { box, lines, cls } — geometry only, no markup
  */
-export function layoutLabels(items, blocked = []) {
+export function placeLabels(items, blocked = []) {
   const taken = [...blocked];
-  const drawn = [];
+  const placed = [];
 
   [...items].sort((a, b) => b.priority - a.priority).forEach(item => {
     let chosen = null, chosenLines = null;
@@ -227,21 +215,114 @@ export function layoutLabels(items, blocked = []) {
 
     if (!chosen) return;   // nothing fits — drop this caption
     taken.push(chosen);
-    drawn.push(renderLabelBox(chosen, chosenLines, item.cls));
+    placed.push({ box: chosen, lines: chosenLines, cls: item.cls });
   });
 
-  return drawn.join('');
+  return placed;
 }
 
-function renderLabelBox(box, lines, cls = '') {
-  return `<g class="sg-map-label ${cls}">
-    <rect class="sg-map-label__box" x="${box.x.toFixed(1)}" y="${box.y.toFixed(1)}"
-      width="${box.w.toFixed(1)}" height="${box.h.toFixed(1)}" rx="9"/>
-    ${lines.map((l, i) => `<text class="sg-map-label__text ${i === 0 ? 'is-title' : 'is-sub'}"
-      x="${(box.x + LBL.padX).toFixed(1)}"
-      y="${(box.y + LBL.padY + LBL.lineH * i + LBL.lineH / 2).toFixed(1)}"
-      dy="0.35em">${esc(l)}</text>`).join('')}
-  </g>`;
+/* ── CAPTION LAYER (HTML) ──────────────────────────────────────
+   Captions used to be <rect> + <text> inside the route SVG. They are now
+   HTML in their own layer, for one reason: `backdrop-filter` is what makes
+   a glass capsule read as glass, and it does not work on SVG shapes. The
+   layer is the same 900x600 box as the viewBox, so the geometry computed by
+   placeLabels() drops straight in as left/top/width pixels.
+
+   The dark rgba background is deliberately opaque enough to stand on its
+   own: where backdrop-filter is unsupported the capsule is still a solid
+   navy pill and the white text still clears AA.
+   ────────────────────────────────────────────────────────────── */
+
+/**
+ * The floor/recentre FABs as a keep-out rect in MAP units.
+ *
+ * placeLabels works in map space and has no idea the controls exist, so a
+ * caption anchored near the right edge slides under them — "Você está aqui"
+ * did exactly that whenever the fit put the origin over on that side. The
+ * FABs are screen-space, so their box has to be projected back through the
+ * live pan/zoom, inverting the same equation mapFit.js documents:
+ *
+ *     screenX = wrapperW/2 + tx + (mapX - MAP_W/2) * scale
+ *
+ * Returns null when there is nothing to measure (no DOM, no controls, or a
+ * degenerate transform), in which case captions simply place as before.
+ * The rect is a snapshot for the current frame: captions are laid out for
+ * the view the fit just produced, and re-laid out on the next step.
+ */
+function controlsKeepOut(floorId) {
+  if (typeof document === 'undefined') return null;
+  const wrapper = document.getElementById('map-wrapper');
+  const fabs    = document.querySelector('.sg-map-fabs');
+  if (!wrapper || !fabs) return null;
+
+  const w = wrapper.getBoundingClientRect();
+  const f = fabs.getBoundingClientRect();
+  if (!w.width || !w.height || f.left >= w.right) return null;
+
+  const { x: tx, y: ty, scale } = getFloorTransform(floorId);
+  if (!scale) return null;
+
+  const toMapX = sx => (sx - w.width  / 2 - tx) / scale + MAP_W / 2;
+  const toMapY = sy => (sy - w.height / 2 - ty) / scale + MAP_H / 2;
+
+  const pad = 10;   // screen px of breathing room around the controls
+  const x1 = toMapX(f.left - w.left - pad);
+  const y1 = toMapY(f.top  - w.top  - pad);
+  // Out to the right edge of the frame: everything past the controls is
+  // just as unusable as the strip beneath them.
+  const x2 = toMapX(w.width);
+  const y2 = toMapY(f.bottom - w.top + pad);
+
+  return { x: x1, y: y1, w: Math.max(0, x2 - x1), h: Math.max(0, y2 - y1) };
+}
+
+/** Captions for the visible floor, already collision-resolved. */
+export function buildLabelLayerHtml(floorId) {
+  const route = navState.route;
+  if (!route) return '';
+
+  const bounds = getFloorBounds(floorId);
+  const toSvg  = n => nodeToSvg(n, bounds);
+
+  const originNode = findNode(planState.originCode);
+  const destNode   = findNode(planState.destinationCode);
+  const originPt = originNode?.floorId === floorId ? toSvg(originNode) : null;
+  const destPt   = destNode?.floorId   === floorId ? toSvg(destNode)   : null;
+
+  const curStep  = navState.semanticSteps[navState.activeStepIndex];
+  const curLandmark = curStep?.landmarkCode ? findNode(curStep.landmarkCode) : null;
+  const showCurLandmark = curLandmark?.floorId === floorId &&
+    curLandmark.code !== planState.destinationCode &&
+    curLandmark.code !== planState.originCode;
+
+  // POI dots share this coordinate space, so they are obstacles too —
+  // otherwise a caption lands on top of one and neither is readable.
+  const blocked = getRoutePois(floorId).map(({ p }) => ({ x: p.x - 12, y: p.y - 12, w: 24, h: 24 }));
+  const controls = controlsKeepOut(floorId);
+  if (controls) blocked.push(controls);
+  const items = [];
+
+  if (destPt) {
+    items.push({ x: destPt.x, y: destPt.y - 20, radius: 18, priority: 3,
+      cls: 'sg-map-label--dest', lines: [getPublicNodeLabel(destNode), 'Seu destino'] });
+    blocked.push({ x: destPt.x - 14, y: destPt.y - 36, w: 28, h: 38 });
+  }
+  if (originPt) {
+    items.push({ x: originPt.x, y: originPt.y, radius: 20, priority: 2,
+      cls: 'sg-map-label--here', lines: ['Você está aqui', getPublicNodeLabel(originNode)] });
+    blocked.push({ x: originPt.x - 18, y: originPt.y - 18, w: 36, h: 36 });
+  }
+  if (showCurLandmark && curLandmark) {
+    const p = toSvg(curLandmark);
+    items.push({ x: p.x, y: p.y - 20, radius: 16, priority: 1,
+      cls: 'sg-map-label--step', lines: [getPublicNodeLabel(curLandmark)] });
+    blocked.push({ x: p.x - 13, y: p.y - 33, w: 26, h: 35 });
+  }
+
+  return placeLabels(items, blocked).map(({ box, lines, cls }) => `
+    <div class="sg-map-label ${cls}" style="left:${box.x.toFixed(1)}px;top:${box.y.toFixed(1)}px;width:${box.w.toFixed(1)}px">
+      ${lines.map((l, i) => `<span class="sg-map-label__text ${i === 0 ? 'is-title' : 'is-sub'}">${esc(l)}</span>`).join('')}
+    </div>`).join('');
 }
 
 /**
@@ -325,20 +406,41 @@ export function buildRouteOverlaySvg(floorId) {
     curLandmark.code !== planState.originCode;
 
   /**
-   * Route stroke stack: two soft halo passes → body → bright core.
+   * Route stroke stack: three soft halo passes → body → bright core.
    *
    * No SVG filter anywhere. feGaussianBlur over a route this long, inside a
    * container the user can zoom to 8x, is genuinely expensive — it repaints
    * the whole blurred region every pan frame and was locking up the renderer
-   * under test. Stacked translucent strokes give the same soft bloom for the
-   * cost of ordinary path painting.
+   * under test. Stacked translucent strokes give the same neon bloom for the
+   * cost of ordinary path painting, and they survive zooming.
+   *
+   * pathLength="100" normalises every leg to a 0–100 dash space. That is
+   * what lets one CSS keyframe draw a 90-unit leg and a 900-unit leg in the
+   * same 800ms, and what keeps the travelling highlight the same visual
+   * length on a short leg as on a long one.
    */
-  const routeLine = (pts, state, { flow = false } = {}) => `
-    <polyline class="sg-route__halo is-${state}" points="${poly(pts)}"/>
-    <polyline class="sg-route__halo2 is-${state}" points="${poly(pts)}"/>
-    <polyline class="sg-route__line is-${state}" points="${poly(pts)}"/>
-    <polyline class="sg-route__core is-${state}" points="${poly(pts)}"/>
-    ${flow ? `<polyline class="sg-route__flow" points="${poly(pts)}"/>` : ''}`;
+  const routeLine = (pts, state, { flow = false } = {}) => {
+    const pl = `points="${poly(pts)}" pathLength="100"`;
+    return `
+    <polyline class="sg-route__halo is-${state}" ${pl}/>
+    <polyline class="sg-route__halo2 is-${state}" ${pl}/>
+    <polyline class="sg-route__halo3 is-${state}" ${pl}/>
+    <polyline class="sg-route__line is-${state}" ${pl}/>
+    <polyline class="sg-route__core is-${state}" ${pl}/>
+    ${flow ? `<polyline class="sg-route__flow" ${pl}/>` : ''}`;
+  };
+
+  /* Gradient along the direction of travel: cooler and softer at "you",
+     brightest at the destination, so the line itself points forward. Drawn
+     in user space between the two ends of this floor's path — a gradient in
+     objectBoundingBox units would flip direction whenever the route happened
+     to run right-to-left. */
+  const floorPts = floorCodes.map(c => { const n = findNode(c); return n ? toSvg(n) : null; }).filter(Boolean);
+  const gA = floorPts[0] ?? { x: 0, y: 0 };
+  const gB = floorPts[floorPts.length - 1] ?? { x: MAP_W, y: MAP_H };
+
+  /** No drawable active leg → the road ahead carries the full treatment. */
+  const upcomingIsLead = activePts.length < 2 && upcomingPts.length > 1;
 
   // Which points anchor the "you are here" / waypoint / destination markers
   const originPt = showOrigin ? toSvg(originNode) : null;
@@ -358,13 +460,39 @@ export function buildRouteOverlaySvg(floorId) {
         <stop offset="70%" stop-color="#29ABE2" stop-opacity=".18"/>
         <stop offset="100%" stop-color="#29ABE2" stop-opacity="0"/>
       </radialGradient>
+
+      <!-- Wider, warmer halo for the destination — it has to win the map. -->
+      <radialGradient id="sgHaloDest">
+        <stop offset="25%" stop-color="#7FE3FF" stop-opacity=".50"/>
+        <stop offset="60%" stop-color="#29ABE2" stop-opacity=".22"/>
+        <stop offset="100%" stop-color="#29ABE2" stop-opacity="0"/>
+      </radialGradient>
+
+      <!-- Direction-of-travel gradient (see routeLine above) -->
+      <linearGradient id="sgRouteGrad" gradientUnits="userSpaceOnUse"
+        x1="${gA.x.toFixed(1)}" y1="${gA.y.toFixed(1)}"
+        x2="${gB.x.toFixed(1)}" y2="${gB.y.toFixed(1)}">
+        <stop offset="0%"   stop-color="#3F9FCE"/>
+        <stop offset="45%"  stop-color="#29ABE2"/>
+        <stop offset="100%" stop-color="#6FE0FF"/>
+      </linearGradient>
     </defs>
 
     <!-- Completed route (dimmed, already walked) -->
     ${completedPts.length > 1 ? routeLine(completedPts, 'completed') : ''}
 
-    <!-- Upcoming route -->
-    ${upcomingPts.length > 1 ? routeLine(upcomingPts, 'upcoming') : ''}
+    <!-- Upcoming route.
+
+         When the current step covers a single node — which is exactly what
+         the FIRST step usually is ("Passe por Porta 3", one point) — there
+         is no active leg to be dominant, and the whole line was rendering
+         in the dim upcoming treatment. The opening frame of the navigation,
+         the one moment the route has to look like the subject, was the one
+         frame where it looked switched off. With no active leg to contrast
+         against, what is ahead IS the route: promote it. -->
+    ${upcomingPts.length > 1
+      ? routeLine(upcomingPts, upcomingIsLead ? 'active' : 'upcoming', { flow: upcomingIsLead })
+      : ''}
 
     <!-- Active route segment (dominant) -->
     ${activePts.length > 1 ? routeLine(activePts, 'active', { flow: true })
@@ -378,64 +506,57 @@ export function buildRouteOverlaySvg(floorId) {
       return allPts.length > 1 ? routeLine(allPts, 'active', { flow: true }) : '';
     })() : ''}
 
-    <!-- Route-relevant landmarks (vertical connections, doors on route) -->
+    <!-- Route-relevant landmarks (vertical connections, doors on route).
+
+         Every marker below is an OUTER group carrying the translate as an
+         attribute, wrapping an INNER group that the entrance animation
+         scales. They cannot be the same element: a CSS transform on the
+         group would override the translate attribute outright and every
+         marker would pop in from the map's top-left corner. -->
     ${visibleLandmarks.map(n => {
       const p = toSvg(n);
       return `<g class="sg-route-mark" aria-label="${esc(getPublicNodeLabel(n))}"
         transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})">
-        <circle class="sg-route-mark__ring" r="6.5"/>
-        <circle class="sg-route-mark__core" r="3"/>
+        <g class="sg-pop">
+          <circle class="sg-route-mark__ring" r="5.5"/>
+          <circle class="sg-route-mark__core" r="2.4"/>
+        </g>
       </g>`;
     }).join('')}
 
     <!-- Current step landmark -->
     ${showCurLandmark && curLandmark ? (() => {
       const p = toSvg(curLandmark);
-      return `<g aria-label="Ponto atual: ${esc(getPublicNodeLabel(curLandmark))}">
-        ${mapPin(p.x, p.y, 'sg-map-pin--step')}
-      </g>`;
+      return `<g class="sg-map-step" aria-label="Ponto atual: ${esc(getPublicNodeLabel(curLandmark))}"
+        transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})">
+        <g class="sg-pop">${mapPin(0, 0, 'sg-map-pin--step')}</g>
+      </g>` ;
     })() : ''}
 
-    <!-- Destination: filled pin -->
-    ${destPt ? `<g class="sg-map-dest" aria-label="Destino: ${esc(getPublicNodeLabel(destNode))}">
-      <circle class="sg-map-dest__halo" cx="${destPt.x.toFixed(1)}" cy="${destPt.y.toFixed(1)}" r="22"/>
-      ${mapPin(destPt.x, destPt.y, 'sg-map-pin--dest')}
+    <!-- Destination: glowing pin, the end of the light -->
+    ${destPt ? `<g class="sg-map-dest" aria-label="Destino: ${esc(getPublicNodeLabel(destNode))}"
+      transform="translate(${destPt.x.toFixed(1)},${destPt.y.toFixed(1)})">
+      <circle class="sg-map-dest__glow" r="34"/>
+      <g class="sg-pop">
+        <circle class="sg-map-dest__halo" r="20"/>
+        ${mapPin(0, 0, 'sg-map-pin--dest')}
+      </g>
     </g>` : ''}
 
-    <!-- "Você está aqui": pulsing turquoise dot + halo -->
+    <!-- "Você está aqui": pulsing turquoise dot with two radar waves -->
     ${originPt ? `<g class="sg-map-here" aria-label="Você está aqui: ${esc(getPublicNodeLabel(originNode))}"
       transform="translate(${originPt.x.toFixed(1)},${originPt.y.toFixed(1)})">
-      <circle class="sg-map-here__pulse" r="15"/>
-      <circle class="sg-map-here__halo" r="24"/>
-      <circle class="sg-map-here__dot" r="9"/>
-      <circle class="sg-map-here__center" r="3.4"/>
+      <circle class="sg-map-here__wave" r="13"/>
+      <circle class="sg-map-here__wave sg-map-here__wave--2" r="13"/>
+      <circle class="sg-map-here__halo" r="26"/>
+      <g class="sg-pop">
+        <circle class="sg-map-here__dot" r="8.5"/>
+        <circle class="sg-map-here__center" r="3.2"/>
+      </g>
     </g>` : ''}
 
-    <!-- Captions last: one layout pass, so no two boxes can ever collide -->
-    ${(() => {
-      // POI dots live in a separate HTML layer but share this coordinate
-      // space, so they have to be obstacles here too — otherwise a caption
-      // happily lands underneath them and the text is unreadable again.
-      const blocked = getRoutePois(floorId).map(({ p }) => ({ x: p.x - 15, y: p.y - 15, w: 30, h: 30 }));
-      const items = [];
-      if (destPt) {
-        items.push({ x: destPt.x, y: destPt.y - 20, radius: 16, priority: 3,
-          cls: 'sg-map-label--dest', lines: [getPublicNodeLabel(destNode), 'Seu destino'] });
-        blocked.push({ x: destPt.x - 13, y: destPt.y - 33, w: 26, h: 35 });
-      }
-      if (originPt) {
-        items.push({ x: originPt.x, y: originPt.y, radius: 19, priority: 2,
-          cls: 'sg-map-label--here', lines: ['Você está aqui', getPublicNodeLabel(originNode)] });
-        blocked.push({ x: originPt.x - 17, y: originPt.y - 17, w: 34, h: 34 });
-      }
-      if (showCurLandmark && curLandmark) {
-        const p = toSvg(curLandmark);
-        items.push({ x: p.x, y: p.y - 20, radius: 16, priority: 1,
-          cls: 'sg-map-label--step', lines: [getPublicNodeLabel(curLandmark)] });
-        blocked.push({ x: p.x - 13, y: p.y - 33, w: 26, h: 35 });
-      }
-      return layoutLabels(items, blocked);
-    })()}
+    <!-- Captions are NOT here: they live in the HTML label layer, where a
+         glass capsule can actually be glass. See buildLabelLayerHtml(). -->
   </svg>`;
 }
 
@@ -462,11 +583,21 @@ function distToPolyline(p, pts) {
 
 /** How close to the line a POI has to be to count as "on the way". */
 export const POI_NEAR_UNITS = 78;
-const POI_MAX = 10;
+/**
+ * Hard ceiling on visible POIs. Was 10 with a 78-unit catchment, which put
+ * a labelled icon roughly every centimetre of route on a phone — the exact
+ * "generic, cluttered map" this redesign exists to kill. The route is the
+ * subject; POIs are a footnote you can tap.
+ */
+const POI_MAX = 6;
+/** Below this many POIs literally on the path, top up with nearby ones. */
+const POI_MIN = 3;
 
 /**
- * POIs worth offering on this floor: real businesses/services near the
- * route, nearest first, capped so the map never turns into a pin cushion.
+ * POIs worth offering on this floor. Places the route physically passes
+ * through come first and are usually the whole list; only when there are
+ * barely any of those do nearby places get pulled in, so the map stays
+ * quiet on a dense floor instead of filling up to the cap every time.
  * Origin, destination and vertical connections are excluded — they already
  * have their own, louder markers.
  */
@@ -485,7 +616,7 @@ export function getRoutePois(floorId) {
 
   const routeSet = new Set(floorCodes);
 
-  return appData.nodes
+  const candidates = appData.nodes
     .filter(n =>
       n.floorId === floorId &&
       n.isPoi && !n.isInternal && !n.isVertical &&
@@ -496,20 +627,34 @@ export function getRoutePois(floorId) {
       return { node: n, p, onRoute: routeSet.has(n.code), dist: distToPolyline(p, linePts) };
     })
     .filter(poi => poi.onRoute || poi.dist <= POI_NEAR_UNITS)
-    .sort((a, b) => (b.onRoute - a.onRoute) || (a.dist - b.dist))
-    .slice(0, POI_MAX);
+    .sort((a, b) => (b.onRoute - a.onRoute) || (a.dist - b.dist));
+
+  const onRoute = candidates.filter(poi => poi.onRoute);
+  // Enough places directly on the path: show only those, nothing else.
+  if (onRoute.length >= POI_MIN) return onRoute.slice(0, POI_MAX);
+  // Sparse route: top up with the nearest few so "no seu caminho" still has
+  // something to offer, but stop well short of the cap.
+  return candidates.slice(0, Math.max(POI_MIN, onRoute.length));
 }
 
-/** HTML for the POI layer. Empty string when there is nothing to show. */
+/**
+ * HTML for the POI layer. Empty string when there is nothing to show.
+ *
+ * A POI at rest is an 8px dot — no category icon, no caption. The icon used
+ * to be a 26px turquoise disc with a glyph, which at six-plus per screen
+ * read louder than the route itself. The glyph is not lost: it leads the
+ * detail card that opens on tap, where there is room to actually see it.
+ * The accessible name lives on the button, so a screen reader still hears
+ * the full place name that the eye no longer has to filter out.
+ */
 export function buildPoiLayerHtml(floorId) {
   return getRoutePois(floorId).map(({ node, p, onRoute }) => {
     const label = getPublicNodeLabel(node);
-    const meta  = getNodeMeta(node.type);
     return `<button type="button" class="sg-poi${onRoute ? ' is-on-route' : ''}"
       data-code="${esc(node.code)}"
       style="left:${p.x.toFixed(1)}px;top:${p.y.toFixed(1)}px"
       aria-label="${esc(label)} — ver detalhes">
-      <span class="sg-poi__dot" aria-hidden="true"><iconify-icon icon="${esc(meta.icon)}"></iconify-icon></span>
+      <span class="sg-poi__dot" aria-hidden="true"></span>
       <span class="sg-poi__label">${esc(label)}</span>
     </button>`;
   }).join('');

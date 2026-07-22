@@ -9,7 +9,7 @@ import { renderFloorControl, renderNavigation } from '../screens/navigation/Navi
 import { bindEvents, bindFloorControlEvents, bindMapPoiEvents, bindSearchItemEvents } from './events.js';
 import { applyMapTransform, bindMapPan } from '../map/mapPanZoom.js';
 import { autoFitRoute } from '../map/mapFit.js';
-import { buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../map/floorMapBuilder.js';
+import { buildLabelLayerHtml, buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../map/floorMapBuilder.js';
 import { getFloorLabel } from '../state/selectors.js';
 import { filterNodes, groupByCategory } from '../services/nodeSearch.js';
 
@@ -48,6 +48,16 @@ export function updatePoiLayer() {
   if (!el) return;
   el.innerHTML = buildPoiLayerHtml(mapState.selectedFloorId);
   bindMapPoiEvents();
+  // Captions are laid out AROUND the POI dots, so they can only be correct
+  // once the dots for this step exist.
+  updateLabelLayer();
+}
+
+/* Caption capsules — same cadence as the POIs they avoid. */
+export function updateLabelLayer() {
+  const el = $('map-labels');
+  if (!el) return;
+  el.innerHTML = buildLabelLayerHtml(mapState.selectedFloorId);
 }
 
 /* Full map swap on floor change */

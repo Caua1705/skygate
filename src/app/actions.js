@@ -14,6 +14,14 @@ import { formatMeters, pathMeters, segmentMeters } from '../services/routeSteps.
    14. ACTIONS
    ============================================================ */
 
+/**
+ * How long the navigation entrance runs, in ms. Must outlast the slowest
+ * keyframe in the `.sg-map-inner.is-entering` block in navigation.css
+ * (destination pop: 760ms delay + 460ms) — cut it short and the marker
+ * freezes half-scaled.
+ */
+const ENTRANCE_MS = 1500;
+
 export function openSearch(kind) {
   if (!['origin', 'destination'].includes(kind)) return;
   clearTimeout(_searchDebounce);
@@ -321,14 +329,27 @@ export function startNavigation() {
 
   render();
 
-  // After render: animate the route in and frame the CURRENT LEG close up.
+  // After render: play the entrance and frame the CURRENT LEG close up.
   // The old whole-route overview left the route as a small squiggle in a
   // large dark field on a phone; autoFitRoute zooms to the leg being walked.
+  //
+  // ENTRANCE. One class on .sg-map-inner drives the whole choreography in
+  // CSS: the plan settles in, the route draws itself along its length, then
+  // the markers pop in origin → landmarks → destination. It has to come off
+  // again (ENTRANCE_MS), because the route overlay and POI layers are
+  // re-rendered inside this element on every step change — leave the class
+  // on and each step would replay the whole opening sequence.
+  //
+  // Nothing here animates the header, the FABs or the sheet: autoFitRoute
+  // measures those three elements to work out the visible region, and a
+  // moving target gives a wrong frame.
   if (!prefersReducedMotion()) {
     requestAnimationFrame(() => {
-      // Class renamed with the map restyle: .sg-route-active → the active leg
-      const routeEl = document.querySelector('.sg-route__line.is-active');
-      if (routeEl) { routeEl.classList.add('sg-route-draw'); }
+      const inner = $('map-inner');
+      if (inner) {
+        inner.classList.add('is-entering');
+        setTimeout(() => inner.classList.remove('is-entering'), ENTRANCE_MS);
+      }
       setTimeout(() => autoFitRoute(), 100);
     });
   } else {

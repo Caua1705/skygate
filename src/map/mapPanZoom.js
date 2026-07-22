@@ -3,14 +3,35 @@ import { getFloorTransform } from '../state/selectors.js';
 import { mapState } from '../state/appState.js';
 import { clamp } from '../utils/format.js';
 import { MAX_SCALE, MIN_SCALE } from '../app/constants.js';
+import { buildLabelLayerHtml } from './floorMapBuilder.js';
 
 /* ============================================================
    8. MAP PAN & ZOOM
    ============================================================ */
 
+/* Captions are placed against the framing they will actually be seen in:
+   buildLabelLayerHtml() projects the floating controls back into map space
+   to avoid them, and that projection depends on the live pan/zoom. Every
+   re-frame therefore has to re-place them once it has settled.
+
+   Only ANIMATED transforms qualify. duration > 0 means a deliberate
+   re-frame (a fit, a floor change, a recentre) — a handful per session.
+   duration === 0 is a drag or a pinch, which arrives once per frame with a
+   finger down; re-laying out captions there would rebuild the layer sixty
+   times a second for a view the user is still choosing. */
+let _labelRelayout = 0;
+function relayoutLabelsAfter(duration) {
+  clearTimeout(_labelRelayout);
+  _labelRelayout = setTimeout(() => {
+    const el = $('map-labels');
+    if (el) el.innerHTML = buildLabelLayerHtml(mapState.selectedFloorId);
+  }, duration + 40);
+}
+
 export function applyMapTransform(duration = 0) {
   const wrapper = $('map-wrapper');
   if (!wrapper) return;
+  if (duration > 0) relayoutLabelsAfter(duration);
   const { x, y, scale } = getFloorTransform(mapState.selectedFloorId);
   const inner = wrapper.querySelector('.sg-map-inner');
   if (inner) {

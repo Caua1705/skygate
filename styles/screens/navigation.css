@@ -40,23 +40,31 @@
   .sg-nav-screen { --nav-map-h: 48%; }
 }
 
-/* ── Map area ───────────────────────────────────────── */
+/* ── Map area: the dark STAGE ───────────────────────────
+   A flat fill made the map read as "screen failed to load". The radial
+   gradient puts a faint pool of light under the middle of the frame and
+   lets the corners fall away — the plan now sits IN a space instead of on
+   a black rectangle. Painted on the area, not on the SVG, so it keeps
+   covering the frame when the user pans past the edge of the plan. */
 .sg-map-area {
   position: absolute;
   top: 0; left: 0; right: 0;
   height: var(--nav-map-h);
   overflow: hidden;
-  background: var(--map-bg);
+  background:
+    radial-gradient(125% 95% at 50% 36%,
+      #16375A 0%, #102A49 38%, #0A1B31 72%, #050E1C 100%);
   touch-action: none; cursor: grab;
 }
 .sg-map-area.is-grabbing { cursor: grabbing; }
 
-/* Soft vignette so the sheet reads as lifted off the map */
+/* Vignette on top of the stage: deepens the edges further and darkens the
+   band where the sheet meets the map, so the sheet reads as lifted. */
 .sg-map-area::after {
   content: ''; position: absolute; inset: 0; pointer-events: none;
   background:
-    radial-gradient(120% 80% at 50% 30%, transparent 40%, rgba(6, 18, 33, .55) 100%),
-    linear-gradient(to bottom, rgba(6, 18, 33, .45) 0%, transparent 22%, transparent 72%, rgba(6, 18, 33, .55) 100%);
+    radial-gradient(110% 78% at 50% 34%, transparent 34%, rgba(4, 12, 24, .62) 100%),
+    linear-gradient(to bottom, rgba(4, 12, 24, .50) 0%, transparent 20%, transparent 68%, rgba(4, 12, 24, .62) 100%);
 }
 
 .sg-map-wrapper {
@@ -96,132 +104,250 @@
 .sg-map-layer--pois  { pointer-events: none; }
 .sg-map-layer--pois .sg-poi { pointer-events: auto; }
 
+/* Caption layer sits above the POIs and never intercepts a gesture — a
+   caption is a label, not a target, and swallowing drags here would make
+   the map feel broken exactly where the eye is drawn. */
+.sg-map-layer--labels { pointer-events: none; }
+
 .sg-map-svg {
   display: block; width: 100%; height: 100%;
   user-select: none; -webkit-user-select: none;
 }
-.sg-map-base { background: var(--map-bg); overflow: hidden; }
+.sg-map-base { background: transparent; overflow: hidden; }
 
-/* ── Base plan: quiet context, but it has to be legible ──
-   Still clearly secondary to the route; the previous alphas (.028 zones,
-   .085 dividers) were below the threshold where anything reads as a plan
-   at all on a phone in daylight. */
-.sg-map__bg        { fill: var(--map-bg); }
-.sg-map__terminal  { fill: var(--map-surface); stroke: var(--map-line); stroke-width: 2; }
-.sg-map__zone      { fill: rgba(41, 171, 226, .07); stroke: rgba(140, 200, 235, .13); stroke-width: 1; }
-.sg-map__divider   { stroke: rgba(140, 200, 235, .26); stroke-width: 1.2; stroke-dasharray: 5 7; }
-
-.sg-map__vert-disc  { fill: rgba(10, 25, 47, .55); stroke: rgba(140, 200, 235, .5); stroke-width: 1.4; }
-.sg-map__vert-glyph { fill: none; stroke: #BFE4F7; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-
-.sg-map__gate-chip  { fill: rgba(140, 200, 235, .16); stroke: rgba(140, 200, 235, .3); stroke-width: .8; }
-.sg-map__gate-label {
-  fill: #DCEEF9;                       /* 12:1 on the chip over the plan */
-  font-family: Inter, system-ui, sans-serif; font-size: 7.5px; font-weight: 700;
-}
+/* ── Base plan: GHOST ARCHITECTURE ──────────────────────
+   Contours only, no fills, at alphas that sit just at the edge of
+   perception. The plan's job is to say "there is a building here" and then
+   get out of the way; anything more legible starts competing with the
+   route for attention, which is precisely what made the old map read as
+   generic clutter. Everything a traveller must actually see — the line,
+   where they are, where they are going — is painted below at full strength. */
+.sg-map__bg        { fill: transparent; }   /* the stage gradient shows through */
+.sg-map__terminal  { fill: rgba(41, 171, 226, .022); stroke: rgba(105, 205, 245, .10); stroke-width: 1.5; }
+.sg-map__zone      { fill: none; stroke: rgba(105, 205, 245, .07); stroke-width: 1; }
+.sg-map__divider   { stroke: rgba(105, 205, 245, .06); stroke-width: 1; stroke-dasharray: 4 10; }
 .sg-map__watermark {
-  fill: rgba(200, 226, 242, .3);
-  font-family: Inter, system-ui, sans-serif; font-size: 11px; font-weight: 600;
+  fill: rgba(150, 200, 232, .16);
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 11px; font-weight: 600; letter-spacing: .08em;
 }
 
-/* ── Route: the subject ─────────────────────────────── */
+/* ── Route: the subject, and the only bright thing ───────
+   Five stacked strokes, widest and faintest first, build a neon bloom:
+     halo   26px @ .07  — the outer air
+     halo2  16px @ .13
+     halo3   9px @ .28  — the tight glow that hugs the line
+     line   6.5px       — the body, on the direction-of-travel gradient
+     core     2px       — the white filament down the middle
+   Still no SVG filter: feGaussianBlur over a route this long, in a
+   container the user can pinch to 8x, repaints the whole blurred region on
+   every pan frame and locked up the renderer under test. Layered strokes
+   are ordinary path painting and survive zoom for free. */
 .sg-route__halo,
 .sg-route__halo2,
+.sg-route__halo3,
 .sg-route__line,
 .sg-route__core,
 .sg-route__flow { fill: none; stroke-linecap: round; stroke-linejoin: round; }
 
-/* Two stacked translucent strokes fake the bloom that feGaussianBlur used
-   to draw, at a fraction of the paint cost. */
-.sg-route__halo  { stroke: var(--map-accent); stroke-width: 24;  opacity: .14; }
-.sg-route__halo2 { stroke: var(--map-accent); stroke-width: 15;  opacity: .24; }
-.sg-route__line  { stroke: var(--map-accent); stroke-width: 7.5; }
-.sg-route__core  { stroke: #EAF8FF;           stroke-width: 2.2; opacity: .9; }
+.sg-route__halo  { stroke: var(--map-accent); stroke-width: 26;  opacity: .07; }
+.sg-route__halo2 { stroke: var(--map-accent); stroke-width: 16;  opacity: .13; }
+.sg-route__halo3 { stroke: #5FD2F5;           stroke-width: 9;   opacity: .28; }
+.sg-route__line  { stroke: url(#sgRouteGrad); stroke-width: 6.5; }
+.sg-route__core  { stroke: #EAF8FF;           stroke-width: 2;   opacity: .92; }
 
-.sg-route__halo.is-completed  { stroke-width: 13; opacity: .05; }
-.sg-route__halo2.is-completed { stroke-width: 8;  opacity: .08; }
-.sg-route__line.is-completed  { stroke-width: 4;  opacity: .34; }
-.sg-route__core.is-completed  { stroke-width: 1.2; opacity: .28; }
+/* Already walked: present, but clearly behind you. */
+.sg-route__halo.is-completed  { opacity: 0; }
+.sg-route__halo2.is-completed { stroke-width: 8;  opacity: .05; }
+.sg-route__halo3.is-completed { stroke-width: 5;  opacity: .09; }
+.sg-route__line.is-completed  { stroke-width: 3.5; opacity: .30; }
+.sg-route__core.is-completed  { stroke-width: 1;  opacity: .22; }
 
-.sg-route__halo.is-upcoming   { stroke-width: 17; opacity: .08; }
-.sg-route__halo2.is-upcoming  { stroke-width: 10; opacity: .12; }
-.sg-route__line.is-upcoming   { stroke-width: 5;  opacity: .62; }
-.sg-route__core.is-upcoming   { stroke-width: 1.5; opacity: .55; }
+/* Still ahead but not this step: dimmer than the active leg, brighter than
+   what is done — the eye should be able to read the shape of the trip. */
+.sg-route__halo.is-upcoming   { opacity: .04; }
+.sg-route__halo2.is-upcoming  { stroke-width: 11; opacity: .08; }
+.sg-route__halo3.is-upcoming  { stroke-width: 7;  opacity: .16; }
+.sg-route__line.is-upcoming   { stroke-width: 4.5; opacity: .60; }
+.sg-route__core.is-upcoming   { stroke-width: 1.3; opacity: .48; }
 
 .sg-route__spot { fill: var(--map-accent); stroke: #EAF8FF; stroke-width: 2; }
 
-/* Flow: a short bright dash travelling along the active leg, in the
-   direction of travel. One element, so the non-composited dashoffset
-   animation stays cheap even on a mid-range phone. */
+/* Flow: a short bright pulse running along the active leg in the direction
+   of travel. Because the polyline declares pathLength="100", the dash is in
+   percent-of-route units — one pulse is 6% of the leg whether that leg is
+   90 units or 900, and one traversal always takes the same time. One
+   element and one non-composited property, so it stays cheap on a phone. */
 .sg-route__flow {
-  stroke: #EAF8FF; stroke-width: 3; opacity: .85;
-  stroke-dasharray: 26 190;
+  stroke: #FFFFFF; stroke-width: 2.6; opacity: 0;
+  stroke-dasharray: 6 94; stroke-dashoffset: 100;
 }
 
 /* ── Markers ────────────────────────────────────────── */
+/* Every animated marker group scales about its own centre, not the map's
+   top-left. .sg-pop is the inner group the keyframes touch. */
+.sg-pop { transform-box: fill-box; transform-origin: center; }
+
 .sg-map-pin__body { fill: #FFFFFF; stroke: rgba(9, 24, 42, .3); stroke-width: .8; }
 .sg-map-pin__core { fill: var(--map-surface); }
 
-.sg-map-pin--dest .sg-map-pin__body { fill: var(--map-accent); stroke: rgba(9, 24, 42, .35); }
-.sg-map-pin--dest .sg-map-pin__core { fill: #FFFFFF; }
+.sg-map-pin--dest .sg-map-pin__body { fill: #EAF8FF; stroke: rgba(9, 24, 42, .35); }
+.sg-map-pin--dest .sg-map-pin__core { fill: var(--map-accent); }
 .sg-map-pin--step .sg-map-pin__body { fill: #DCEEF9; }
 .sg-map-pin--step .sg-map-pin__core { fill: var(--map-accent-deep); }
 
-/* Halos use the radial gradient from <defs> — no filter, no blur region. */
-.sg-map-dest__halo { fill: url(#sgHalo); }
+/* Halos use radial gradients from <defs> — no filter, no blur region. */
+.sg-map-dest__halo { fill: url(#sgHaloDest); }
+.sg-map-dest__glow { fill: url(#sgHaloDest); opacity: .45; }
 
-/* "Você está aqui" — turquoise dot, soft halo, breathing ring */
+/* "Você está aqui" — turquoise dot with two radar waves */
 .sg-map-here__halo   { fill: url(#sgHalo); }
 .sg-map-here__dot    { fill: var(--map-accent); stroke: #FFFFFF; stroke-width: 3; }
 .sg-map-here__center { fill: #FFFFFF; }
-/* fill-box origin: the circle sits at 0,0 inside a translated <g>, and the
-   default view-box origin would scale it from the map's top-left corner. */
-.sg-map-here__pulse  {
-  fill: none; stroke: var(--map-accent); stroke-width: 2.5; opacity: 0;
+.sg-map-here__wave   {
+  fill: none; stroke: #5FD2F5; stroke-width: 2; opacity: 0;
   transform-box: fill-box; transform-origin: center;
 }
 
-/* ── Captions (placed by layoutLabels — never overlapping) ── */
-.sg-map-label__box  { fill: #071A2E; opacity: .94; }
-.sg-map-label__text { font-family: Inter, system-ui, sans-serif; font-size: 12.5px; }
-/* #FFFFFF on #071A2E ≈ 17:1; the muted line still clears 8:1. */
-.sg-map-label__text.is-title { fill: #FFFFFF; font-weight: 700; }
-.sg-map-label__text.is-sub   { fill: rgba(255, 255, 255, .74); font-weight: 500; }
-.sg-map-label--here .sg-map-label__box { fill: #08243C; }
-
 /* ── Route landmarks (doors, lifts on the way) ──────── */
-.sg-route-mark__ring { fill: #FFFFFF; stroke: var(--map-accent); stroke-width: 2; }
-.sg-route-mark__core { fill: var(--map-accent); }
+.sg-route-mark__ring { fill: #0B2138; stroke: var(--map-accent); stroke-width: 1.8; }
+.sg-route-mark__core { fill: #EAF8FF; }
 
-@media not (prefers-reduced-motion: reduce) {
-  .sg-route-draw {
-    stroke-dasharray: 1000;
-    stroke-dashoffset: 1000;
-    animation: routeReveal 420ms ease forwards;
-  }
-  @keyframes routeReveal {
-    from { stroke-dashoffset: 1000; }
-    to   { stroke-dashoffset: 0; }
-  }
+/* ── Caption capsules (HTML, glass) ─────────────────────
+   Positioned by placeLabels() in map units; 1 unit == 1px in this layer.
+   The rgba fill is opaque enough to carry AA on its own wherever
+   backdrop-filter is unsupported or disabled. */
+.sg-map-label {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 9px 12px;
+  border-radius: 11px;
+  background: rgba(8, 24, 42, .66);
+  border: 1px solid rgba(120, 205, 245, .20);
+  box-shadow:
+    0 8px 24px rgba(3, 10, 20, .48),
+    0 1px 2px rgba(3, 10, 20, .34),
+    inset 0 1px 0 rgba(255, 255, 255, .09);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  font-family: Inter, system-ui, sans-serif;
+  white-space: nowrap;
+}
+.sg-map-label__text { font-size: 12.5px; line-height: 17px; }
+/* #FFFFFF on that capsule ≈ 15:1; the muted line still clears 9:1. */
+.sg-map-label__text.is-title { color: #FFFFFF; font-weight: 700; }
+.sg-map-label__text.is-sub   { color: rgba(255, 255, 255, .76); font-weight: 500; }
 
-  .sg-route__flow { animation: routeFlow 2.6s linear infinite; }
-  @keyframes routeFlow {
-    from { stroke-dashoffset: 216; }
-    to   { stroke-dashoffset: 0; }
-  }
-
-  .sg-map-here__pulse { animation: herePulse 2.4s cubic-bezier(.4, 0, .2, 1) infinite; }
-  @keyframes herePulse {
-    0%   { transform: scale(.55); opacity: .8; }
-    70%  { transform: scale(1.5); opacity: 0; }
-    100% { transform: scale(1.5); opacity: 0; }
-  }
+/* The two endpoints get a turquoise edge; "here" leans cooler, the
+   destination brighter, matching the ends of the route gradient. */
+.sg-map-label--here {
+  border-color: rgba(41, 171, 226, .38);
+  box-shadow:
+    0 8px 24px rgba(3, 10, 20, .48),
+    0 0 0 1px rgba(41, 171, 226, .10),
+    inset 0 1px 0 rgba(255, 255, 255, .09);
+}
+.sg-map-label--dest {
+  border-color: rgba(111, 224, 255, .46);
+  box-shadow:
+    0 10px 28px rgba(3, 10, 20, .52),
+    0 0 22px rgba(41, 171, 226, .18),
+    inset 0 1px 0 rgba(255, 255, 255, .12);
 }
 
-/* Static fallback: no travelling dash, no breathing ring. */
+/* ── Motion ─────────────────────────────────────────────
+   Two kinds: the ENTRANCE (plays once, driven by .is-entering, which
+   actions.js removes when the sequence ends) and the AMBIENT loops (the
+   radar waves and the travelling pulse) that run for as long as the screen
+   is open. Both are off entirely under prefers-reduced-motion. */
+@media not (prefers-reduced-motion: reduce) {
+
+  /* --- Ambient --- */
+  .sg-route__flow {
+    animation:
+      routeFlow 3.4s linear infinite,
+      flowFadeIn 500ms ease 900ms both;
+  }
+  @keyframes routeFlow {
+    from { stroke-dashoffset: 100; }
+    to   { stroke-dashoffset: 0; }
+  }
+  @keyframes flowFadeIn { from { opacity: 0; } to { opacity: .9; } }
+
+  .sg-map-here__wave { animation: hereWave 2.9s cubic-bezier(.25, .6, .3, 1) infinite; }
+  .sg-map-here__wave--2 { animation-delay: 1.45s; }
+  @keyframes hereWave {
+    0%   { transform: scale(.55); opacity: .70; }
+    70%  { transform: scale(2.2);  opacity: 0; }
+    100% { transform: scale(2.2);  opacity: 0; }
+  }
+
+  /* --- Entrance: the plan settles, the route draws, markers arrive --- */
+  .sg-map-inner.is-entering .sg-map-layer--base {
+    animation: planSettle 720ms cubic-bezier(.22, .61, .36, 1) both;
+  }
+  @keyframes planSettle {
+    from { opacity: 0; transform: scale(1.045); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* The dash is listed per class rather than inherited from the <svg>:
+     stroke-dasharray IS an inherited property, so setting it on the root
+     would also dash every marker circle — and a circle whose circumference
+     is under 100 units lands in the "off" half of the dash and vanishes. */
+  .sg-map-inner.is-entering .sg-route__halo,
+  .sg-map-inner.is-entering .sg-route__halo2,
+  .sg-map-inner.is-entering .sg-route__halo3,
+  .sg-map-inner.is-entering .sg-route__line,
+  .sg-map-inner.is-entering .sg-route__core {
+    stroke-dasharray: 100;
+    animation: routeDraw 820ms cubic-bezier(.33, .8, .35, 1) both;
+  }
+  /* Drawn in travel order: what is behind you, then the leg you are on,
+     then the rest of the trip. */
+  .sg-map-inner.is-entering .is-active   { animation-delay: 110ms; }
+  .sg-map-inner.is-entering .is-upcoming { animation-delay: 220ms; }
+  @keyframes routeDraw {
+    from { stroke-dashoffset: 100; }
+    to   { stroke-dashoffset: 0; }
+  }
+
+  .sg-map-inner.is-entering .sg-map-here .sg-pop {
+    animation: markerPop 440ms cubic-bezier(.34, 1.4, .5, 1) 140ms both;
+  }
+  .sg-map-inner.is-entering .sg-route-mark .sg-pop {
+    animation: markerPop 360ms cubic-bezier(.34, 1.4, .5, 1) 560ms both;
+  }
+  .sg-map-inner.is-entering .sg-map-step .sg-pop {
+    animation: markerPop 400ms cubic-bezier(.34, 1.4, .5, 1) 640ms both;
+  }
+  .sg-map-inner.is-entering .sg-map-dest .sg-pop {
+    animation: markerPop 460ms cubic-bezier(.34, 1.4, .5, 1) 760ms both;
+  }
+  @keyframes markerPop {
+    from { opacity: 0; transform: scale(.3); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* Glows and captions are not part of the pop — they fade in behind it. */
+  .sg-map-inner.is-entering .sg-map-here__halo { animation: softIn 520ms ease 140ms both; }
+  .sg-map-inner.is-entering .sg-map-dest__glow,
+  .sg-map-inner.is-entering .sg-map-dest__halo { animation: softIn 560ms ease 760ms both; }
+  .sg-map-inner.is-entering .sg-map-label { animation: softIn 420ms ease 900ms both; }
+  /* Opacity only: .sg-poi carries a transform that counter-scales the map
+     zoom, and a transform keyframe here would wipe it out. */
+  .sg-map-inner.is-entering .sg-poi { animation: softIn 320ms ease 1020ms both; }
+  @keyframes softIn { from { opacity: 0; } to { opacity: 1; } }
+}
+
+/* Reduced motion: nothing moves. The route is simply there, the "here"
+   marker keeps one static ring instead of a radar sweep, and the
+   travelling pulse is dropped rather than parked mid-route. */
 @media (prefers-reduced-motion: reduce) {
   .sg-route__flow { display: none; }
-  .sg-map-here__pulse { opacity: .32; }
+  .sg-map-here__wave { opacity: .30; }
+  .sg-map-here__wave--2 { display: none; }
 }
 
 /* ── POI markers (HTML, positioned in SVG units) ────── */
@@ -237,42 +363,59 @@
   justify-content: center;
 }
 
-/* Filled turquoise disc with a dark glyph: reads as a tappable point at a
-   glance. The outline is a dark ring, not a light one — it separates the
-   dot from the plan whatever happens to sit behind it. */
+/* AT REST: an 8px dot and nothing else — no glyph, no ring, no caption.
+   This used to be a 26px turquoise disc with a category icon, repeated up
+   to ten times per screen; the map stopped being a route and became a list
+   of shops. The dot is deliberately quiet enough to scan past and bright
+   enough to notice when you go looking for it.
+   ON TOUCH: it grows (below) and the tap opens the detail card. */
 .sg-poi__dot {
-  display: grid; place-items: center;
-  width: 26px; height: 26px;
+  width: 8px; height: 8px;
   border-radius: 50%;
-  background: var(--map-accent);
-  border: 2px solid rgba(6, 26, 45, .7);
-  color: var(--map-ink);              /* #06263A on #29ABE2 → 7.4:1 */
-  font-size: 14px;
-  box-shadow: 0 0 0 1px rgba(140, 200, 235, .45), 0 2px 8px rgba(3, 12, 22, .6);
-  transition: transform var(--t-fast), box-shadow var(--t-fast);
+  background: #7FD8F5;
+  box-shadow:
+    0 0 0 2px rgba(6, 22, 40, .85),        /* separates it from the line */
+    0 0 10px rgba(41, 171, 226, .55);      /* faint bloom, matches the route */
+  transition: width var(--t-fast), height var(--t-fast),
+              background var(--t-fast), box-shadow var(--t-fast);
 }
-/* On the route: same disc, brighter halo ring so it stands out from the
-   POIs that merely happen to be nearby. */
+/* Literally on the route: a touch larger and whiter, so the places you
+   will actually walk past outrank the ones merely nearby. */
 .sg-poi.is-on-route .sg-poi__dot {
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, .85), 0 2px 10px rgba(3, 12, 22, .65);
+  width: 10px; height: 10px;
+  background: #FFFFFF;
+  box-shadow:
+    0 0 0 2px rgba(6, 22, 40, .85),
+    0 0 12px rgba(120, 220, 255, .75);
 }
 
-.sg-poi:hover  .sg-poi__dot,
-.sg-poi:focus  .sg-poi__dot { transform: scale(1.14); }
-.sg-poi:active .sg-poi__dot { transform: scale(.94); }
+/* Grow on hover, focus or press — the moment of interest, and the only
+   time a POI is allowed to be loud. */
+.sg-poi:hover .sg-poi__dot,
+.sg-poi:focus .sg-poi__dot,
+.sg-poi:active .sg-poi__dot {
+  width: 18px; height: 18px;
+  background: #FFFFFF;
+  box-shadow:
+    0 0 0 3px rgba(41, 171, 226, .9),
+    0 0 18px rgba(120, 220, 255, .8);
+}
 .sg-poi:focus { outline: none; }
-.sg-poi:focus .sg-poi__dot { outline: 2px solid #FFFFFF; outline-offset: 2px; }
+.sg-poi:focus-visible .sg-poi__dot { outline: 2px solid #FFFFFF; outline-offset: 3px; }
 
 /* Label is opt-in: hover or keyboard focus only. Showing every name at
    once is what turns a map into noise. On touch, the tap opens the card,
    which leads with the name anyway. */
 .sg-poi__label {
-  position: absolute; top: calc(100% + 3px);
+  position: absolute; top: calc(100% + 5px);
   max-width: 132px;
-  padding: 3px 8px;
-  border-radius: 7px;
-  background: #071A2E;
-  color: #FFFFFF;                 /* ~17:1 on that navy */
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: rgba(7, 26, 46, .78);
+  border: 1px solid rgba(120, 205, 245, .22);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #FFFFFF;                 /* ~15:1 on that navy */
   font-size: 11px; font-weight: 600; line-height: 1.3;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   opacity: 0; pointer-events: none;
@@ -346,18 +489,40 @@
   display: flex; flex-direction: column; gap: 16px;
 }
 
+/* Dark glass: the map reads through them, so they float above the stage
+   instead of sitting on it as solid navy coins. There are only two, which
+   is why the blur is affordable here — see the note on the map FAB blur
+   budget at the bottom of this file. */
 .sg-map-fab {
   position: relative;
   width: var(--nav-fab-size); height: var(--nav-fab-size);
   display: grid; place-items: center;
   border-radius: 50%;
-  background: var(--nav-navy); color: #ffffff;
+  background: rgba(10, 28, 50, .58);
+  border: 1px solid rgba(120, 205, 245, .20);
+  color: #EAF7FF;
   font-size: 22px;
-  box-shadow: var(--nav-fab-shadow);
-  transition: background var(--t-fast), transform var(--t-fast);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow:
+    0 8px 24px rgba(3, 10, 20, .45),
+    inset 0 1px 0 rgba(255, 255, 255, .10);
+  transition: background var(--t-fast), transform var(--t-fast),
+              border-color var(--t-fast), box-shadow var(--t-fast);
 }
-.sg-map-fab:hover { background: #16355a; }
-.sg-map-fab:active { transform: scale(.94); }
+/* Turquoise bloom on the glyph only — the button stays neutral glass. */
+.sg-map-fab > .sg-ico,
+.sg-map-fab > iconify-icon { filter: drop-shadow(0 0 6px rgba(41, 171, 226, .65)); }
+
+.sg-map-fab:hover {
+  background: rgba(18, 46, 78, .68);
+  border-color: rgba(120, 205, 245, .34);
+  box-shadow:
+    0 10px 28px rgba(3, 10, 20, .5),
+    0 0 18px rgba(41, 171, 226, .22),
+    inset 0 1px 0 rgba(255, 255, 255, .14);
+}
+.sg-map-fab:active { transform: scale(.93); }
 .sg-map-fab:focus-visible { outline: 2px solid var(--map-accent); outline-offset: 3px; }
 
 .sg-floor-ctrl { position: relative; }
@@ -428,3 +593,18 @@
 }
 .sg-floor-announce.is-visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 .sg-floor-announce--manual { background: var(--map-accent-deep); }
+
+/* ── BLUR BUDGET (read before adding another glass surface) ──
+   backdrop-filter is the most expensive thing on this screen: the compositor
+   has to snapshot and blur whatever is behind the element, and it redoes
+   that work whenever the backdrop changes — which, over a map that pans and
+   zooms, means every frame the finger is down.
+   Blurred surfaces over the map, deliberately kept few and small:
+     · 2 FABs (54px circles)
+     · up to 3 caption capsules (~200x45)
+     · 1 POI label, only while hovered/focused
+     · the header scrim (::before, masked)
+   The map itself, the route SVG and the POI dots use no blur at all — they
+   are ordinary paint, so panning stays cheap. If a new glass element is
+   large, or there would be many of it, use a solid rgba fill instead: at
+   these alphas the difference is barely visible and the cost is nil. */
