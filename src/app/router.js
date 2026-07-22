@@ -9,6 +9,7 @@ import { renderFloorControl, renderNavigation } from '../screens/navigation/Navi
 import { bindEvents, bindFloorControlEvents, bindMapPoiEvents, bindSearchItemEvents } from './events.js';
 import { applyMapTransform, bindMapPan } from '../map/mapPanZoom.js';
 import { autoFitRoute } from '../map/mapFit.js';
+import { scrollTimelineToCurrent } from './actions.js';
 import { buildLabelLayerHtml, buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../map/floorMapBuilder.js';
 import { getFloorLabel } from '../state/selectors.js';
 import { filterNodes, groupByCategory } from '../services/nodeSearch.js';
@@ -26,8 +27,13 @@ export function render() {
   }
   bindEvents();
   if (app.mode === 'navigation') {
+    // Both are no-ops without the map DOM, so the timeline view costs
+    // nothing here and the map view keeps its previous behaviour.
     applyMapTransform(0);
     bindMapPan();
+    // The traveller must land on the step they are actually on, not at the
+    // top of a route they are halfway through.
+    if (navState.view !== 'map') requestAnimationFrame(() => scrollTimelineToCurrent('auto'));
   }
 }
 

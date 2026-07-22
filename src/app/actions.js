@@ -1,9 +1,10 @@
 import { SEARCH_CATEGORIES } from '../services/nodePresentation.js';
-import { _searchDebounce, bindInstructionSwipe } from './events.js';
+import { _searchDebounce, bindInstructionSwipe, bindTimelinePlaceEvents } from './events.js';
 import { app, appData, mapState, navState, planState, uiState } from '../state/appState.js';
 import { render, updateRouteOverlay } from './router.js';
 import { findNode } from '../state/selectors.js';
 import { renderInstructionCardInner, renderOverlayOverview } from '../screens/navigation/NavigationScreen.js';
+import { renderSummaryStrip, renderTimelineList } from '../screens/navigation/NavigationTimeline.js';
 import { switchFloor } from '../map/floorSwitch.js';
 import { autoFitRoute, fitStepToView } from '../map/mapFit.js';
 import { prefersReducedMotion , $ } from '../utils/dom.js';
@@ -21,6 +22,15 @@ import { formatMeters, pathMeters, segmentMeters } from '../services/routeSteps.
  * freezes half-scaled.
  */
 const ENTRANCE_MS = 1500;
+
+/**
+ * How long the timeline entrance runs, in ms. Must outlast the last node's
+ * stagger — see `--i` in the .sg-tl__item rules — so a long route's bottom
+ * rows are not frozen mid-fade when the class comes off. The stagger is
+ * capped in CSS, which is what keeps this a constant and not a function of
+ * the step count.
+ */
+const TIMELINE_ENTRANCE_MS = 1400;
 
 export function openSearch(kind) {
   if (!['origin', 'destination'].includes(kind)) return;
@@ -321,6 +331,8 @@ export function startNavigation() {
   if (!navState.semanticSteps.length) return;
   app.mode = 'navigation';
   navState.activeStepIndex = 0;
+  // Always open on the timeline, whichever view was left behind last time.
+  navState.view = 'timeline';
 
   const firstStep = navState.semanticSteps[0];
   const targetFloor = firstStep?.floorId || findNode(planState.originCode)?.floorId || mapState.selectedFloorId;
@@ -328,7 +340,43 @@ export function startNavigation() {
   mapState.manualFloor = false;
 
   render();
+  playTimelineEntrance();
+}
 
+/**
+ * Timeline entrance: the nodes fade in top-to-bottom and the connector grows
+ * down behind them. Driven by one class, like the map entrance, and removed
+ * when it ends — the list is re-rendered in place on every step change, and
+ * a class left on would replay the whole opening each time.
+ */
+function playTimelineEntrance() {
+  const screen = $('nav-screen');
+  if (!screen || prefersReducedMotion()) return;
+  screen.classList.add('is-entering');
+  setTimeout(() => screen.classList.remove('is-entering'), TIMELINE_ENTRANCE_MS);
+}
+
+/** Switch to the top-down map view and play its own entrance. */
+export function showRouteMap() {
+  if (!navState.route) return;
+  navState.view = 'map';
+  const step = navState.semanticSteps[navState.activeStepIndex];
+  if (step?.floorId) mapState.selectedFloorId = step.floorId;
+  mapState.manualFloor = false;
+  render();
+  playMapEntrance();
+  bindInstructionSwipe();
+}
+
+/** Back from the map to the timeline, on the same step. */
+export function showTimeline() {
+  navState.view = 'timeline';
+  render();
+  playTimelineEntrance();
+  scrollTimelineToCurrent('auto');
+}
+
+function playMapEntrance() {
   // After render: play the entrance and frame the CURRENT LEG close up.
   // The old whole-route overview left the route as a small squiggle in a
   // large dark field on a phone; autoFitRoute zooms to the leg being walked.
@@ -355,7 +403,6 @@ export function startNavigation() {
   } else {
     requestAnimationFrame(() => autoFitRoute(0));
   }
-  bindInstructionSwipe();
 }
 
 export function exitNavigation() {
@@ -367,35 +414,89 @@ export function exitNavigation() {
 export function goToStep(idx) {
   const total = navState.semanticSteps.length;
   if (idx < 0 || idx >= total) return;
-  navState.activeStepIndex = idx;
-  const step = navState.semanticSteps[idx];
-  if (step?.floorId && step.floorId !== mapState.selectedFloorId) {
-    switchFloor(step.floorId, false);
-  }
-  updateInstructionCard();
-  updateRouteOverlay();
-  requestAnimationFrame(() => fitStepToView(idx));
-  announceStep(idx, step);
+  applyStepChange(idx);
 }
 
 export function advanceStep(delta) {
   const total = navState.semanticSteps.length;
   const next  = navState.activeStepIndex + delta;
   if (next < 0 || next >= total) return;
-  navState.activeStepIndex = next;
+  applyStepChange(next);
+}
 
-  const step = navState.semanticSteps[next];
+/**
+ * Move the active step and refresh whichever view is on screen.
+ *
+ * The two views share the state but not the update path: the timeline swaps
+ * its list and scrolls, the map redraws its overlay and re-frames. Doing
+ * both regardless would run the map's fit against elements that are not in
+ * the document, which is how you get a silent ReferenceError per keypress.
+ */
+function applyStepChange(idx) {
+  navState.activeStepIndex = idx;
+  const step = navState.semanticSteps[idx];
   if (step?.floorId && step.floorId !== mapState.selectedFloorId) {
     switchFloor(step.floorId, false);
   }
 
-  // Update only changed parts (no full re-render)
-  updateInstructionCard();
-  updateRouteOverlay();
-  // Always re-frame; fitStepToView itself drops the animation to 0ms under
-  // prefers-reduced-motion, so skipping it entirely just left the map behind.
-  requestAnimationFrame(() => fitStepToView(next));
-  announceStep(next, step);
+  if (navState.view === 'map') {
+    // Update only changed parts (no full re-render)
+    updateInstructionCard();
+    updateRouteOverlay();
+    // Always re-frame; fitStepToView itself drops the animation to 0ms under
+    // prefers-reduced-motion, so skipping it entirely just left the map behind.
+    requestAnimationFrame(() => fitStepToView(idx));
+  } else {
+    updateTimeline();
+  }
+
+  announceStep(idx, step);
+}
+
+/**
+ * Re-render the timeline list in place and bring the new current node into
+ * view. The list is swapped rather than diffed because a step change moves
+ * the done/current/upcoming boundary on nearly every row anyway.
+ */
+export function updateTimeline() {
+  const list = $('tl-list');
+  if (!list) return;
+  list.innerHTML = renderTimelineList();
+  bindTimelinePlaceEvents();
+  updateTimelineFooter();
+  scrollTimelineToCurrent();
+}
+
+/** Keep "Próximo"/"Chegou!" and the summary strip honest after a step. */
+function updateTimelineFooter() {
+  const isLast = navState.activeStepIndex >= navState.semanticSteps.length - 1;
+  const next = $('nav-next');
+  if (next) {
+    next.disabled = isLast;
+    const label = next.querySelector('span');
+    if (label) label.textContent = isLast ? 'Chegou!' : 'Próximo';
+  }
+  const strip = document.querySelector('.sg-tl__strip');
+  if (strip) strip.outerHTML = renderSummaryStrip();
+}
+
+/**
+ * Scroll the current node to a comfortable reading position — a third down
+ * the viewport, not dead centre, so the steps that come NEXT are the ones
+ * filling the screen below it.
+ */
+export function scrollTimelineToCurrent(behavior) {
+  const scroller = $('tl-scroll');
+  const current  = document.querySelector('.sg-tl__item.is-current');
+  if (!scroller || !current) return;
+  const mode = behavior ?? (prefersReducedMotion() ? 'auto' : 'smooth');
+  // Measured from rects, not offsetTop. Timeline items are position:relative
+  // but the scroller is not, so their offsetParent is the fixed screen —
+  // offsetTop therefore included the header and scrolled every step short by
+  // its height. Rect deltas do not care what the offsetParent happens to be.
+  const delta = current.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+  const top = scroller.scrollTop + delta - scroller.clientHeight * 0.28;
+  scroller.scrollTo({ top: Math.max(0, top), behavior: mode });
 }
 
 export function updateInstructionCard() {

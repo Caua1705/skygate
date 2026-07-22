@@ -6,7 +6,7 @@
  *
  * @example
  *   dsIcon('solar:clock-circle-bold')
- *   dsIcon('solar:elevator-bold', 'ds-metric__glyph')
+ *   dsIcon('solar:round-transfer-vertical-bold', 'ds-metric__glyph')
  *
  * Decorative by default: aria-hidden, because the surrounding component
  * carries the accessible name. Pass `label` only when the icon itself is

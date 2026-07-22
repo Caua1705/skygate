@@ -46,14 +46,22 @@ export const SEARCH_CATEGORIES = [
   { key:'shops',       label:'Lojas',                        icon:'solar:bag-4-bold',           types:['shop','pharmacy'] },
   { key:'restrooms',   label:'Banheiros',                    icon:'solar:bath-bold',            types:['restroom'] },
   { key:'services',    label:'Serviços',                     icon:'solar:info-circle-bold',     types:['service','service_area','atm','currency_exchange','medical','lounge','car_rental','transport_service','checkin'] },
-  { key:'access',      label:'Entradas e saídas',            icon:'solar:door-bold',            types:['entrance','exit'] },
-  { key:'circulation', label:'Acessibilidade e circulação',  icon:'solar:elevator-bold',        types:['elevator','stairs','escalator'] },
+  { key:'access',      label:'Entradas e saídas',            icon:'solar:exit-bold',            types:['entrance','exit'] },
+  { key:'circulation', label:'Acessibilidade e circulação',  icon:'solar:round-transfer-vertical-bold', types:['elevator','stairs','escalator'] },
 ];
 
-/* ── TYPE META ────────────────────────────────────────────── */
+/* ── TYPE META ──────────────────────────────────────────────
+   ICON NAMES ARE VERIFIED AGAINST THE SET, NOT GUESSED. `solar:door-bold`,
+   `solar:elevator-bold` and `solar:stairs-bold` were all in this table and
+   none of them exist in Solar — <iconify-icon> renders an empty 0x0 box for
+   an unknown name, silently, so entrances, lifts and stairs had been drawing
+   as blank circles everywhere they appeared. Solar simply has no lift or
+   stairs glyph; the transfer-vertical pair is the closest true match for
+   "moves you between floors". Check a new name at
+   https://api.iconify.design/solar.json?icons=<name> before adding it. */
 const _TYPE_META = {
   gate:              { publicType:'Portão',               icon:'solar:routing-2-bold',           color:'#1e3a5f' },
-  entrance:          { publicType:'Entrada',              icon:'solar:door-bold',                color:'#1e3a5f' },
+  entrance:          { publicType:'Entrada',              icon:'solar:login-2-bold',             color:'#1e3a5f' },
   exit:              { publicType:'Saída',                icon:'solar:exit-bold',                color:'#1e3a5f' },
   checkin:           { publicType:'Check-in',             icon:'solar:case-round-bold',          color:'#1e3a5f' },
   restroom:          { publicType:'Banheiro',             icon:'solar:bath-bold',                color:'#475569' },
@@ -68,8 +76,8 @@ const _TYPE_META = {
   transport_service: { publicType:'Transporte',           icon:'solar:bus-bold',                 color:'#475569' },
   service:           { publicType:'Serviço',              icon:'solar:info-circle-bold',         color:'#475569' },
   service_area:      { publicType:'Área de Serviços',     icon:'solar:info-circle-bold',         color:'#475569' },
-  elevator:          { publicType:'Elevador',             icon:'solar:elevator-bold',            color:'#d97706' },
-  stairs:            { publicType:'Escada',               icon:'solar:stairs-bold',              color:'#d97706' },
+  elevator:          { publicType:'Elevador',             icon:'solar:round-transfer-vertical-bold', color:'#d97706' },
+  stairs:            { publicType:'Escada',               icon:'solar:transfer-vertical-bold',   color:'#d97706' },
   escalator:         { publicType:'Escada Rolante',       icon:'solar:sort-vertical-bold',       color:'#d97706' },
   corridor:          { publicType:'Corredor',             icon:'solar:arrow-right-bold',         color:'#94a3b8' },
   waypoint:          { publicType:'Passagem',             icon:'solar:arrow-right-bold',         color:'#94a3b8' },

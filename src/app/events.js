@@ -1,5 +1,5 @@
 import { $ } from '../utils/dom.js';
-import { advanceStep, clearLocation, closeLocationDetail, closePlaceDetail, closeOverview, closeSearch, editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail, openPlaceFromMap, openPlaceOrLocationDetail, openOverview, openSearch, returnToCurrentStep, selectLocation, setRouteMode, showHelp, startNavigation, swapLocations, toggleAccessibleRoute, traceRouteToLocation, tracePlaceRoute } from './actions.js';
+import { advanceStep, clearLocation, closeLocationDetail, closePlaceDetail, closeOverview, closeSearch, editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail, openPlaceFromMap, openPlaceOrLocationDetail, openOverview, openSearch, returnToCurrentStep, selectLocation, setRouteMode, showHelp, showRouteMap, showTimeline, startNavigation, swapLocations, toggleAccessibleRoute, traceRouteToLocation, tracePlaceRoute } from './actions.js';
 import { handleCalculate } from './routeController.js';
 import { init } from './bootstrap.js';
 import { app, navState, uiState } from '../state/appState.js';
@@ -54,6 +54,11 @@ export function bindEvents() {
 
   // Navigation
   $('exit-nav-btn')?.addEventListener('click', exitNavigation);
+  // Timeline ⇄ map. "Ver trajeto" opens the top-down plan for now.
+  // TODO(trajeto): swap showRouteMap() for the schematic metro view.
+  $('view-route-btn')?.addEventListener('click', showRouteMap);
+  $('back-to-timeline-btn')?.addEventListener('click', showTimeline);
+  bindTimelinePlaceEvents();
   $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
   $('nav-next')?.addEventListener('click', () => advanceStep(1));
   $('fit-segment-btn')?.addEventListener('click', () => autoFitRoute());
@@ -123,6 +128,18 @@ export function bindFocusTrap(container) {
  * POI markers live in their own layer that is re-rendered on every step and
  * floor change, so this is exported and called again after those updates.
  */
+/**
+ * Timeline nodes that carry a business open the same rich card as the map
+ * POIs and the search list — same action, so the "No seu caminho" context
+ * line comes along for free. Exported because the list is re-rendered on
+ * every step change.
+ */
+export function bindTimelinePlaceEvents() {
+  document.querySelectorAll('.sg-tl__hit[data-place-code]').forEach(btn =>
+    btn.addEventListener('click', () => openPlaceFromMap(btn.dataset.placeCode))
+  );
+}
+
 export function bindMapPoiEvents() {
   document.querySelectorAll('.sg-poi').forEach(btn =>
     btn.addEventListener('click', e => {
@@ -233,6 +250,9 @@ document.addEventListener('keydown', e => {
     if (uiState.showOverview)  { closeOverview(); return; }
     if (uiState.searchOpenFor) { e.preventDefault(); closeSearch(); return; }
     if (uiState.floorMenuOpen) { uiState.floorMenuOpen = false; document.getElementById('floor-ctrl')?.querySelector('button')?.focus(); return; }
+    // Escape unwinds one layer at a time, matching the back button: from the
+    // map back to the timeline, and only from the timeline out of the trip.
+    if (app.mode === 'navigation' && navState.view === 'map') { showTimeline(); return; }
     if (app.mode === 'navigation') { exitNavigation(); return; }
   }
   if (app.mode === 'navigation' && !uiState.searchOpenFor && !uiState.showOverview) {

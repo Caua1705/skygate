@@ -122,7 +122,7 @@ export function buildFromSteps(steps, accessible) {
     const trans = buf.find(s => s.isTransition);
     if (trans) {
       const t = cleanStepText(trans.text);
-      if (t) semantic.push({ text: t, isTransition: true, floorId: trans.floorId, toFloor: trans.floorId, icon: 'solar:elevator-bold', nodeType: 'elevator', rawFrom: 0, rawTo: 0, landmarkCode: null });
+      if (t) semantic.push({ text: t, isTransition: true, floorId: trans.floorId, toFloor: trans.floorId, icon: 'solar:round-transfer-vertical-bold', nodeType: 'elevator', rawFrom: 0, rawTo: 0, landmarkCode: null });
     } else {
       const goodTexts = buf.map(s => s.text).filter(t => t && !isInternalText(t));
       const text = goodTexts.length ? cleanStepText(goodTexts[goodTexts.length - 1]) : 'Siga pelo corredor.';
@@ -135,7 +135,7 @@ export function buildFromSteps(steps, accessible) {
 
   steps.forEach(step => {
     if (accessible && /escada|escalator/i.test(step.text) && !/elev/i.test(step.text)) return;
-    if (step.isTransition) { flush(); const t = cleanStepText(step.text); if (t) semantic.push({ text: t, isTransition: true, floorId: step.floorId, toFloor: step.floorId, icon: 'solar:elevator-bold', nodeType: 'elevator', rawFrom: 0, rawTo: 0, landmarkCode: null }); return; }
+    if (step.isTransition) { flush(); const t = cleanStepText(step.text); if (t) semantic.push({ text: t, isTransition: true, floorId: step.floorId, toFloor: step.floorId, icon: 'solar:round-transfer-vertical-bold', nodeType: 'elevator', rawFrom: 0, rawTo: 0, landmarkCode: null }); return; }
     if (isInternalText(step.text)) { buf.push(step); } else { flush(); const t = cleanStepText(step.text); if (t) semantic.push({ text: t, isTransition: false, floorId: step.floorId, toFloor: step.floorId, icon: 'solar:arrow-right-bold', nodeType: 'corridor', rawFrom: 0, rawTo: 0, landmarkCode: null }); }
   });
   flush();

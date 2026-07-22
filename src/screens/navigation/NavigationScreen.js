@@ -8,8 +8,19 @@ import { render } from '../../app/router.js';
 import { countFloorChanges, formatMeters } from '../../services/routeSteps.js';
 import { getNodeMeta } from '../../app/constants.js';
 import { Button, Chip, Metric, MetricGroup, StepRail, dsIcon } from '../../components/ds/index.js';
+import { renderNavigationTimeline } from './NavigationTimeline.js';
 
+/**
+ * Navigation dispatch. The DEFAULT view is now the vertical timeline; the
+ * top-down map below is reached through "Ver trajeto" and is otherwise
+ * untouched, so it can be swapped for the schematic metro view later
+ * without disturbing the list.
+ */
 export function renderNavigation() {
+  return navState.view === 'map' ? renderNavigationMap() : renderNavigationTimeline();
+}
+
+export function renderNavigationMap() {
   const fid = mapState.selectedFloorId;
 
   return `
@@ -41,7 +52,10 @@ export function renderNavigation() {
         <!-- Header bar (over the dark map): exit · white lockup · help.
              A soft scrim behind it guarantees AA on any map content. -->
         <header class="sg-ds sg-navhdr" role="banner">
-          <button type="button" class="sg-navhdr__btn" id="exit-nav-btn" aria-label="Voltar ao resumo da rota">
+          <!-- Back goes to the TIMELINE, not out of navigation: the map is
+               now only ever reached from there, and leaving the trip
+               entirely is the timeline header's job. -->
+          <button type="button" class="sg-navhdr__btn" id="back-to-timeline-btn" aria-label="Voltar às etapas">
             ${dsIcon('solar:arrow-left-linear')}
           </button>
           <div class="sg-navhdr__brand">

@@ -1,0 +1,489 @@
+/* ============================================================
+   NAVIGATION — VERTICAL TIMELINE (default view, dark premium)
+
+   Replaces the top-down map as what the traveller sees first. Scoped under
+   .sg-ds.sg-ds-dark, so every DS component dropped inside inherits the dark
+   token scale instead of needing its own overrides.
+
+   Three bands, like the sheet before it: a fixed header, ONE scroller, and
+   a fixed footer. Only the middle scrolls, so "Próximo" and the destination
+   name are never more than a glance away.
+   ============================================================ */
+
+.sg-ds.sg-ds-dark.sg-tl-screen {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 100dvh;            /* not inset:0 — see the note in navigation.css */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  overscroll-behavior: none;
+  font-family: var(--font-body);
+
+  /* The stage, same family as the map's: a faint pool of light up top where
+     the journey starts, falling away to near-black at the foot. A flat fill
+     reads as "failed to load"; this reads as depth. */
+  background:
+    radial-gradient(120% 70% at 50% 0%, #16375A 0%, #0E2542 42%, #0A1B31 72%, #060F1E 100%);
+
+  /* Semantic status colours RE-TUNED FOR DARK. The global --success/--danger
+     are picked for AA on white and drop to ~2:1 on this navy, so they cannot
+     be reused as-is. These are the same semantics, lightened until they
+     clear AA here: 8.9:1 and 6.4:1 on the card surface. Still semantic, and
+     still nothing to do with the brand turquoise. */
+  --tl-open:   #4ADE80;
+  --tl-closed: #FCA5A5;
+
+  --tl-accent:      #29ABE2;
+  --tl-accent-soft: #6FE0FF;
+  --tl-rail: 56px;           /* width of the dot/line gutter */
+}
+
+/* ── Header ─────────────────────────────────────────── */
+.sg-tl-hdr {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: calc(var(--safe-top) + var(--space-4)) var(--space-4) var(--space-4);
+  background: linear-gradient(180deg, rgba(8, 21, 40, .72) 0%, rgba(8, 21, 40, .28) 70%, rgba(8, 21, 40, 0) 100%);
+}
+
+.sg-tl-hdr__brand {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+/* align-self, not stretch: a column flex container would otherwise smear
+   the auto-width logo across the whole header. */
+.sg-tl-hdr__logo { height: 28px; width: auto; display: block; align-self: flex-start; }
+
+.sg-tl-hdr__dest {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: rgba(255, 255, 255, .92);      /* ~13:1 on the header scrim */
+}
+.sg-tl-hdr__dest > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sg-tl-hdr__pin { flex: 0 0 auto; font-size: 16px; color: var(--tl-accent-soft); }
+
+.sg-tl-hdr__btn {
+  flex: 0 0 auto;
+  width: var(--tap-min); height: var(--tap-min);
+  display: grid; place-items: center;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .12);
+  color: #FFFFFF;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12);
+  transition: background var(--ds-transition), border-color var(--ds-transition);
+}
+.sg-tl-hdr__btn:hover { background: rgba(255, 255, 255, .24); border-color: rgba(255, 255, 255, .3); }
+.sg-tl-hdr__btn iconify-icon { font-size: 22px; }
+.sg-tl-hdr__btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(8, 21, 40, .8), 0 0 0 5px var(--sky-400);
+}
+
+/* ── Scroller ───────────────────────────────────────── */
+.sg-tl__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 var(--space-4) var(--space-5);
+  scrollbar-width: none;
+}
+.sg-tl__scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+/* ── Summary strip ──────────────────────────────────── */
+.sg-tl__strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, .05);
+  border: 1px solid rgba(120, 205, 245, .14);
+  font-size: var(--text-sm);
+  color: rgba(255, 255, 255, .78);       /* 9.5:1 on the strip */
+}
+.sg-tl__strip-item { display: inline-flex; align-items: center; gap: var(--space-1); }
+.sg-tl__strip-item b { color: #FFFFFF; font-weight: var(--weight-bold); }
+.sg-tl__strip-item iconify-icon { font-size: 15px; color: var(--tl-accent-soft); }
+.sg-tl__strip-sep { width: 1px; height: 14px; background: rgba(255, 255, 255, .16); }
+
+/* ── The timeline ───────────────────────────────────── */
+.sg-tl { list-style: none; margin: 0; padding: 0; }
+
+.sg-tl__item { position: relative; display: block; }
+
+/* The hit area is the whole row, whether or not it is a button, so the
+   layout never shifts between an interactive node and a plain one. */
+.sg-tl__hit {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  padding: 0 0 var(--space-5);
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+}
+.sg-tl__item.has-place .sg-tl__hit { cursor: pointer; }
+.sg-tl__item:last-child .sg-tl__hit { padding-bottom: var(--space-4); }
+
+/* ── Rail: dot + connector ──────────────────────────── */
+/* align-self:stretch is load-bearing. The rail is a flex item next to the
+   body, and at the default `flex-start` it shrank to the height of its own
+   40px dot — so the connector, which is anchored to the rail's bottom, had
+   6px of row to draw in and the timeline appeared as disconnected dots.
+   Stretched, the rail spans the row and the line can reach the next node. */
+.sg-tl__rail {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: stretch;
+  width: 40px;
+  display: flex;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.sg-tl__dot {
+  position: relative;
+  z-index: 2;
+  width: 40px; height: 40px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: #12263F;
+  border: 1.5px solid rgba(120, 205, 245, .22);
+  color: rgba(255, 255, 255, .55);
+  font-size: 19px;
+  transition: transform var(--ds-transition), background var(--ds-transition),
+              border-color var(--ds-transition), color var(--ds-transition);
+}
+.sg-tl__dot-glyph { display: block; }
+
+/* Connector: from the bottom of this dot to the top of the next one.
+   The negative `bottom` is what bridges the row gap — .sg-tl__hit's
+   padding-bottom sits OUTSIDE the stretched rail, so without bleeding into
+   it the line would stop short of every following dot. Drawn behind the dot
+   (z-index) so it never clips the glyph. */
+.sg-tl__line {
+  position: absolute;
+  z-index: 1;
+  top: 44px;
+  bottom: calc(-1 * var(--space-5) - 2px);
+  left: 50%;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: rgba(120, 205, 245, .16);
+  transform-origin: top center;
+}
+
+/* ── Node states ────────────────────────────────────────
+   Walked → receded. Current → the loudest thing on screen. Ahead → present
+   and readable, because the whole point of a list is that you can see what
+   is coming without doing anything. */
+.sg-tl__item.is-done .sg-tl__dot {
+  background: rgba(41, 171, 226, .16);
+  border-color: rgba(41, 171, 226, .42);
+  color: var(--tl-accent-soft);
+}
+.sg-tl__item.is-done .sg-tl__line { background: rgba(41, 171, 226, .34); }
+/* .58, not the .52 this started at: a walked step is de-emphasised, not
+   disabled — it is still text the traveller may read to check where they
+   have been. At .52 it measured 4.49:1 against the lightest point of the
+   page gradient, just under AA. */
+.sg-tl__item.is-done .sg-tl__title { color: rgba(255, 255, 255, .58); }
+
+/* The lit segment: from where you are to where you are going next. */
+.sg-tl__item.is-current .sg-tl__line {
+  background: linear-gradient(180deg, var(--tl-accent-soft) 0%, var(--tl-accent) 55%, rgba(41, 171, 226, .28) 100%);
+  box-shadow: 0 0 12px rgba(41, 171, 226, .55);
+  width: 3px; margin-left: -1.5px;
+}
+
+.sg-tl__item.is-current .sg-tl__dot {
+  background: var(--tl-accent);
+  border-color: #FFFFFF;
+  color: #06263A;                      /* 7.4:1 on the turquoise */
+  box-shadow: 0 0 0 4px rgba(41, 171, 226, .18), 0 0 22px rgba(41, 171, 226, .6);
+  transform: scale(1.08);
+}
+
+.sg-tl__item.is-dest .sg-tl__dot {
+  background: #EAF8FF;
+  border-color: #FFFFFF;
+  color: var(--sky-ink);
+}
+.sg-tl__item.is-dest.is-current .sg-tl__dot { background: var(--tl-accent); color: #06263A; }
+
+/* Radar waves on the current node. Two rings, staggered. */
+.sg-tl__wave {
+  position: absolute;
+  z-index: 1;
+  top: 2px; left: 50%;
+  width: 40px; height: 40px;
+  margin-left: -20px;
+  border-radius: 50%;
+  border: 2px solid var(--tl-accent-soft);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Node body ──────────────────────────────────────── */
+.sg-tl__body { flex: 1 1 auto; min-width: 0; padding-top: var(--space-1); }
+
+.sg-tl__now {
+  display: inline-block;
+  margin-bottom: var(--space-1);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--tl-accent-soft);          /* 8.6:1 on the glass card */
+}
+
+.sg-tl__title {
+  display: block;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-snug);
+  color: rgba(255, 255, 255, .90);
+}
+
+.sg-tl__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  font-size: var(--text-sm);
+  color: rgba(255, 255, 255, .62);       /* 7.2:1 — meets AA as body text */
+}
+.sg-tl__floor { display: inline-flex; align-items: center; gap: 4px; }
+.sg-tl__floor iconify-icon { font-size: 14px; color: var(--tl-accent-soft); }
+
+/* The current node gets a glass card so it lifts off the page. Only ONE row
+   ever has it, which is what keeps the blur affordable. */
+.sg-tl__item.is-current .sg-tl__body {
+  padding: var(--space-3) var(--space-4);
+  margin-top: -6px;
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, .07);
+  border: 1px solid rgba(120, 205, 245, .30);
+  backdrop-filter: blur(12px) saturate(140%);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  box-shadow:
+    0 12px 32px rgba(3, 10, 20, .45),
+    0 0 24px rgba(41, 171, 226, .12),
+    inset 0 1px 0 rgba(255, 255, 255, .10);
+}
+.sg-tl__item.is-current .sg-tl__title {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  color: #FFFFFF;
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* ── Place card ─────────────────────────────────────── */
+.sg-tl__place {
+  position: relative;
+  display: block;
+  margin-top: var(--space-3);
+  height: 132px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, .10);
+  box-shadow: 0 8px 22px rgba(3, 10, 20, .38);
+}
+.sg-tl__place-photo { position: absolute; inset: 0; display: block; background: #12263F; }
+.sg-tl__place-photo img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.sg-tl__place-glyph {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font-size: 34px;
+  color: rgba(255, 255, 255, .28);
+}
+
+/* The scrim is load-bearing, not decoration: it is the only reason white
+   text and a semantic status colour can sit on an arbitrary photograph and
+   still clear AA. */
+.sg-tl__place-scrim {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg,
+    rgba(4, 12, 24, .05) 0%,
+    rgba(4, 12, 24, .45) 52%,
+    rgba(4, 12, 24, .88) 100%);
+}
+
+.sg-tl__place-info {
+  position: absolute;
+  left: var(--space-3); right: var(--space-6); bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.sg-tl__place-name {
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: #FFFFFF;
+  line-height: var(--leading-tight);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sg-tl__place-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+}
+.sg-tl__place-status.is-open   { color: var(--tl-open); }
+.sg-tl__place-status.is-closed { color: var(--tl-closed); }
+.sg-tl__place-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.sg-tl__place-cue {
+  position: absolute;
+  right: var(--space-2); bottom: var(--space-3);
+  display: grid; place-items: center;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .16);
+  color: #FFFFFF;
+  font-size: 16px;
+}
+
+.sg-tl__item.has-place .sg-tl__hit:hover .sg-tl__place,
+.sg-tl__item.has-place .sg-tl__hit:focus-visible .sg-tl__place {
+  border-color: rgba(120, 205, 245, .45);
+  box-shadow: 0 10px 26px rgba(3, 10, 20, .5), 0 0 20px rgba(41, 171, 226, .2);
+}
+.sg-tl__hit:focus-visible {
+  outline: 2px solid var(--sky-400);
+  outline-offset: 4px;
+  border-radius: var(--radius-md);
+}
+
+/* ── Footer ─────────────────────────────────────────── */
+.sg-tl-foot {
+  flex: 0 0 auto;
+  padding: var(--space-3) var(--space-4)
+           max(var(--space-4), env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, rgba(6, 15, 30, 0) 0%, rgba(6, 15, 30, .92) 24%, #060F1E 100%);
+  border-top: 1px solid rgba(120, 205, 245, .14);
+}
+.sg-tl-foot__row { display: flex; gap: var(--space-3); }
+.sg-ds-dark .sg-tl-foot__next { flex: 1 1 58%; }
+.sg-ds-dark .sg-tl-foot__map  { flex: 1 1 42%; }
+
+/* The DS outline button is drawn for light surfaces; on navy its border and
+   label both fall under AA, so the dark island restates them. */
+.sg-ds-dark .sg-tl-foot__map.ds-btn--outline {
+  border-color: rgba(120, 205, 245, .42);
+  color: #EAF7FF;
+  background: rgba(255, 255, 255, .05);
+}
+.sg-ds-dark .sg-tl-foot__map.ds-btn--outline:hover {
+  border-color: var(--sky-400);
+  background: rgba(41, 171, 226, .14);
+}
+
+/* ============================================================
+   MOTION
+   Entrance plays once, driven by .is-entering on the screen (actions.js
+   removes it — the list is re-rendered in place on every step change, and a
+   class left on would replay the opening each time).
+   ============================================================ */
+@media not (prefers-reduced-motion: reduce) {
+
+  /* --- Ambient: the current node breathes --- */
+  .sg-tl__wave { animation: tlWave 2.9s cubic-bezier(.25, .6, .3, 1) infinite; }
+  .sg-tl__wave--2 { animation-delay: 1.45s; }
+  @keyframes tlWave {
+    0%   { transform: scale(.72); opacity: .55; }
+    70%  { transform: scale(1.9); opacity: 0; }
+    100% { transform: scale(1.9); opacity: 0; }
+  }
+
+  /* --- Entrance: nodes cascade down, connector grows behind them ---
+     The stagger is CAPPED at 10 slots. Uncapped, a 20-step route would
+     still be fading in its last rows a full two seconds after the screen
+     opened, which stops reading as choreography and starts reading as lag. */
+  .sg-tl-screen.is-entering .sg-tl__item {
+    animation: tlNodeIn 460ms cubic-bezier(.22, .61, .36, 1) both;
+    animation-delay: calc(min(var(--i), 10) * 70ms);
+  }
+  @keyframes tlNodeIn {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  .sg-tl-screen.is-entering .sg-tl__line {
+    animation: tlLineGrow 700ms cubic-bezier(.22, .61, .36, 1) both;
+    animation-delay: calc(min(var(--i), 10) * 70ms + 120ms);
+  }
+  @keyframes tlLineGrow {
+    from { transform: scaleY(0); }
+    to   { transform: scaleY(1); }
+  }
+
+  .sg-tl-screen.is-entering .sg-tl__strip {
+    animation: tlNodeIn 420ms cubic-bezier(.22, .61, .36, 1) both;
+  }
+
+  /* --- Photos fade in rather than snapping --- */
+  .sg-tl__place-photo img { animation: tlPhotoIn 420ms ease both; }
+  @keyframes tlPhotoIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* --- Step change: the new current node settles in rather than snapping.
+     Only the body animates; the dot has its own scale and would fight it. */
+  .sg-tl__item.is-current .sg-tl__body {
+    animation: tlCurrentIn 320ms cubic-bezier(.22, .61, .36, 1) both;
+  }
+  @keyframes tlCurrentIn {
+    from { opacity: .4; transform: translateY(6px) scale(.99); }
+    to   { opacity: 1; transform: none; }
+  }
+}
+
+/* Reduced motion: no travel, no pulse — one static ring so the current node
+   still reads as "live", and everything else simply appears. */
+@media (prefers-reduced-motion: reduce) {
+  .sg-tl__wave { opacity: .28; }
+  .sg-tl__wave--2 { display: none; }
+}
+
+/* ── Desktop: the timeline is a column, not a canvas ──
+   Left unconstrained, the rows stretch to a 1400px line length and the eye
+   loses the rail on the way back. */
+@media (min-width: 900px) {
+  .sg-tl__scroll { padding-inline: 0; }
+  .sg-tl__scroll > * { max-width: 620px; margin-inline: auto; }
+  .sg-tl-foot__row { max-width: 620px; margin-inline: auto; }
+  .sg-tl-hdr { max-width: 620px; margin-inline: auto; width: 100%; }
+}

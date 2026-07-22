@@ -15,6 +15,14 @@ export const navState = {
   semanticSteps: [],    // { text, icon, nodeType, isTransition, floorId, rawFrom, rawTo }
   activeStepIndex: 0,
   routeFloorIds: new Set(),
+  /**
+   * Which navigation view is on screen: 'timeline' (default) or 'map'.
+   * Both read the SAME steps and activeStepIndex above — this only chooses
+   * how they are drawn, so switching views never loses the traveller's place.
+   * TODO(trajeto): 'map' is the old top-down plan, kept as the "Ver trajeto"
+   * destination until the schematic metro view replaces it there.
+   */
+  view: 'timeline',
 };
 
 export const mapState = {

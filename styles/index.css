@@ -21,3 +21,6 @@
 @import url('./screens/navigation-sheet.css');
 /* Reusable place-detail card (business info) on the DS — tokens only. */
 @import url('./components/place-detail.css');
+/* Navigation DEFAULT view: the vertical timeline (dark). Own sg-tl* classes.
+   Last, so it wins over the map/sheet rules for anything they share. */
+@import url('./screens/navigation-timeline.css');
