@@ -108,9 +108,11 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  padding: var(--space-2) var(--space-5) 0;
-  /* Clear the fixed footer: note + button + padding + safe area. */
-  padding-bottom: calc(132px + env(safe-area-inset-bottom, 0px));
+  /* The footer is a FLEX SIBLING, not an overlay — it takes its own height out
+     of this column, so the scroll already ends where the footer begins. The
+     old `padding-bottom: 132px` here was written for a fixed footer that
+     never shipped, and left 132px of dead space under the last card. */
+  padding: var(--space-2) var(--space-5) var(--space-5);
 }
 /* The scroll is a flex column, so children with overflow:hidden would be
    squashed to fit instead of making the container scroll. */
@@ -556,7 +558,13 @@
    ============================================================ */
 .sg-rc__footer {
   flex: 0 0 auto;
-  padding: var(--space-3) var(--space-5) calc(var(--space-3) + env(safe-area-inset-bottom, 0px));
+  /* max(), not calc(+): the inset ALREADY is the clearance a home-indicator
+     phone needs, so adding a fixed pad on top double-counts it and pushes the
+     CTA up off the optical baseline. Same value and same function as
+     .sg-tl-foot on the navigation screen, so the primary action sits at an
+     identical height on both screens. */
+  padding: var(--space-3) var(--space-5)
+           max(var(--space-5), env(safe-area-inset-bottom, 0px));
   background: linear-gradient(180deg, rgba(244, 246, 250, 0) 0%, var(--bg) 24%);
 }
 .sg-rc__footer-note {

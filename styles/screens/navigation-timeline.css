@@ -164,7 +164,14 @@
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding: 0 var(--space-4) var(--space-5);
+  /* padding-top is NOT decorative — it is headroom for the current node's
+     pulsing ring. .sg-tl__wave is 40px at top:2px and animates to scale(1.9),
+     so at peak it reaches 16px ABOVE its item's top edge. With no top padding
+     this container's overflow clipped it, and the first step of every route
+     opened with its marker sliced off against the status band. 20px = the
+     16px overhang + a little breathing room; keep it >= the overhang if the
+     wave's size or scale changes. */
+  padding: 20px var(--space-4) var(--space-5);
   scrollbar-width: none;
 }
 .sg-tl__scroll::-webkit-scrollbar { width: 0; height: 0; }
@@ -462,8 +469,10 @@
 /* ── Footer ─────────────────────────────────────────── */
 .sg-tl-foot {
   flex: 0 0 auto;
+  /* Matches .sg-rc__footer on the choice screen — same pad, same function —
+     so the primary action does not jump when you cross from one to the other. */
   padding: var(--space-3) var(--space-4)
-           max(var(--space-4), env(safe-area-inset-bottom, 0px));
+           max(var(--space-5), env(safe-area-inset-bottom, 0px));
   background: linear-gradient(180deg, rgba(6, 15, 30, 0) 0%, rgba(6, 15, 30, .92) 24%, #060F1E 100%);
   border-top: 1px solid rgba(120, 205, 245, .14);
 }
@@ -471,7 +480,15 @@
    that job belongs to the toggle at the top, and having it in two places is
    what made one screen look like two. */
 .sg-tl-foot__row { display: flex; gap: var(--space-3); }
-.sg-ds-dark .sg-tl-foot__next { flex: 1 1 auto; }
+/* Same 56px as .sg-rc__cta: both are THE primary action of their screen, and
+   at 44px vs 56px the footer visibly changed shape on the way into
+   navigation. */
+.sg-ds-dark .sg-tl-foot__next {
+  flex: 1 1 auto;
+  min-height: 56px;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+}
 
 /* ============================================================
    MOTION
