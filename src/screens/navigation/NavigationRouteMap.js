@@ -26,24 +26,19 @@
  * node x/y the API returns, and are only drawn when a POI is genuinely close
  * to a stop on the route (see nearbyReferences).
  *
- * ICONS. Everything NEW here is Lucide — the tabs through <iconify-icon
- * icon="lucide:…">, the two glyphs that have to live inside the <svg> as
- * inlined Lucide path data (see LUCIDE). The header and footer are NOT new:
- * they are the timeline's own chrome, reused verbatim, and they keep the
- * `solar:` glyphs the rest of the app draws — repainting them here would
- * make the shared chrome change appearance every time the toggle is used.
+ * ICONS. The two glyphs that have to live inside the <svg> are Lucide path
+ * data, inlined (see LUCIDE), because <iconify-icon> is an HTML custom
+ * element and renders nothing inside an <svg>.
  *
- * Behaviour hooks (bound in events.js):
- *   #exit-nav-btn      leave navigation
- *   #tab-steps-btn     back to the timeline
- *   #nav-next          advance the active step
+ * The header, the view toggle, the status strip and the footer are NOT here:
+ * they are the screen's frame and live in NavigationShell, shared with the
+ * timeline.
  */
 import { appData, navState, planState } from '../../state/appState.js';
 import { esc } from '../../utils/format.js';
 import { findNode, getFloorLabel } from '../../state/selectors.js';
 import { getPublicNodeLabel } from '../../services/nodePresentation.js';
-import { Button, dsIcon } from '../../components/ds/index.js';
-import { renderSummaryStrip } from './NavigationTimeline.js';
+import { renderNavigationShell } from './NavigationShell.js';
 
 /* ============================================================
    LAYOUT CONSTANTS — all in viewBox units (1 unit ≈ 1 CSS px on a
@@ -516,67 +511,11 @@ export function renderRouteDiagram() {
     </ul>`;
 }
 
-/**
- * The full view.
- *
- * The header, the summary strip and the footer are the TIMELINE's, reused by
- * class and by function — the two views are one screen with two bodies, and
- * duplicating the chrome is how they drift apart.
- */
+/** The diagram is now only a BODY: the frame around it is NavigationShell. */
 export function renderNavigationRouteMap() {
-  const destNode = findNode(planState.destinationCode);
-  const destName = destNode ? getPublicNodeLabel(destNode) : 'seu destino';
-  const isLast   = navState.activeStepIndex >= navState.semanticSteps.length - 1;
-
-  return `
-    <div class="sg-ds sg-ds-dark sg-tl-screen sg-rt-screen" id="nav-screen">
-
-      <header class="sg-tl-hdr" role="banner">
-        <button type="button" class="sg-tl-hdr__btn" id="exit-nav-btn" aria-label="Sair da navegação">
-          ${dsIcon('solar:arrow-left-linear')}
-        </button>
-        <div class="sg-tl-hdr__brand">
-          <img class="sg-tl-hdr__logo" src="assets/logo-skygate-white.png" alt="SkyGate">
-          <span class="sg-tl-hdr__dest">
-            ${dsIcon('solar:map-point-bold', 'sg-tl-hdr__pin')}
-            <span>FOR · Chegue a ${esc(destName)}</span>
-          </span>
-        </div>
-        <button type="button" class="sg-tl-hdr__btn" id="help-btn" aria-label="Ajuda">
-          ${dsIcon('solar:question-circle-linear')}
-        </button>
-      </header>
-
-      <div class="sg-rt__tabs" role="tablist" aria-label="Modo de visualização">
-        <button type="button" class="sg-rt__tab" id="tab-steps-btn"
-          role="tab" aria-selected="false">
-          ${dsIcon('lucide:list')}Passo a passo
-        </button>
-        <button type="button" class="sg-rt__tab is-active" id="tab-route-btn"
-          role="tab" aria-selected="true" aria-controls="rt-map">
-          ${dsIcon('lucide:route')}Ver trajeto
-        </button>
-      </div>
-
-      <div class="sg-tl__scroll" id="rt-scroll">
-        ${renderSummaryStrip()}
-        <div class="sg-rt__map" id="rt-map" role="tabpanel" aria-labelledby="tab-route-btn">
-          ${renderRouteDiagram()}
-        </div>
-      </div>
-
-      <div class="sg-tl-foot">
-        <div class="sg-tl-foot__row">
-          ${Button({
-            label: isLast ? 'Chegou!' : 'Próximo',
-            variant: 'primary',
-            iconRight: 'solar:arrow-right-linear',
-            id: 'nav-next',
-            disabled: isLast,
-            className: 'sg-tl-foot__next',
-          })}
-        </div>
-      </div>
-    </div>
-  `;
+  return renderNavigationShell({
+    view: 'trajeto',
+    bodyClass: 'sg-rt__map',
+    body: renderRouteDiagram(),
+  });
 }

@@ -18,19 +18,20 @@
  * from getPlaceDetails(), the same source as the detail card.
  *
  * Behaviour hooks (bound in events.js / actions.js):
- *   #exit-nav-btn                    leave navigation
- *   #nav-next                        advance the active step
- *   #view-route-btn                  switch to the map view
  *   .sg-tl__item[data-place-code]    open the PlaceDetailSheet
+ *
+ * The header, the view toggle, the status strip and the footer are NOT here:
+ * they are the screen's frame and live in NavigationShell, shared with the
+ * metro diagram.
  */
 import { navState, planState } from '../../state/appState.js';
-import { esc, fmtMin } from '../../utils/format.js';
-import { findNode, getFloorLabel } from '../../state/selectors.js';
-import { getPublicNodeLabel } from '../../services/nodePresentation.js';
+import { esc } from '../../utils/format.js';
+import { getFloorLabel } from '../../state/selectors.js';
 import { getOpenStatus, getPlaceDetails } from '../../services/placesMock.js';
 import { formatMeters } from '../../services/routeSteps.js';
 import { getNodeMeta } from '../../app/constants.js';
-import { Button, dsIcon } from '../../components/ds/index.js';
+import { dsIcon } from '../../components/ds/index.js';
+import { renderNavigationShell } from './NavigationShell.js';
 
 /**
  * Per-step walking minutes.
@@ -155,82 +156,12 @@ export function renderTimelineList() {
   return steps.map((step, i) => timelineItem(step, i, active)).join('');
 }
 
-/** Compact journey summary above the list: total time and remaining steps. */
-export function renderSummaryStrip() {
-  const total   = navState.semanticSteps.length;
-  const active  = navState.activeStepIndex;
-  const minutes = fmtMin(navState.route?.estimatedMinutes ?? 0);
-  const left    = Math.max(0, total - active - 1);
-
-  return `<div class="sg-tl__strip">
-    <span class="sg-tl__strip-item">
-      ${dsIcon('solar:clock-circle-bold')}<b>${esc(String(minutes))}</b> min
-    </span>
-    <span class="sg-tl__strip-sep" aria-hidden="true"></span>
-    <span class="sg-tl__strip-item">
-      ${dsIcon('solar:routing-2-bold')}Passo <b>${active + 1}</b> de ${total}
-    </span>
-    <span class="sg-tl__strip-sep" aria-hidden="true"></span>
-    <span class="sg-tl__strip-item">
-      ${left ? `faltam <b>${left}</b>` : 'último passo'}
-    </span>
-  </div>`;
-}
-
+/** The timeline is now only a BODY: the frame around it is NavigationShell. */
 export function renderNavigationTimeline() {
-  const destNode = findNode(planState.destinationCode);
-  const destName = destNode ? getPublicNodeLabel(destNode) : 'seu destino';
-  const isLast   = navState.activeStepIndex >= navState.semanticSteps.length - 1;
-
-  return `
-    <div class="sg-ds sg-ds-dark sg-tl-screen" id="nav-screen">
-
-      <header class="sg-tl-hdr" role="banner">
-        <button type="button" class="sg-tl-hdr__btn" id="exit-nav-btn" aria-label="Sair da navegação">
-          ${dsIcon('solar:arrow-left-linear')}
-        </button>
-        <div class="sg-tl-hdr__brand">
-          <img class="sg-tl-hdr__logo" src="assets/logo-skygate-white.png" alt="SkyGate">
-          <span class="sg-tl-hdr__dest">
-            ${dsIcon('solar:map-point-bold', 'sg-tl-hdr__pin')}
-            <span>FOR · Chegue a ${esc(destName)}</span>
-          </span>
-        </div>
-        <button type="button" class="sg-tl-hdr__btn" id="help-btn" aria-label="Ajuda">
-          ${dsIcon('solar:question-circle-linear')}
-        </button>
-      </header>
-
-      <div class="sg-tl__scroll" id="tl-scroll">
-        ${renderSummaryStrip()}
-        <ol class="sg-tl" id="tl-list" aria-label="Etapas do trajeto">
-          ${renderTimelineList()}
-        </ol>
-      </div>
-
-      <div class="sg-tl-foot">
-        <div class="sg-tl-foot__row">
-          ${Button({
-            label: isLast ? 'Chegou!' : 'Próximo',
-            variant: 'primary',
-            iconRight: 'solar:arrow-right-linear',
-            id: 'nav-next',
-            disabled: isLast,
-            className: 'sg-tl-foot__next',
-          })}
-          ${Button({
-            label: 'Ver trajeto',
-            variant: 'outline',
-            icon: 'solar:map-bold',
-            id: 'view-route-btn',
-            className: 'sg-tl-foot__map',
-          })}
-        </div>
-      </div>
-
-      <!-- announceStep() has always written here, but no view ever rendered
-           the element, so step changes were silent for screen readers. -->
-      <p class="sr-only" id="nav-live" role="status" aria-live="polite"></p>
-    </div>
-  `;
+  return renderNavigationShell({
+    view: 'timeline',
+    body: `<ol class="sg-tl" id="tl-list" aria-label="Etapas do trajeto">
+      ${renderTimelineList()}
+    </ol>`,
+  });
 }

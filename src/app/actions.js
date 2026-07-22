@@ -4,8 +4,9 @@ import { app, appData, mapState, navState, planState, uiState } from '../state/a
 import { render, updateRouteOverlay } from './router.js';
 import { findNode } from '../state/selectors.js';
 import { renderInstructionCardInner, renderOverlayOverview } from '../screens/navigation/NavigationScreen.js';
-import { renderSummaryStrip, renderTimelineList } from '../screens/navigation/NavigationTimeline.js';
+import { renderTimelineList } from '../screens/navigation/NavigationTimeline.js';
 import { renderRouteDiagram } from '../screens/navigation/NavigationRouteMap.js';
+import { renderSummaryStrip } from '../screens/navigation/NavigationShell.js';
 import { switchFloor } from '../map/floorSwitch.js';
 import { autoFitRoute, fitStepToView } from '../map/mapFit.js';
 import { prefersReducedMotion , $ } from '../utils/dom.js';
@@ -35,7 +36,7 @@ const TIMELINE_ENTRANCE_MS = 1400;
 
 /**
  * How long the "Ver trajeto" entrance runs, in ms. Must outlast the slowest
- * keyframe in the `.sg-rt-screen.is-entering` block in
+ * keyframe in the `.sg-nav-screen--trajeto.is-entering` block in
  * navigation-route-map.css (the marker pop: 760ms delay + 520ms).
  */
 const ROUTE_MAP_ENTRANCE_MS = 1400;
@@ -373,6 +374,10 @@ function playTimelineEntrance() {
  */
 export function showRouteMap() {
   if (!navState.route) return;
+  // The toggle shows both tabs in both views, so the active one gets clicked.
+  // Re-rendering the view you are already on would replay its entrance for
+  // no reason; switching views is idempotent instead.
+  if (navState.view === 'trajeto') return;
   navState.view = 'trajeto';
   const step = navState.semanticSteps[navState.activeStepIndex];
   if (step?.floorId) mapState.selectedFloorId = step.floorId;
@@ -398,8 +403,9 @@ export function showFloorPlan() {
   bindInstructionSwipe();
 }
 
-/** Back to the timeline, on the same step. */
+/** Back to the timeline, on the same step. Idempotent, like showRouteMap(). */
 export function showTimeline() {
+  if (navState.view === 'timeline') return;
   navState.view = 'timeline';
   render();
   playTimelineEntrance();
@@ -503,12 +509,14 @@ function applyStepChange(idx) {
  *
  * The whole SVG is rebuilt rather than patched: one step moves the boundary
  * between the solid and the dotted line, retypes three pills and moves the
- * marker, which is most of the drawing anyway. Only #rt-map is touched, so
- * the entrance choreography is not replayed.
+ * marker, which is most of the drawing anyway. Only the panel is touched, so
+ * the frame stays put and the entrance choreography is not replayed.
  */
 export function updateRouteMap() {
-  const el = $('rt-map');
-  if (!el) return;
+  // The panel id is shared with the timeline, so check it is actually the
+  // diagram before overwriting it.
+  const el = $('nav-panel');
+  if (!el?.classList.contains('sg-rt__map')) return;
   el.innerHTML = renderRouteDiagram();
   updateTimelineFooter();
   scrollRouteMapToCurrent();
@@ -521,7 +529,7 @@ export function updateRouteMap() {
  * below it is the part of the trip that has not happened yet.
  */
 export function scrollRouteMapToCurrent(behavior) {
-  const scroller = $('rt-scroll');
+  const scroller = $('nav-scroll');
   const here     = $('rt-here');
   if (!scroller || !here) return;
   const mode = behavior ?? (prefersReducedMotion() ? 'auto' : 'smooth');
@@ -567,7 +575,7 @@ function updateTimelineFooter() {
  * filling the screen below it.
  */
 export function scrollTimelineToCurrent(behavior) {
-  const scroller = $('tl-scroll');
+  const scroller = $('nav-scroll');
   const current  = document.querySelector('.sg-tl__item.is-current');
   if (!scroller || !current) return;
   const mode = behavior ?? (prefersReducedMotion() ? 'auto' : 'smooth');

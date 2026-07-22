@@ -54,13 +54,12 @@ export function bindEvents() {
 
   // Navigation
   $('exit-nav-btn')?.addEventListener('click', exitNavigation);
-  // Timeline ⇄ trajeto. Two ways in, because the two views carry the
-  // control in different places: the timeline has it in its footer, and the
-  // diagram has the toggle at the top of the screen.
-  $('view-route-btn')?.addEventListener('click', showRouteMap);
+  // Timeline ⇄ trajeto. ONE control, rendered by NavigationShell and present
+  // in both views — clicking the tab that is already active re-renders the
+  // same view, which is the correct no-op.
   $('tab-steps-btn')?.addEventListener('click', showTimeline);
-  // The active tab is a no-op on purpose: it already shows what it names.
-  // Still a real button, so the pair reads and focuses as one control.
+  $('tab-route-btn')?.addEventListener('click', showRouteMap);
+  // The old top-down plan's own back button (see showFloorPlan).
   $('back-to-timeline-btn')?.addEventListener('click', showTimeline);
   bindTimelinePlaceEvents();
   $('nav-prev')?.addEventListener('click', () => advanceStep(-1));

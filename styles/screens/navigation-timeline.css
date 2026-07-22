@@ -1,13 +1,22 @@
 /* ============================================================
-   NAVIGATION — VERTICAL TIMELINE (default view, dark premium)
+   NAVIGATION — THE SHARED SHELL + the vertical timeline body
 
-   Replaces the top-down map as what the traveller sees first. Scoped under
-   .sg-ds.sg-ds-dark, so every DS component dropped inside inherits the dark
-   token scale instead of needing its own overrides.
+   This file styles TWO things:
 
-   Three bands, like the sheet before it: a fixed header, ONE scroller, and
-   a fixed footer. Only the middle scrolls, so "Próximo" and the destination
-   name are never more than a glance away.
+   1. The shell every navigation view lives in (NavigationShell.js) — the
+      screen, the header, the view toggle, the status band, the scroller and
+      the footer. Navigation is one screen with two bodies, so the frame is
+      styled once, here, and the metro diagram inherits all of it.
+   2. The timeline body itself (.sg-tl__item and below), which is the
+      DEFAULT view and what replaced the top-down map as the first thing the
+      traveller sees.
+
+   Scoped under .sg-ds.sg-ds-dark, so every DS component dropped inside
+   inherits the dark token scale instead of needing its own overrides.
+
+   Four bands: a fixed header, a fixed toggle, a fixed status band, ONE
+   scroller and a fixed footer. Only the middle scrolls, so the toggle, the
+   destination and "Próximo" are never more than a glance away.
    ============================================================ */
 
 .sg-ds.sg-ds-dark.sg-tl-screen {
@@ -93,6 +102,61 @@
   box-shadow: 0 0 0 3px rgba(8, 21, 40, .8), 0 0 0 5px var(--sky-400);
 }
 
+/* ── View toggle: Passo a passo | Ver trajeto ────────
+   Part of the FRAME, not of either view. It sits directly under the header,
+   above the status band, and is identical in both — that is what makes the
+   two drawings read as one screen instead of two.
+
+   The active tab is raised rather than tinted: on a dark island a colour
+   swap alone is not a reliable "selected" signal, and the pair has to be
+   readable as a switch at a glance. */
+.sg-nav-tabs {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+  margin: 0 var(--space-4) var(--space-3);
+  padding: var(--space-1);
+  border-radius: var(--radius-lg);
+  background: rgba(4, 14, 28, .55);
+  border: 1px solid rgba(120, 205, 245, .14);
+}
+
+.sg-nav-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: rgba(255, 255, 255, .70);      /* 8.3:1 on the track */
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: background var(--ds-transition), color var(--ds-transition);
+}
+.sg-nav-tab iconify-icon { font-size: 17px; }
+.sg-nav-tab:hover { color: #FFFFFF; background: rgba(255, 255, 255, .06); }
+
+.sg-nav-tab.is-active {
+  color: #FFFFFF;
+  background: linear-gradient(180deg, rgba(28, 66, 108, .95), rgba(18, 45, 78, .95));
+  box-shadow: 0 6px 16px rgba(3, 10, 20, .5), inset 0 0 0 1px rgba(120, 205, 245, .28);
+  cursor: default;
+}
+.sg-nav-tab.is-active iconify-icon { color: var(--tl-accent-soft); }
+
+.sg-nav-tab:focus-visible {
+  outline: 2px solid var(--sky-400);
+  outline-offset: 2px;
+}
+
 /* ── Scroller ───────────────────────────────────────── */
 .sg-tl__scroll {
   flex: 1 1 auto;
@@ -105,13 +169,19 @@
 }
 .sg-tl__scroll::-webkit-scrollbar { width: 0; height: 0; }
 
-/* ── Summary strip ──────────────────────────────────── */
+/* ── Status band ────────────────────────────────────
+   Pinned, not scrolled: "how is the trip going" is a question about the
+   journey, so it belongs to the frame and stays put while either body
+   scrolls underneath it. */
 .sg-tl__strip {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: var(--space-3);
   flex-wrap: wrap;
-  margin-bottom: var(--space-5);
+  margin: 0 var(--space-4) var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
   background: rgba(255, 255, 255, .05);
@@ -397,21 +467,11 @@
   background: linear-gradient(180deg, rgba(6, 15, 30, 0) 0%, rgba(6, 15, 30, .92) 24%, #060F1E 100%);
   border-top: 1px solid rgba(120, 205, 245, .14);
 }
+/* One button, full width. The footer used to carry "Ver trajeto" beside it;
+   that job belongs to the toggle at the top, and having it in two places is
+   what made one screen look like two. */
 .sg-tl-foot__row { display: flex; gap: var(--space-3); }
-.sg-ds-dark .sg-tl-foot__next { flex: 1 1 58%; }
-.sg-ds-dark .sg-tl-foot__map  { flex: 1 1 42%; }
-
-/* The DS outline button is drawn for light surfaces; on navy its border and
-   label both fall under AA, so the dark island restates them. */
-.sg-ds-dark .sg-tl-foot__map.ds-btn--outline {
-  border-color: rgba(120, 205, 245, .42);
-  color: #EAF7FF;
-  background: rgba(255, 255, 255, .05);
-}
-.sg-ds-dark .sg-tl-foot__map.ds-btn--outline:hover {
-  border-color: var(--sky-400);
-  background: rgba(41, 171, 226, .14);
-}
+.sg-ds-dark .sg-tl-foot__next { flex: 1 1 auto; }
 
 /* ============================================================
    MOTION
@@ -486,4 +546,7 @@
   .sg-tl__scroll > * { max-width: 620px; margin-inline: auto; }
   .sg-tl-foot__row { max-width: 620px; margin-inline: auto; }
   .sg-tl-hdr { max-width: 620px; margin-inline: auto; width: 100%; }
+  /* The pinned bands share the body's column so the whole frame lines up. */
+  .sg-nav-tabs,
+  .sg-tl__strip { max-width: 620px; margin-inline: auto; width: calc(100% - var(--space-4) * 2); }
 }
