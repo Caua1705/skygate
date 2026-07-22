@@ -1,10 +1,17 @@
 import { calculateRoute, SkyGateApiError } from '../services/api/index.js';
 import { app, appData, mapState, navState, planState, uiState } from '../state/appState.js';
+
 import { render } from './router.js';
 import { findNode, getAirportSlug } from '../state/selectors.js';
 import { normalizeRoute } from '../services/normalize.js';
 import { attachStepDistances, buildSemanticSteps } from '../services/routeSteps.js';
-import { buildRouteOptions } from '../services/routeOptions.js';
+import { buildRouteOptions, scoreOptions } from '../services/routeOptions.js';
+
+/** The recommended route if we can give one, else the fastest. */
+function pickInitialOption(options) {
+  const scored = scoreOptions(options);
+  return (scored.find(o => o.recommended) ?? scored[0])?.id ?? '';
+}
 
 /* ============================================================
    15. ROUTE CALCULATION
@@ -26,6 +33,10 @@ export async function handleCalculate() {
       origin_code:      planState.originCode,
       destination_code: planState.destinationCode,
       route_mode:       planState.routeMode,
+      // Optional. When present the endpoint can return folga_min/status per
+      // route; the client recomputes both anyway (see routeOptions.js), so an
+      // endpoint that ignores this field changes nothing on screen.
+      ...(planState.flightTime ? { horario_voo: planState.flightTime } : {}),
     });
 
     const route = normalizeRoute(raw);
@@ -41,10 +52,13 @@ export async function handleCalculate() {
     navState.activeStepIndex = 0;
     mapState.manualFloor = false;
 
-    // The WAYS of walking this route. The direct one is always first and is
-    // what the choice screen pre-selects — the traveller opts INTO a detour.
+    // The WAYS of walking this route, pre-selected on the app's own
+    // recommendation: the scenic one when the margin allows, the direct one
+    // when it does not. Without a flight time there is no verdict to give, so
+    // scoreOptions leaves the order alone and this lands on the fastest.
     navState.routeOptions = buildRouteOptions(route);
-    navState.selectedOptionId = navState.routeOptions[0]?.id ?? '';
+    navState.selectedOptionId = pickInitialOption(navState.routeOptions);
+    uiState.riskAcknowledged = false;
 
     // Set selected floor to origin floor
     const firstFloor = (route.segments ?? []).find(s => s.type === 'floor')?.floorId

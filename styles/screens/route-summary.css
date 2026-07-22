@@ -209,100 +209,81 @@
 .sg-rc__trip-mode { display: flex; padding-left: var(--space-5); }
 
 /* ============================================================
-   2. TIME BUDGET — optional, and labelled as such.
+   2a. DEADLINE BANNER — stated once, so every "sobra ~X" below has
+   something to be relative to.
    ============================================================ */
-.sg-rc__budget { display: flex; flex-direction: column; gap: var(--space-3); }
-
-.sg-rc__budget-head {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-}
-.sg-rc__optional {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-medium);
-  color: var(--text-muted);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-pill);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-}
-
-.sg-rc__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.sg-ds.sg-rc .sg-rc__chip {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--tap-min);
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-pill);
-  /* --border-strong, not --border: this is an interactive control, so its
-     outline has to clear 3:1 on its own. */
-  border: 1px solid var(--border-strong);
-  background: var(--surface);
-  color: var(--text);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-semibold);
-  cursor: pointer;
-  transition: background var(--ds-transition), border-color var(--ds-transition), color var(--ds-transition);
-}
-.sg-ds.sg-rc .sg-rc__chip iconify-icon { font-size: 18px; color: var(--sky-ink); }
-.sg-ds.sg-rc .sg-rc__chip:hover { background: var(--surface-2); }
-
-.sg-ds.sg-rc .sg-rc__chip.is-selected {
-  background: var(--navy-900);
-  border-color: var(--navy-900);
-  color: #FFFFFF;
-}
-.sg-ds.sg-rc .sg-rc__chip.is-selected iconify-icon { color: var(--sky-400); }
-
-.sg-rc__exact {
+.sg-rc__deadline {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  flex-wrap: wrap;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-}
-.sg-rc__exact-label {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-medium);
-  color: var(--text-muted);
-}
-.sg-ds.sg-rc .sg-rc__exact-input {
-  min-height: var(--tap-min);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  color: var(--text);
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-  font-variant-numeric: tabular-nums;
-}
-
-.sg-rc__budget-echo-slot:empty { display: none; }
-.sg-rc__budget-echo {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: 0;
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-lg);
   background: rgba(41, 171, 226, .10);
   border: 1px solid rgba(41, 171, 226, .24);
+}
+.sg-rc__deadline-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  color: var(--sky-ink);
+}
+.sg-rc__deadline-text {
+  margin: 0;
   font-size: var(--text-sm);
+  line-height: var(--leading-snug);
   color: var(--text);
 }
-.sg-rc__budget-echo iconify-icon { font-size: 18px; color: var(--sky-ink); flex: 0 0 auto; }
-.sg-rc__budget-echo strong { font-weight: var(--weight-bold); }
+.sg-rc__deadline-text strong { font-weight: var(--weight-bold); }
+
+/* Boarding already started — the banner has to stop reassuring. */
+.sg-rc__deadline.is-late {
+  background: var(--danger-soft);
+  border-color: rgba(185, 28, 28, .30);
+}
+.sg-rc__deadline.is-late .sg-rc__deadline-icon { color: var(--danger); }
+
+/* ============================================================
+   2b. FLIGHT INVITE — shown instead when there is no flight time.
+   Present and confident, never a blocker: this is the app pointing at
+   the best of itself.
+   ============================================================ */
+.sg-rc__invite {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  border: 1px solid rgba(41, 171, 226, .30);
+  box-shadow: var(--elev-1);
+}
+.sg-rc__invite-icon {
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: rgba(41, 171, 226, .14);
+  color: var(--sky-ink);
+  font-size: 21px;
+}
+.sg-rc__invite-text { grid-column: 2; min-width: 0; }
+.sg-rc__invite-title {
+  margin: 0 0 2px;
+  font-family: var(--font-display);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  color: var(--text);
+}
+.sg-rc__invite-copy {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: var(--leading-snug);
+  color: var(--text-muted);
+}
+.sg-ds.sg-rc .sg-rc__invite-cta { grid-column: 1 / -1; margin-top: var(--space-2); }
 
 /* ============================================================
    3. ROUTE CARDS — the hero.
@@ -414,23 +395,56 @@
 .sg-rc-opt__floors iconify-icon { font-size: 14px; }
 .sg-rc-opt__est { font-style: italic; }
 
-/* ---- Budget badge: only rendered when the traveller answered ---- */
-.sg-rc-opt__fit {
-  display: flex;
+/* ---- Recommendation ribbon — only ever on ONE card ---- */
+.sg-rc-opt__rec {
+  display: inline-flex;
   align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  padding: 4px var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--navy-900);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.sg-rc-opt__rec iconify-icon { font-size: 13px; color: var(--sky-400); }
+
+/* ---- Slack badge: only rendered when there IS a flight time ---- */
+.sg-rc-opt__slack {
+  display: flex;
+  align-items: flex-start;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-md);
   font-size: var(--text-xs);
   line-height: var(--leading-snug);
 }
-.sg-rc-opt__fit iconify-icon { font-size: 16px; flex: 0 0 auto; }
-.sg-rc-opt__fit strong { font-weight: var(--weight-bold); }
+.sg-rc-opt__slack iconify-icon { font-size: 16px; flex: 0 0 auto; margin-top: 1px; }
+.sg-rc-opt__slack-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; min-width: 0; }
+.sg-rc-opt__slack-text strong { font-weight: var(--weight-bold); }
+.sg-rc-opt__slack-num { font-weight: var(--weight-semibold); }
+/* The "what this margin buys you" line drops to its own row and softens, so
+   the verdict and the number stay the things you read first. */
+.sg-rc-opt__slack-hint { flex: 1 0 100%; opacity: .85; }
 
-/* Turquoise for "it fits" — this brand's success colour, never green. */
-.sg-rc-opt__fit--ok    { background: rgba(41, 171, 226, .12); color: var(--sky-ink); }
-.sg-rc-opt__fit--tight { background: var(--warning-soft);     color: var(--warning); }
-.sg-rc-opt__fit--over  { background: var(--danger-soft);      color: var(--danger); }
+/* Turquoise = fine, amber = tight, soft red = impossible. Never green:
+   on this brand success IS turquoise. */
+.sg-rc-opt__slack--ok      { background: rgba(41, 171, 226, .12); color: var(--sky-ink); }
+.sg-rc-opt__slack--neutral { background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border); }
+.sg-rc-opt__slack--tight   { background: var(--warning-soft); color: var(--warning); }
+.sg-rc-opt__slack--over    { background: var(--danger-soft);  color: var(--danger); }
+
+/* ---- Unviable route: legible, but visibly demoted ---- */
+.sg-ds.sg-rc .sg-rc-opt.is-doomed { background: var(--surface-2); }
+/* Dimming the CONTENT, not the card, keeps the slack warning at full contrast
+   — the one thing on an unviable card that must stay easy to read. */
+.sg-rc-opt.is-doomed .sg-rc-opt__head,
+.sg-rc-opt.is-doomed .sg-rc-opt__meta,
+.sg-rc-opt.is-doomed .sg-rc-opt__places { opacity: .62; }
+.sg-rc-opt.is-doomed .sg-rc-opt__icon { background: var(--danger-soft); color: var(--danger); }
 
 /* ---- Places this route walks past ---- */
 .sg-rc-opt__places {
@@ -514,11 +528,57 @@
 }
 .sg-rc__footer-note strong { color: var(--text); font-weight: var(--weight-bold); }
 
+/* ---- Risk gate: an unviable route can be walked, but not by accident ---- */
+.sg-rc__risk {
+  margin-bottom: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--danger-soft);
+  border: 1px solid rgba(185, 28, 28, .30);
+}
+.sg-rc__risk-text {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--danger);
+}
+.sg-rc__risk-text iconify-icon { font-size: 16px; flex: 0 0 auto; margin-top: 1px; }
+.sg-rc__risk-text strong { font-weight: var(--weight-bold); }
+
+.sg-rc__risk-ack {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* The whole row is the hit target, so the 16px checkbox is not the only
+     thing a thumb can land on. */
+  min-height: var(--tap-min);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+  cursor: pointer;
+}
+.sg-rc__risk-ack input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  accent-color: var(--danger);
+  cursor: pointer;
+}
+
 .sg-ds.sg-rc .sg-rc__cta {
   min-height: 56px;
   font-size: var(--text-lg);
   font-weight: var(--weight-bold);
   box-shadow: 0 6px 18px rgba(14, 42, 107, .26);
+}
+/* Starting a route that arrives after boarding should never look like the
+   happy path. */
+.sg-ds.sg-rc .sg-rc__cta.is-risky:not(:disabled) {
+  background: var(--danger);
+  box-shadow: 0 6px 18px rgba(185, 28, 28, .26);
 }
 
 /* ============================================================
@@ -527,8 +587,8 @@
 .sg-ds.sg-rc :is(
   .sg-rc__back,
   .sg-rc__edit,
-  .sg-rc__chip,
-  .sg-rc__exact-input,
+  .sg-rc__invite-cta,
+  .sg-rc__risk-ack input,
   .sg-rc__cta
 ):focus-visible {
   outline: none;

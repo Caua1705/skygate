@@ -1,5 +1,5 @@
 import { $ } from '../utils/dom.js';
-import { advanceStep, clearLocation, closeLocationDetail, closePlaceDetail, closeOverview, closeSearch, editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail, openPlaceFromMap, openPlaceOrLocationDetail, openOverview, openSearch, returnToCurrentStep, selectLocation, selectRouteOption, setBudgetTime, setRouteMode, setTimeBudget, showHelp, showRouteMap, showTimeline, startNavigation, swapLocations, toggleAccessibleRoute, traceRouteToLocation, tracePlaceRoute } from './actions.js';
+import { addFlightFromChoice, advanceStep, clearFlightTime, clearLocation, closeLocationDetail, closePlaceDetail, closeOverview, closeSearch, editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail, openPlaceFromMap, openPlaceOrLocationDetail, openOverview, openSearch, returnToCurrentStep, selectLocation, selectRouteOption, setFlightTime, setRouteMode, showHelp, showRouteMap, showTimeline, startNavigation, swapLocations, toggleAccessibleRoute, toggleRiskAck, traceRouteToLocation, tracePlaceRoute } from './actions.js';
 import { handleCalculate } from './routeController.js';
 import { init } from './bootstrap.js';
 import { app, navState, uiState } from '../state/appState.js';
@@ -46,17 +46,18 @@ export function bindEvents() {
     btn.addEventListener('click', () => openCategorySearch(btn.dataset.catKey))
   );
 
+  // Flight time (Home). `input`, not `change`: the derived gate deadline
+  // should appear as soon as the value is valid, and the field is never
+  // re-rendered from under the caret.
+  $('flight-time')?.addEventListener('input', e => setFlightTime(e.target.value));
+  $('flight-clear')?.addEventListener('click', clearFlightTime);
+
   // Route choice ("Escolha seu caminho")
-  $('start-nav-btn')?.addEventListener('click', startNavigation);
   $('back-to-planning-btn')?.addEventListener('click', () => { app.mode = 'planning'; render(); });
   $('edit-route-btn')?.addEventListener('click', editRoute);
-  document.querySelectorAll('.sg-rc__chip[data-budget]').forEach(btn =>
-    btn.addEventListener('click', () => setTimeBudget(btn.dataset.budget))
-  );
-  // `input`, not `change`: the fit badges should follow the clock the traveller
-  // is typing, and the field is never re-rendered from under them.
-  $('budget-time')?.addEventListener('input', e => setBudgetTime(e.target.value));
+  $('add-flight-btn')?.addEventListener('click', addFlightFromChoice);
   bindRouteOptionEvents();
+  bindChoiceFooterEvents();
 
   // Navigation
   $('exit-nav-btn')?.addEventListener('click', exitNavigation);
@@ -135,13 +136,22 @@ export function bindFocusTrap(container) {
 
 /**
  * The route cards are real radios, so `change` covers click, Space and the
- * arrow keys in one listener. Exported because the list is re-rendered in
- * place whenever the time budget changes (refreshRouteChoice).
+ * arrow keys in one listener.
  */
 export function bindRouteOptionEvents() {
   document.querySelectorAll('.route-option-input').forEach(input =>
     input.addEventListener('change', () => { if (input.checked) selectRouteOption(input.value); })
   );
+}
+
+/**
+ * The footer is rebuilt whenever the selection changes shape (a viable route's
+ * summary line vs an unviable one's warning + acknowledgement), so its
+ * controls are bound separately from the rest of the screen.
+ */
+export function bindChoiceFooterEvents() {
+  $('start-nav-btn')?.addEventListener('click', startNavigation);
+  $('risk-ack')?.addEventListener('change', e => toggleRiskAck(e.target.checked));
 }
 
 /**

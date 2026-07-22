@@ -324,6 +324,111 @@
 }
 
 /* ============================================================
+   HORÁRIO DO VOO
+   ------------------------------------------------------------
+   The one time input in the app, and the reason the product exists.
+
+   OPTIONAL BUT PUSHED — the Waze "home/work" pattern. It gets a filled
+   turquoise-tinted block rather than a bare row, because SkyGate is built
+   for the passenger with a flight and the screen should say so. It is NOT
+   required: "Calcular rota" works either way, so nothing here signals an
+   error state when it is empty.
+
+   Once filled, the block calms down to a neutral surface: it has done its
+   job and should stop competing with the CTA.
+   ============================================================ */
+
+.sg-home__flight {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: rgba(41, 171, 226, .10);
+  border: 1px solid rgba(41, 171, 226, .28);
+  transition: background var(--ds-transition), border-color var(--ds-transition);
+}
+.sg-home__flight.is-filled {
+  background: var(--surface-2);
+  border-color: var(--border);
+}
+
+.sg-home__flight-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--sky-ink);
+  font-size: 20px;
+  box-shadow: var(--elev-1);
+}
+
+.sg-home__flight-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sg-home__flight-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  color: var(--text);
+  cursor: pointer;
+}
+.sg-home__flight-copy {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--text-muted);
+}
+.sg-home__flight-copy strong { color: var(--sky-ink); font-weight: var(--weight-bold); }
+
+.sg-home__flight-control {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.sg-ds.sg-home .sg-home__flight-input {
+  min-height: var(--tap-min);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);   /* interactive control: needs 3:1 on its own */
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.sg-ds.sg-home .sg-home__flight-clear {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 17px;
+  cursor: pointer;
+  transition: background var(--ds-transition), color var(--ds-transition);
+}
+.sg-ds.sg-home .sg-home__flight-clear:hover { background: var(--surface); color: var(--text); }
+
+.sg-ds.sg-home :is(.sg-home__flight-input, .sg-home__flight-clear):focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+
+/* ============================================================
    ACCESSIBLE ROUTE ROW
    Shares .sg-access-row / .sg-toggle with the old markup because
    actions.js patches those nodes directly.

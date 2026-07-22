@@ -12,6 +12,7 @@
  *   #accessible-toggle        toggles accessible routing (actions.js also
  *                             patches this node in place, and reaches for
  *                             .sg-access-row / .sg-access-row__icon)
+ *   #flight-time              horário do voo ('HH:MM'); #flight-clear removes it
  *   #calc-btn                 handleCalculate -> RouteSummaryScreen
  *   #help-btn #retry-btn #dismiss-error
  *   .sg-home-quick[data-cat-key]  quick-action shortcuts (own class, not
@@ -24,6 +25,7 @@ import { findNode, getFloorLabel } from '../../state/selectors.js';
 import { appData, planState, uiState } from '../../state/appState.js';
 import { esc } from '../../utils/format.js';
 import { Button, Card, Chip, Header, IconButton, dsIcon } from '../../components/ds/index.js';
+import { deadlineClock, hasFlight } from '../../services/flightSlack.js';
 
 /* Four quick actions on a single row (Uber/Maps style). The visible label is
    ONE word; the fuller description lives in `hint`, which goes to the
@@ -83,6 +85,48 @@ function endpointField({ kind, node, label, placeholder, clearLabel }) {
    separate column, keeps them level with the place name whether or not
    the field is showing a Chip. */
 
+/**
+ * Horário do voo — the ONE time input in the app, and the reason the product
+ * exists: with it, every route can say how much slack it leaves.
+ *
+ * OPTIONAL BUT PUSHED (the Waze "home/work" pattern): SkyGate is built for the
+ * passenger with a flight, so the field gets a real block, an inviting line of
+ * copy and brand colour — not a timid "optional" footnote. "Calcular rota"
+ * works with or without it; someone without a flight simply gets an excellent
+ * indoor map and no slack.
+ *
+ * Departure time, NOT boarding time: departure is what a passenger knows by
+ * heart. The boarding margin is applied for them (APP_CONFIG.flight).
+ */
+function flightField() {
+  const value = planState.flightTime;
+  const filled = hasFlight();
+  const deadline = filled ? deadlineClock() : '';
+
+  /* Stacked, not a three-column row: a native <input type="time"> is ~99px
+     wide (it carries its own picker glyph), which left the label too little
+     room and wrapped "Horário do voo" onto two lines at 390px. The icon
+     anchors the block on the left; everything else stacks beside it. */
+  return `<div class="sg-home__flight${filled ? ' is-filled' : ''}">
+    <span class="sg-home__flight-icon" aria-hidden="true">${dsIcon('lucide:plane-takeoff')}</span>
+
+    <div class="sg-home__flight-body">
+      <label class="sg-home__flight-label" for="flight-time">Horário do voo</label>
+      <p class="sg-home__flight-copy" id="flight-help">
+        ${filled
+          ? `Esteja no portão até <strong>${esc(deadline)}</strong>.`
+          : 'Adicione seu voo e veja quanto tempo sobra.'}
+      </p>
+      <div class="sg-home__flight-control">
+        <input type="time" id="flight-time" class="sg-home__flight-input"
+          value="${esc(value)}" step="300" aria-describedby="flight-help">
+        ${filled ? `<button type="button" class="sg-home__flight-clear" id="flight-clear"
+          aria-label="Remover horário do voo">${dsIcon('lucide:x')}</button>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
 function routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, offline }) {
   const body = `
     ${uiState.error ? `
@@ -116,6 +160,10 @@ function routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, o
         })}
       </div>
     </div>
+
+    <div class="sg-home__divider" role="presentation"></div>
+
+    ${flightField()}
 
     <div class="sg-home__divider" role="presentation"></div>
 

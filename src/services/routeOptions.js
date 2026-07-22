@@ -8,9 +8,9 @@
  *
  * ─── SWAP TO BACKEND ──────────────────────────────────────────────────
  * The screen only ever calls `buildRouteOptions(route)`. The moment Dijkstra
- * starts returning alternatives, put them on the response under `alternatives`
- * (or `routes` / `route_options`) shaped like this and they are used verbatim —
- * nothing in the UI changes:
+ * starts returning alternatives, put them on the response under `rotas`
+ * (or `alternatives` / `routes` / `route_options`) shaped like this and they
+ * are used verbatim — nothing in the UI changes:
  *
  *   {
  *     id: 'food',
@@ -18,15 +18,22 @@
  *     tempo_min: 15,
  *     delta_vs_rapida_min: 3,
  *     pisos: 2,
- *     passa_por: [{ loja: 'Club Café', icone: 'solar:cup-hot-bold' }],
+ *     passa_por: [{ loja: 'Club Café', icone: 'lucide:coffee' }],
  *     etapas: [...]                         // same shape as route.steps
  *   }
  *
- * Until then `deriveOptions()` below builds the extra cards from the POIs that
- * actually sit on or beside the calculated path, and flags them `isEstimate`
- * so the UI can label the numbers as approximations instead of passing a guess
- * off as a fact. The component is written for N options either way — it never
- * assumes exactly three.
+ * ON `folga_min` / `status`: the endpoint may also accept `horario_voo` and
+ * return those per route. We PARSE them but recompute slack on the client
+ * anyway — see scoreOptions(). A slack minted server-side is stale the second
+ * it is serialised, and this screen sits open while the passenger reads it.
+ * The server's copy is the right thing for logging and for any push
+ * notification; the number on screen has to follow the device clock.
+ *
+ * Until alternatives exist, `deriveOptions()` below builds the extra cards
+ * from the POIs that actually sit on or beside the calculated path, and flags
+ * them `isEstimate` so the UI labels the numbers as approximations instead of
+ * passing a guess off as a fact. The component is written for N options either
+ * way — it never assumes exactly three.
  * ──────────────────────────────────────────────────────────────────────
  */
 import { INTERNAL_TYPES, getPublicNodeLabel, getTypeMeta } from './nodePresentation.js';
@@ -34,6 +41,7 @@ import { getOpenStatus, getPlaceDetails } from './placesMock.js';
 import { appData } from '../state/appState.js';
 import { findNode, getFloorLabel } from '../state/selectors.js';
 import { asArray, clamp, first } from '../utils/format.js';
+import { slackFor } from './flightSlack.js';
 
 /** The direct route is always id `fastest`; the screen pre-selects it. */
 export const FASTEST_ID = 'fastest';
@@ -46,18 +54,26 @@ const FLAVOURS = [
   {
     id: 'food',
     name: 'Pela praça de alimentação',
-    icon: 'solar:cup-hot-bold',
+    icon: 'lucide:coffee',
     types: new Set(['restaurant']),
     fits: 'dá tempo de comer algo no caminho',
   },
   {
     id: 'shops',
     name: 'Pelas lojas',
-    icon: 'solar:bag-4-bold',
+    icon: 'lucide:shopping-bag',
     types: new Set(['shop', 'pharmacy']),
     fits: 'dá tempo de passar nas lojas',
   },
 ];
+
+/** Node type → Lucide glyph for the "passa por" chips. */
+const PLACE_ICONS = {
+  restaurant: 'lucide:utensils',
+  shop:       'lucide:shopping-bag',
+  pharmacy:   'lucide:pill',
+  lounge:     'lucide:armchair',
+};
 
 /** How many places one card lists before it stops being scannable. */
 const MAX_PASSES_BY = 3;
@@ -87,33 +103,72 @@ export function findOption(options, id) {
 }
 
 /**
- * How the option lands against the traveller's time budget.
- * Returns null when no budget was given — that is what keeps the cards clean
- * for the passenger who is only killing time.
+ * The options ready to render: each one scored against the flight deadline,
+ * ordered, and with exactly one marked as the app's recommendation.
  *
- * @returns {{ slack:number, tone:'ok'|'tight'|'over', label:string, hint:string }|null}
+ * Recomputed at RENDER time, never stored — `now` moves while the screen is
+ * open, so a route that was "apertada" a moment ago becomes "inviável" on its
+ * own. Returns the options untouched (slack null, no recommendation) when the
+ * passenger gave no flight time.
  */
-export function budgetFit(option, budgetMinutes, isFastest) {
-  if (!Number.isFinite(budgetMinutes) || budgetMinutes <= 0 || !option) return null;
-  const slack = Math.round(budgetMinutes - option.minutes);
+export function scoreOptions(options, now = new Date()) {
+  if (!options?.length) return [];
 
-  if (slack < 0) {
-    return {
-      slack,
-      tone: 'over',
-      label: `${Math.abs(slack)} min a mais do que você tem`,
-      hint: isFastest ? '' : 'a rota direta cabe melhor',
-    };
+  const fastestId = options[0]?.id;
+  const scored = options.map(o => {
+    const fit = slackFor(o.minutes, now);
+    return { ...o, isFastest: o.id === fastestId, slack: fit, recommended: false };
+  });
+
+  if (!scored[0].slack) return scored;   // no flight: plain list, no verdicts
+
+  const ordered = orderByViability(scored);
+  const pick = pickRecommended(ordered);
+  return ordered.map(o => ({ ...o, recommended: o.id === pick }));
+}
+
+/**
+ * Viable routes keep their natural order (fastest, food, shops); anything the
+ * passenger cannot actually make sinks to the bottom. Deliberately NOT a sort
+ * by slack — reshuffling the whole list every minute as the clock ticks would
+ * make the screen impossible to trust.
+ */
+function orderByViability(scored) {
+  const viable = scored.filter(o => o.slack.status !== 'inviavel');
+  const doomed = scored.filter(o => o.slack.status === 'inviavel');
+  return [...viable, ...doomed];
+}
+
+/**
+ * The one route the app puts its name on.
+ *
+ * Tight margin → the direct route, and the others carry their own warning.
+ * Generous margin → the scenic one, because that is the whole point of having
+ * time to spare: the copilot should say "you can afford the coffee".
+ *
+ * When NOTHING fits, nothing is recommended. The fastest is still what the
+ * screen pre-selects (it is the least bad), but stamping "recomendada para
+ * você" on a route the passenger would miss their flight on is the app
+ * endorsing a plan it has just called impossible.
+ */
+function pickRecommended(ordered) {
+  const viable = ordered.filter(o => o.slack.status !== 'inviavel');
+  if (!viable.length) return '';
+
+  const scenic = viable.find(o => !o.isFastest && o.slack.status === 'tranquila');
+  return (scenic ?? viable[0]).id;
+}
+
+/** The short line under a card's badge: what this margin lets you do. */
+export function slackHint(option) {
+  const status = option.slack?.status;
+  if (!status) return '';
+  if (status === 'inviavel') {
+    return option.isFastest ? 'você chegaria após o embarque' : 'a rota direta cabe melhor';
   }
-  if (slack < 10) {
-    return { slack, tone: 'tight', label: `sobra ~${slack} min`, hint: 'sem tempo para paradas' };
-  }
-  return {
-    slack,
-    tone: 'ok',
-    label: `sobra ~${slack} min`,
-    hint: isFastest ? '' : (option.fits ?? ''),
-  };
+  if (status === 'apertada') return 'siga direto, sem paradas';
+  if (status === 'tranquila') return option.fits ?? 'dá tempo de aproveitar o aeroporto';
+  return option.isFastest ? '' : (option.fits ?? '');
 }
 
 /* ============================================================
@@ -121,7 +176,7 @@ export function budgetFit(option, budgetMinutes, isFastest) {
    ============================================================ */
 
 function normalizeApiOptions(raw) {
-  const list = asArray(first(raw?.alternatives, raw?.routes, raw?.route_options, []));
+  const list = asArray(first(raw?.rotas, raw?.alternatives, raw?.routes, raw?.route_options, []));
   if (list.length < 2) return [];   // one route is not a choice — derive instead
 
   return list.map((r, i) => {
@@ -129,7 +184,7 @@ function normalizeApiOptions(raw) {
     return {
       id: String(first(r?.id, r?.slug, `rota-${i}`)),
       name: String(first(r?.nome, r?.name, r?.label, `Opção ${i + 1}`)),
-      icon: String(first(r?.icone, r?.icon, i === 0 ? 'solar:bolt-bold' : 'solar:map-point-bold')),
+      icon: String(first(r?.icone, r?.icon, i === 0 ? 'lucide:zap' : 'lucide:map-pin')),
       minutes,
       deltaMinutes: Math.max(0, Math.round(Number(first(r?.delta_vs_rapida_min, r?.delta_minutes, 0)) || 0)),
       floors: Math.max(1, Number(first(r?.pisos, r?.floors, 1)) || 1),
@@ -138,16 +193,20 @@ function normalizeApiOptions(raw) {
       path: asArray(r?.path ?? r?.node_codes),
       isEstimate: false,
       fits: String(first(r?.sugestao, r?.hint, '')),
+      // Kept for logging/parity checks; the screen recomputes live. See the
+      // "ON folga_min / status" note at the top of this file.
+      serverSlackMin: Number.isFinite(Number(r?.folga_min)) ? Number(r.folga_min) : null,
+      serverStatus: String(first(r?.status, '')),
     };
   });
 }
 
 function normalizePassBy(p) {
-  if (typeof p === 'string') return { code: '', name: p, icon: 'solar:map-point-bold', floor: '', open: null };
+  if (typeof p === 'string') return { code: '', name: p, icon: 'lucide:map-pin', floor: '', open: null };
   return {
     code: String(first(p?.code, p?.node_code, '')),
     name: String(first(p?.loja, p?.name, p?.label, 'Local')),
-    icon: String(first(p?.icone, p?.icon, 'solar:map-point-bold')),
+    icon: String(first(p?.icone, p?.icon, 'lucide:map-pin')),
     floor: String(first(p?.piso, p?.floor, '')),
     open: typeof p?.aberto === 'boolean' ? p.aberto : null,
   };
@@ -168,7 +227,7 @@ function deriveOptions(route) {
   const fastest = {
     id: FASTEST_ID,
     name: 'Mais rápida',
-    icon: 'solar:bolt-bold',
+    icon: 'lucide:zap',
     minutes: baseMinutes,
     deltaMinutes: 0,
     floors,
@@ -240,7 +299,7 @@ function describePlace(node) {
   return {
     code: node.code,
     name: place?.name ?? getPublicNodeLabel(node),
-    icon: getTypeMeta(node.type).icon,
+    icon: PLACE_ICONS[node.type] ?? 'lucide:map-pin',
     floor: getFloorLabel(node.floorId),
     open: status ? status.open : null,     // null = unknown, never rendered
     closesAt: status?.open ? (status.today?.close ?? '') : '',

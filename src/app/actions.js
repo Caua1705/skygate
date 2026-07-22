@@ -1,5 +1,5 @@
 import { SEARCH_CATEGORIES } from '../services/nodePresentation.js';
-import { _searchDebounce, bindInstructionSwipe, bindRouteOptionEvents, bindTimelinePlaceEvents } from './events.js';
+import { _searchDebounce, bindChoiceFooterEvents, bindInstructionSwipe, bindTimelinePlaceEvents } from './events.js';
 import { app, appData, mapState, navState, planState, uiState } from '../state/appState.js';
 import { render, updateRouteOverlay } from './router.js';
 import { findNode } from '../state/selectors.js';
@@ -7,14 +7,15 @@ import { renderInstructionCardInner, renderOverlayOverview } from '../screens/na
 import { renderTimelineList } from '../screens/navigation/NavigationTimeline.js';
 import { renderRouteDiagram } from '../screens/navigation/NavigationRouteMap.js';
 import { renderSummaryStrip } from '../screens/navigation/NavigationShell.js';
-import { renderBudgetEcho, renderChoiceFooterNote, renderChoiceOptions } from '../screens/routeSummary/RouteSummaryScreen.js';
-import { budgetMinutes } from '../services/timeBudget.js';
+import { renderChoiceFooterInner } from '../screens/routeSummary/RouteSummaryScreen.js';
+import { deadlineClock, hasFlight } from '../services/flightSlack.js';
+import { esc } from '../utils/format.js';
 import { switchFloor } from '../map/floorSwitch.js';
 import { autoFitRoute, fitStepToView } from '../map/mapFit.js';
 import { prefersReducedMotion , $ } from '../utils/dom.js';
 import { hasPlaceDetails } from '../components/PlaceDetailSheet.js';
 import { attachStepDistances, buildSemanticSteps, formatMeters, pathMeters, segmentMeters } from '../services/routeSteps.js';
-import { findOption } from '../services/routeOptions.js';
+import { findOption, scoreOptions } from '../services/routeOptions.js';
 
 /* ============================================================
    14. ACTIONS
@@ -299,78 +300,96 @@ export function editRoute() {
   navState.activeStepIndex = 0;
   navState.routeOptions = [];
   navState.selectedOptionId = '';
+  uiState.riskAcknowledged = false;
   app.mode = 'planning';
   render();
 }
 
 /* ============================================================
-   ROUTE CHOICE SCREEN — time budget + which way to walk
+   FLIGHT TIME — the one time input in the app (Home)
    ============================================================ */
 
 /**
- * A time-budget chip. Tapping the active one clears it, because the answer is
- * optional and there must be a way back to "I would rather not say".
- *
- * Full re-render: choosing (or leaving) 'exact' adds or removes the time
- * field, which is a structural change. Focus is put back where the traveller
- * left it — on the field it just opened, or on the chip they pressed.
+ * Patched in place, never re-rendered: a full render() would tear out the
+ * <input type="time"> mid-edit and drop the caret on every keystroke. Only the
+ * copy line under the label changes as the value becomes valid, so that is the
+ * only thing rewritten.
  */
-export function setTimeBudget(key) {
-  const next = planState.timeBudget === key ? '' : key;
-  planState.timeBudget = next;
-  if (next !== 'exact') planState.budgetUntil = '';
+export function setFlightTime(value) {
+  planState.flightTime = String(value ?? '');
+  const block = document.querySelector('.sg-home__flight');
+  const help  = $('flight-help');
+  if (!block || !help) return;
+
+  const filled = hasFlight();
+  block.classList.toggle('is-filled', filled);
+  help.innerHTML = filled
+    ? `Esteja no portão até <strong>${esc(deadlineClock())}</strong>.`
+    : 'Adicione seu voo e veja quanto tempo sobra.';
+}
+
+export function clearFlightTime() {
+  planState.flightTime = '';
+  render();
+  requestAnimationFrame(() => $('flight-time')?.focus({ preventScroll: true }));
+}
+
+/**
+ * "Adicionar horário do voo" from the choice screen. Goes back to Home with
+ * the route intact and lands the passenger ON the field, so the invitation
+ * costs one tap rather than a hunt.
+ */
+export function addFlightFromChoice() {
+  app.mode = 'planning';
   render();
   requestAnimationFrame(() => {
-    const target = next === 'exact'
-      ? $('budget-time')
-      : document.querySelector(`.sg-rc__chip[data-budget="${CSS.escape(key)}"]`);
-    target?.focus({ preventScroll: true });
+    const input = $('flight-time');
+    input?.focus({ preventScroll: true });
+    input?.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
   });
 }
 
-/** The 'HH:MM' behind "Horário exato". Patched in place — see refreshRouteChoice. */
-export function setBudgetTime(value) {
-  planState.budgetUntil = String(value ?? '');
-  refreshRouteChoice();
-}
+/* ============================================================
+   ROUTE CHOICE SCREEN — which way to walk
+   ============================================================ */
 
 /**
- * Re-render everything the budget FEEDS (the echo line, the cards' fit badges,
- * the footer note) without touching the controls that produced it. A full
- * render() here would tear out the <input type="time"> mid-edit and drop the
- * caret on every keystroke.
- */
-export function refreshRouteChoice() {
-  const budget = budgetMinutes();
-
-  const echo = $('budget-echo');
-  if (echo) echo.innerHTML = renderBudgetEcho(budget);
-
-  const list = $('route-option-list');
-  if (list) {
-    list.innerHTML = renderChoiceOptions(undefined, undefined, budget);
-    bindRouteOptionEvents();
-  }
-  updateChoiceFooterNote(budget);
-}
-
-/**
- * Pick a way to walk the route. Patched in place rather than re-rendered: the
- * cards are real radios, and rebuilding them mid-interaction would drop focus
- * out of the group and break arrow-key selection.
+ * Pick a way to walk the route. The cards are patched in place rather than
+ * re-rendered: they are real radios, and rebuilding them mid-interaction would
+ * drop focus out of the group and break arrow-key selection.
+ *
+ * The FOOTER is rebuilt, because it changes shape with the choice — a viable
+ * route gets a summary line, an unviable one gets the warning and its
+ * acknowledgement gate. The acknowledgement resets: it was about the OTHER
+ * route, and consenting to miss one flight is not consent for the next.
  */
 export function selectRouteOption(id) {
   if (!id || navState.selectedOptionId === id) return;
   navState.selectedOptionId = id;
+  uiState.riskAcknowledged = false;
   document.querySelectorAll('.sg-rc-opt').forEach(el => {
     el.classList.toggle('is-selected', el.querySelector('.route-option-input')?.value === id);
   });
-  updateChoiceFooterNote();
+  refreshChoiceFooter();
 }
 
-function updateChoiceFooterNote(budget) {
-  const note = $('sg-rc-selection');
-  if (note) note.outerHTML = renderChoiceFooterNote(undefined, budget ?? budgetMinutes());
+/** The passenger accepted that this route arrives after boarding. */
+export function toggleRiskAck(on) {
+  uiState.riskAcknowledged = !!on;
+  const cta = $('start-nav-btn');
+  if (cta) cta.disabled = !on;
+}
+
+function refreshChoiceFooter() {
+  const footer = document.querySelector('.sg-rc__footer');
+  if (!footer) return;
+  footer.innerHTML = renderChoiceFooterInner();
+  bindChoiceFooterEvents();
+}
+
+function isSelectedRouteUnviable() {
+  const scored = scoreOptions(navState.routeOptions ?? []);
+  return findOption(scored, navState.selectedOptionId)?.slack?.status === 'inviavel';
 }
 
 /**
@@ -439,6 +458,10 @@ export function returnToCurrentStep() {
 
 export function startNavigation() {
   if (!navState.semanticSteps.length) return;
+  // Belt and braces: the CTA is already disabled in this state, but the guard
+  // means no other caller can start a route that arrives after boarding
+  // without the passenger having said so.
+  if (isSelectedRouteUnviable() && !uiState.riskAcknowledged) return;
   applySelectedRouteOption();
   app.mode = 'navigation';
   navState.activeStepIndex = 0;

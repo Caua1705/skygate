@@ -10,17 +10,15 @@ export const planState = {
   accessibleRoute: false,     // compact toggle — replaces the two big mode cards
 
   /**
-   * OPTIONAL time budget, asked on the route-choice screen as "quanto tempo
-   * você tem?" — deliberately not "horário do voo", because it also serves the
-   * passenger who is just killing time.
+   * The passenger's departure time as 'HH:MM' — the ONE time input in the whole
+   * app, collected on Home. Optional but prominent: SkyGate is built for the
+   * passenger with a flight, so the field is pushed, not hidden.
    *
-   * `timeBudget` is the chosen preset key ('' | 'rush' | 'm30' | 'h1' | 'exact');
-   * `budgetUntil` is the 'HH:MM' backing the 'exact' preset. Everything the UI
-   * needs is derived from these by budgetMinutes() in services/timeBudget.js —
-   * nothing caches a minute count that would go stale as the clock moves.
+   * Everything downstream (gate deadline, per-route slack, the status badges)
+   * is DERIVED from this by services/flightSlack.js against the device clock.
+   * Nothing caches a minute count — `now` moves while the screen is on.
    */
-  timeBudget: '',
-  budgetUntil: '',
+  flightTime: '',
 };
 
 export const navState = {
@@ -70,6 +68,13 @@ export const uiState = {
 
   floorMenuOpen: false,
   routeAnimating: false,
+
+  /**
+   * The passenger ticked "entendo que posso perder o voo" for a route whose
+   * slack is negative. Reset whenever the selected route changes — the
+   * acknowledgement is about THAT route, not a blanket opt-out.
+   */
+  riskAcknowledged: false,
 };
 
 export const appData = {

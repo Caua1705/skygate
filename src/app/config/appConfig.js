@@ -15,6 +15,22 @@ export const APP_CONFIG = Object.freeze({
     metersPerUnit: 1,
     roundToMeters: 10,   // displayed distances snap to this grid
   },
+  /**
+   * The passenger tells us ONE time: when their flight departs — that is what
+   * people know by heart. Everything else is derived.
+   *
+   *   arrival deadline = flight time − boardingMarginMin
+   *   slack (per route) = arrival deadline − (now + route travel time)
+   *
+   * `boardingMarginMin` and the slack bands vary by airport and airline, so
+   * they live here rather than being buried in the UI. Bands are read as
+   * minutes of slack: above `comfortable` is "tranquila", down to `ok` is
+   * "no tempo", down to 0 is "apertada", below 0 the route is "inviável".
+   */
+  flight: {
+    boardingMarginMin: 35,
+    slackBands: { comfortable: 30, ok: 10 },
+  },
 });
 
 export function getApiBaseUrl() {
