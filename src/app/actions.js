@@ -5,6 +5,7 @@ import { render, updateRouteOverlay } from './router.js';
 import { findNode } from '../state/selectors.js';
 import { renderInstructionCardInner, renderOverlayOverview } from '../screens/navigation/NavigationScreen.js';
 import { renderSummaryStrip, renderTimelineList } from '../screens/navigation/NavigationTimeline.js';
+import { renderRouteDiagram } from '../screens/navigation/NavigationRouteMap.js';
 import { switchFloor } from '../map/floorSwitch.js';
 import { autoFitRoute, fitStepToView } from '../map/mapFit.js';
 import { prefersReducedMotion , $ } from '../utils/dom.js';
@@ -31,6 +32,13 @@ const ENTRANCE_MS = 1500;
  * the step count.
  */
 const TIMELINE_ENTRANCE_MS = 1400;
+
+/**
+ * How long the "Ver trajeto" entrance runs, in ms. Must outlast the slowest
+ * keyframe in the `.sg-rt-screen.is-entering` block in
+ * navigation-route-map.css (the marker pop: 760ms delay + 520ms).
+ */
+const ROUTE_MAP_ENTRANCE_MS = 1400;
 
 export function openSearch(kind) {
   if (!['origin', 'destination'].includes(kind)) return;
@@ -356,8 +364,30 @@ function playTimelineEntrance() {
   setTimeout(() => screen.classList.remove('is-entering'), TIMELINE_ENTRANCE_MS);
 }
 
-/** Switch to the top-down map view and play its own entrance. */
+/**
+ * "Ver trajeto": the schematic metro diagram.
+ *
+ * The floor still follows the active step even though this view never draws
+ * one — leaving it behind would strand the plan (and the floor control) on
+ * whatever floor the traveller happened to open navigation from.
+ */
 export function showRouteMap() {
+  if (!navState.route) return;
+  navState.view = 'trajeto';
+  const step = navState.semanticSteps[navState.activeStepIndex];
+  if (step?.floorId) mapState.selectedFloorId = step.floorId;
+  mapState.manualFloor = false;
+  render();
+  playRouteMapEntrance();
+  scrollRouteMapToCurrent('auto');
+}
+
+/**
+ * The old top-down floor plan. No control opens it since the metro diagram
+ * took over "Ver trajeto"; it is kept exported, and kept working, so the
+ * plan can be put back behind a control without rebuilding anything.
+ */
+export function showFloorPlan() {
   if (!navState.route) return;
   navState.view = 'map';
   const step = navState.semanticSteps[navState.activeStepIndex];
@@ -368,12 +398,24 @@ export function showRouteMap() {
   bindInstructionSwipe();
 }
 
-/** Back from the map to the timeline, on the same step. */
+/** Back to the timeline, on the same step. */
 export function showTimeline() {
   navState.view = 'timeline';
   render();
   playTimelineEntrance();
   scrollTimelineToCurrent('auto');
+}
+
+/**
+ * Diagram entrance: the walked line draws itself, then the stops land. Same
+ * contract as the other two — one class, removed when it ends, because the
+ * diagram is re-rendered in place on every step change.
+ */
+function playRouteMapEntrance() {
+  const screen = $('nav-screen');
+  if (!screen || prefersReducedMotion()) return;
+  screen.classList.add('is-entering');
+  setTimeout(() => screen.classList.remove('is-entering'), ROUTE_MAP_ENTRANCE_MS);
 }
 
 function playMapEntrance() {
@@ -427,10 +469,11 @@ export function advanceStep(delta) {
 /**
  * Move the active step and refresh whichever view is on screen.
  *
- * The two views share the state but not the update path: the timeline swaps
- * its list and scrolls, the map redraws its overlay and re-frames. Doing
- * both regardless would run the map's fit against elements that are not in
- * the document, which is how you get a silent ReferenceError per keypress.
+ * The views share the state but not the update path: the timeline swaps its
+ * list and scrolls, the diagram redraws itself, the plan redraws its overlay
+ * and re-frames. Doing all three regardless would run the plan's fit against
+ * elements that are not in the document, which is how you get a silent
+ * ReferenceError per keypress.
  */
 function applyStepChange(idx) {
   navState.activeStepIndex = idx;
@@ -446,11 +489,47 @@ function applyStepChange(idx) {
     // Always re-frame; fitStepToView itself drops the animation to 0ms under
     // prefers-reduced-motion, so skipping it entirely just left the map behind.
     requestAnimationFrame(() => fitStepToView(idx));
+  } else if (navState.view === 'trajeto') {
+    updateRouteMap();
   } else {
     updateTimeline();
   }
 
   announceStep(idx, step);
+}
+
+/**
+ * Redraw the metro diagram in place.
+ *
+ * The whole SVG is rebuilt rather than patched: one step moves the boundary
+ * between the solid and the dotted line, retypes three pills and moves the
+ * marker, which is most of the drawing anyway. Only #rt-map is touched, so
+ * the entrance choreography is not replayed.
+ */
+export function updateRouteMap() {
+  const el = $('rt-map');
+  if (!el) return;
+  el.innerHTML = renderRouteDiagram();
+  updateTimelineFooter();
+  scrollRouteMapToCurrent();
+}
+
+/**
+ * Keep the traveller's marker on screen after a step.
+ *
+ * A third down the viewport, like the timeline, so what fills the screen
+ * below it is the part of the trip that has not happened yet.
+ */
+export function scrollRouteMapToCurrent(behavior) {
+  const scroller = $('rt-scroll');
+  const here     = $('rt-here');
+  if (!scroller || !here) return;
+  const mode = behavior ?? (prefersReducedMotion() ? 'auto' : 'smooth');
+  // Rect deltas, not offsetTop: the marker is an SVG node, which has no
+  // offsetTop at all, and the scroller is not its offsetParent either.
+  const delta = here.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+  const top = scroller.scrollTop + delta - scroller.clientHeight * 0.32;
+  scroller.scrollTo({ top: Math.max(0, top), behavior: mode });
 }
 
 /**
@@ -467,7 +546,9 @@ export function updateTimeline() {
   scrollTimelineToCurrent();
 }
 
-/** Keep "Próximo"/"Chegou!" and the summary strip honest after a step. */
+/** Keep "Próximo"/"Chegou!" and the summary strip honest after a step.
+    Both views render the same footer button and the same strip, so both
+    refresh through here. */
 function updateTimelineFooter() {
   const isLast = navState.activeStepIndex >= navState.semanticSteps.length - 1;
   const next = $('nav-next');

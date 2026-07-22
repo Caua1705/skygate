@@ -9,15 +9,20 @@ import { countFloorChanges, formatMeters } from '../../services/routeSteps.js';
 import { getNodeMeta } from '../../app/constants.js';
 import { Button, Chip, Metric, MetricGroup, StepRail, dsIcon } from '../../components/ds/index.js';
 import { renderNavigationTimeline } from './NavigationTimeline.js';
+import { renderNavigationRouteMap } from './NavigationRouteMap.js';
 
 /**
- * Navigation dispatch. The DEFAULT view is now the vertical timeline; the
- * top-down map below is reached through "Ver trajeto" and is otherwise
- * untouched, so it can be swapped for the schematic metro view later
- * without disturbing the list.
+ * Navigation dispatch. The DEFAULT view is the vertical timeline; "Ver
+ * trajeto" opens the schematic metro diagram beside it. The top-down floor
+ * plan below is no longer wired to a control, but it still answers to
+ * navState.view === 'map' and is otherwise untouched.
  */
 export function renderNavigation() {
-  return navState.view === 'map' ? renderNavigationMap() : renderNavigationTimeline();
+  switch (navState.view) {
+    case 'trajeto': return renderNavigationRouteMap();
+    case 'map':     return renderNavigationMap();
+    default:        return renderNavigationTimeline();
+  }
 }
 
 export function renderNavigationMap() {

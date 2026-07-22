@@ -32,8 +32,9 @@ export function render() {
     applyMapTransform(0);
     bindMapPan();
     // The traveller must land on the step they are actually on, not at the
-    // top of a route they are halfway through.
-    if (navState.view !== 'map') requestAnimationFrame(() => scrollTimelineToCurrent('auto'));
+    // top of a route they are halfway through. Each view scrolls itself; the
+    // diagram does it from showRouteMap(), where the entrance is played.
+    if (navState.view === 'timeline') requestAnimationFrame(() => scrollTimelineToCurrent('auto'));
   }
 }
 

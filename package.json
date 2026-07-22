@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/presentation.test.mjs && node tests/state-and-map.test.mjs",
+    "test": "node tests/presentation.test.mjs && node tests/state-and-map.test.mjs && node tests/route-diagram.test.mjs",
     "dev": "node serve.js",
     "start": "node serve.js"
   }

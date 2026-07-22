@@ -24,3 +24,6 @@
 /* Navigation DEFAULT view: the vertical timeline (dark). Own sg-tl* classes.
    Last, so it wins over the map/sheet rules for anything they share. */
 @import url('./screens/navigation-timeline.css');
+/* Navigation SECOND view: the schematic metro diagram behind "Ver trajeto".
+   Own sg-rt* classes; reuses the timeline's shell, so it must come after it. */
+@import url('./screens/navigation-route-map.css');

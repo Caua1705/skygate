@@ -54,9 +54,13 @@ export function bindEvents() {
 
   // Navigation
   $('exit-nav-btn')?.addEventListener('click', exitNavigation);
-  // Timeline ⇄ map. "Ver trajeto" opens the top-down plan for now.
-  // TODO(trajeto): swap showRouteMap() for the schematic metro view.
+  // Timeline ⇄ trajeto. Two ways in, because the two views carry the
+  // control in different places: the timeline has it in its footer, and the
+  // diagram has the toggle at the top of the screen.
   $('view-route-btn')?.addEventListener('click', showRouteMap);
+  $('tab-steps-btn')?.addEventListener('click', showTimeline);
+  // The active tab is a no-op on purpose: it already shows what it names.
+  // Still a real button, so the pair reads and focuses as one control.
   $('back-to-timeline-btn')?.addEventListener('click', showTimeline);
   bindTimelinePlaceEvents();
   $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
@@ -250,9 +254,10 @@ document.addEventListener('keydown', e => {
     if (uiState.showOverview)  { closeOverview(); return; }
     if (uiState.searchOpenFor) { e.preventDefault(); closeSearch(); return; }
     if (uiState.floorMenuOpen) { uiState.floorMenuOpen = false; document.getElementById('floor-ctrl')?.querySelector('button')?.focus(); return; }
-    // Escape unwinds one layer at a time, matching the back button: from the
-    // map back to the timeline, and only from the timeline out of the trip.
-    if (app.mode === 'navigation' && navState.view === 'map') { showTimeline(); return; }
+    // Escape unwinds one layer at a time, matching the back button: from a
+    // second view back to the timeline, and only from the timeline out of
+    // the trip.
+    if (app.mode === 'navigation' && navState.view !== 'timeline') { showTimeline(); return; }
     if (app.mode === 'navigation') { exitNavigation(); return; }
   }
   if (app.mode === 'navigation' && !uiState.searchOpenFor && !uiState.showOverview) {

@@ -1,0 +1,276 @@
+/* ============================================================
+   NAVIGATION — "VER TRAJETO" (schematic metro diagram)
+
+   The second navigation view. It borrows the timeline's shell wholesale —
+   .sg-tl-screen for the three-band layout and the stage gradient,
+   .sg-tl-hdr / .sg-tl__scroll / .sg-tl-foot for the bands themselves — so
+   everything below is only what the DIAGRAM needs.
+
+   All paint comes from the DS token scale remapped by .sg-ds-dark, plus the
+   two accent aliases the timeline already defines for this island. Nothing
+   here introduces a colour the app did not already have, and nothing here is
+   green: "walked" is turquoise, because on this brand success IS turquoise.
+   ============================================================ */
+
+.sg-rt-screen {
+  --rt-accent:      #29ABE2;   /* --sky-500; restated as a local alias, like --tl-accent */
+  --rt-accent-soft: #6FE0FF;
+  --rt-track:       rgba(120, 205, 245, .16);
+}
+
+/* ── Toggle: Passo a passo | Ver trajeto ─────────────
+   The two views are one screen with two bodies, so the control that swaps
+   them sits above the scroller and never moves. */
+.sg-rt__tabs {
+  flex: 0 0 auto;
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+  margin: 0 var(--space-4) var(--space-3);
+  padding: var(--space-1);
+  border-radius: var(--radius-lg);
+  background: rgba(4, 14, 28, .55);
+  border: 1px solid rgba(120, 205, 245, .14);
+}
+
+.sg-rt__tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: var(--space-2) var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: rgba(255, 255, 255, .70);      /* 8.3:1 on the track */
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: background var(--ds-transition), color var(--ds-transition);
+}
+.sg-rt__tab iconify-icon { font-size: 17px; }
+.sg-rt__tab:hover { color: #FFFFFF; background: rgba(255, 255, 255, .06); }
+
+.sg-rt__tab.is-active {
+  color: #FFFFFF;
+  background: linear-gradient(180deg, rgba(28, 66, 108, .95), rgba(18, 45, 78, .95));
+  box-shadow: 0 6px 16px rgba(3, 10, 20, .5), inset 0 0 0 1px rgba(120, 205, 245, .28);
+}
+.sg-rt__tab.is-active iconify-icon { color: var(--rt-accent-soft); }
+
+.sg-rt__tab:focus-visible {
+  outline: 2px solid var(--sky-400);
+  outline-offset: 2px;
+}
+
+/* ── The diagram ────────────────────────────────────── */
+.sg-rt__map { padding-bottom: var(--space-4); }
+
+/* height is set per-route on the element; width:100% makes it scale down on
+   a narrow phone, and the fixed aspect keeps the layout stable while it does. */
+.sg-rt__svg { display: block; width: 100%; height: auto; overflow: visible; }
+.sg-rt__svg text { font-family: var(--font-body); }
+
+.sg-rt__empty {
+  padding: var(--space-6) 0;
+  text-align: center;
+  color: rgba(255, 255, 255, .62);
+  font-size: var(--text-sm);
+}
+
+/* ── Backdrop: concourse bays ────────────────────────
+   Barely there on purpose. It gives the line something to sit in front of;
+   any louder and it starts reading as a floor plan, which this is not. */
+.sg-rt__bg { fill: rgba(255, 255, 255, .012); stroke: rgba(160, 190, 255, .06); stroke-width: 1.5; }
+.sg-rt__bg-cut { stroke: rgba(160, 190, 255, .07); stroke-dasharray: 2 12; fill: none; }
+
+/* ── The line ────────────────────────────────────────
+   Three strokes doing three jobs: a wide soft halo for the neon bloom, the
+   lit core on top of it, and — past the traveller — a dotted stroke for the
+   part of the trip that has not happened yet. */
+.sg-rt__grad-from { stop-color: #1C86C4; }
+.sg-rt__grad-to   { stop-color: var(--rt-accent); }
+
+.sg-rt__halo {
+  fill: none;
+  stroke: url(#rt-line-grad);
+  stroke-width: 17;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: .22;
+}
+
+.sg-rt__line {
+  fill: none;
+  stroke: url(#rt-line-grad);
+  stroke-width: 7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* drop-shadow, not an SVG <filter>: same bloom, composited on the GPU, and
+     it does not force the whole path through a filter region on every paint. */
+  filter: drop-shadow(0 0 6px rgba(41, 171, 226, .55));
+}
+
+.sg-rt__line--ahead {
+  stroke: var(--rt-accent);
+  stroke-width: 6;
+  stroke-dasharray: 1 13;
+  opacity: .8;
+  filter: none;
+}
+
+/* ── Stations ───────────────────────────────────────── */
+.sg-rt__stop { stroke: #0A1B31; stroke-width: 3; }
+.sg-rt__stop--done  { fill: var(--rt-accent); }
+.sg-rt__stop--ahead { fill: #16304E; stroke: rgba(120, 205, 245, .45); stroke-width: 2.5; }
+
+/* "Você está aqui" — the loudest thing on the canvas, and the only marker
+   with a moving part. */
+.sg-rt__here-halo { fill: rgba(41, 171, 226, .18); }
+.sg-rt__here-ring { fill: #0A1B31; stroke: var(--rt-accent); stroke-width: 3.5; }
+.sg-rt__here-core { fill: #FFFFFF; }
+.sg-rt__pulse     { fill: none; stroke: var(--rt-accent-soft); stroke-width: 2; opacity: 0; }
+
+.sg-rt__dest-dot   { fill: var(--rt-accent); stroke: #0A1B31; stroke-width: 3; }
+.sg-rt__dest-glyph { color: #06263A; }   /* 7.4:1 on the turquoise dot */
+
+/* ── Name pills ─────────────────────────────────────── */
+.sg-rt__pill-box {
+  fill: #12263F;
+  stroke: rgba(120, 205, 245, .20);
+  stroke-width: 1;
+}
+.sg-rt__pill-title {
+  fill: rgba(255, 255, 255, .90);
+  font-weight: var(--weight-semibold);
+}
+.sg-rt__pill-eyebrow {
+  fill: rgba(255, 255, 255, .58);
+  font-size: 9.5px;
+  font-weight: var(--weight-bold);
+  letter-spacing: .1em;
+}
+.sg-rt__pill-glyph { color: var(--rt-accent-soft); }
+
+/* Walked stops recede — they are still readable, because "where have I
+   been" is a real question, but they stop competing for attention. */
+.sg-rt__pill--done .sg-rt__pill-box   { fill: rgba(18, 38, 63, .72); stroke: rgba(120, 205, 245, .12); }
+.sg-rt__pill--done .sg-rt__pill-title { fill: rgba(255, 255, 255, .58); }
+
+.sg-rt__pill--current .sg-rt__pill-box {
+  fill: #173366;
+  stroke: rgba(41, 171, 226, .55);
+  stroke-width: 1.5;
+}
+.sg-rt__pill--current .sg-rt__pill-title   { fill: #FFFFFF; font-weight: var(--weight-bold); }
+.sg-rt__pill--current .sg-rt__pill-eyebrow { fill: var(--rt-accent-soft); }
+
+.sg-rt__pill.is-dest .sg-rt__pill-box {
+  fill: #173366;
+  stroke: rgba(41, 171, 226, .45);
+  stroke-width: 1.5;
+}
+.sg-rt__pill.is-dest .sg-rt__pill-title   { fill: #FFFFFF; font-weight: var(--weight-bold); }
+.sg-rt__pill.is-dest .sg-rt__pill-eyebrow { fill: var(--rt-accent-soft); }
+
+/* ── Off-route references ───────────────────────────── */
+.sg-rt__ref-link { stroke: rgba(160, 190, 255, .28); stroke-width: 1.5; stroke-dasharray: 3 4; }
+.sg-rt__ref-box  { fill: rgba(15, 35, 80, .85); stroke: rgba(160, 190, 255, .16); stroke-width: 1; }
+.sg-rt__ref-dot  { fill: rgba(160, 190, 255, .55); }
+.sg-rt__ref-text {
+  fill: rgba(255, 255, 255, .62);        /* 7.2:1 — AA as body text, still clearly secondary */
+  font-size: 11.5px;
+  font-weight: var(--weight-medium);
+}
+
+/* ── Legend ─────────────────────────────────────────── */
+.sg-rt__legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-2);
+  list-style: none;
+  border-top: 1px solid rgba(120, 205, 245, .12);
+  font-size: var(--text-xs);
+  color: rgba(255, 255, 255, .70);
+}
+.sg-rt__legend li { display: inline-flex; align-items: center; gap: var(--space-2); }
+
+.sg-rt__key { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.sg-rt__key--done  { background: var(--rt-accent); }
+.sg-rt__key--here  { background: #FFFFFF; box-shadow: 0 0 0 2px var(--rt-accent); }
+.sg-rt__key--ahead { background: #16304E; box-shadow: 0 0 0 1.5px rgba(120, 205, 245, .55); }
+
+/* ============================================================
+   MOTION
+   Ambient pulse always; the entrance plays once per opening, driven by
+   .is-entering on the screen (actions.js takes it off again — the diagram is
+   re-rendered in place on every step change, and a class left on would
+   replay the whole opening each time).
+   ============================================================ */
+@media not (prefers-reduced-motion: reduce) {
+
+  .sg-rt__pulse { animation: rtPulse 2.4s cubic-bezier(.25, .6, .3, 1) infinite; }
+  .sg-rt__dest .sg-rt__pulse { animation-delay: 1.2s; }
+  @keyframes rtPulse {
+    0%        { transform: scale(.55); opacity: .55; }
+    70%, 100% { transform: scale(2.1); opacity: 0; }
+  }
+  /* The rings scale about their own centre, not the SVG origin. */
+  .sg-rt__pulse { transform-box: fill-box; transform-origin: center; }
+
+  /* Entrance: the walked line draws itself from the start of the trip to the
+     traveller, then the stops and the labels arrive. pathLength="1" is what
+     lets one dash length cover any route length. */
+  .sg-rt-screen.is-entering .sg-rt__line:not(.sg-rt__line--ahead) {
+    stroke-dasharray: 1;
+    animation: rtDraw 900ms cubic-bezier(.22, .61, .36, 1) both;
+  }
+  @keyframes rtDraw {
+    from { stroke-dashoffset: 1; }
+    to   { stroke-dashoffset: 0; }
+  }
+
+  .sg-rt-screen.is-entering .sg-rt__halo,
+  .sg-rt-screen.is-entering .sg-rt__line--ahead {
+    animation: rtFade 700ms ease 500ms both;
+  }
+  .sg-rt-screen.is-entering .sg-rt__stop,
+  .sg-rt-screen.is-entering .sg-rt__pill,
+  .sg-rt-screen.is-entering .sg-rt__ref {
+    animation: rtFade 420ms ease 620ms both;
+  }
+  .sg-rt-screen.is-entering .sg-rt__here,
+  .sg-rt-screen.is-entering .sg-rt__dest {
+    animation: rtPop 520ms cubic-bezier(.22, 1.2, .36, 1) 760ms both;
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+  @keyframes rtFade { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes rtPop  { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+
+  .sg-rt-screen.is-entering .sg-rt__legend {
+    animation: rtFade 420ms ease 820ms both;
+  }
+}
+
+/* Reduced motion: no travel, no draw-on. One static ring so the traveller's
+   position still reads as "live" rather than as another stop. */
+@media (prefers-reduced-motion: reduce) {
+  .sg-rt__pulse { opacity: .3; transform: none; }
+  .sg-rt__dest .sg-rt__pulse { display: none; }
+}
+
+/* ── Desktop: a column, not a canvas ─────────────────
+   Matches the timeline's own ceiling, so switching views does not change
+   the width of the thing you are reading. */
+@media (min-width: 900px) {
+  .sg-rt__tabs { max-width: 620px; margin-inline: auto; width: calc(100% - var(--space-4) * 2); }
+  .sg-rt__map  { max-width: 620px; margin-inline: auto; }
+}

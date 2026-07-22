@@ -16,11 +16,16 @@ export const navState = {
   activeStepIndex: 0,
   routeFloorIds: new Set(),
   /**
-   * Which navigation view is on screen: 'timeline' (default) or 'map'.
-   * Both read the SAME steps and activeStepIndex above — this only chooses
-   * how they are drawn, so switching views never loses the traveller's place.
-   * TODO(trajeto): 'map' is the old top-down plan, kept as the "Ver trajeto"
-   * destination until the schematic metro view replaces it there.
+   * Which navigation view is on screen: 'timeline' (default) or 'trajeto',
+   * the schematic metro diagram. All of them read the SAME steps and
+   * activeStepIndex above — this only chooses how they are drawn, so
+   * switching views never loses the traveller's place.
+   *
+   * 'map', the old top-down floor plan, is no longer reachable from the UI:
+   * "Ver trajeto" now opens the metro diagram instead. The plan's renderer
+   * and its whole map layer are left intact and still honour this value, so
+   * setting it by hand (or wiring a control to showFloorPlan()) brings it
+   * back without any of it having to be rebuilt.
    */
   view: 'timeline',
 };
