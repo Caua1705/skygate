@@ -25,7 +25,7 @@ import { findNode, getFloorLabel } from '../../state/selectors.js';
 import { appData, planState, uiState } from '../../state/appState.js';
 import { esc } from '../../utils/format.js';
 import { Button, Card, Chip, Header, IconButton, dsIcon } from '../../components/ds/index.js';
-import { deadlineClock, hasFlight } from '../../services/flightSlack.js';
+import { gateCloseClock, hasFlight } from '../../services/flightSlack.js';
 
 /* Four quick actions on a single row (Uber/Maps style). The visible label is
    ONE word; the fuller description lives in `hint`, which goes to the
@@ -101,7 +101,7 @@ function endpointField({ kind, node, label, placeholder, clearLabel }) {
 function flightField() {
   const value = planState.flightTime;
   const filled = hasFlight();
-  const deadline = filled ? deadlineClock() : '';
+  const gateClose = filled ? gateCloseClock() : '';
 
   /* Stacked, not a three-column row: a native <input type="time"> is ~99px
      wide (it carries its own picker glyph), which left the label too little
@@ -114,7 +114,7 @@ function flightField() {
       <label class="sg-home__flight-label" for="flight-time">Horário do voo</label>
       <p class="sg-home__flight-copy" id="flight-help">
         ${filled
-          ? `Esteja no portão até <strong>${esc(deadline)}</strong>.`
+          ? `Portão fecha <strong>~${esc(gateClose)}</strong> (estimado).`
           : 'Adicione seu voo e veja quanto tempo sobra.'}
       </p>
       <div class="sg-home__flight-control">

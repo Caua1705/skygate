@@ -19,6 +19,14 @@ export const planState = {
    * Nothing caches a minute count — `now` moves while the screen is on.
    */
   flightTime: '',
+
+  /**
+   * 'domestic' | 'international' — drives the gate-close margin (APP_CONFIG
+   * .flight.gateCloseMargin). Nothing collects it yet: there is no UI for it,
+   * and inferring it from the destination gate would be a guess dressed as a
+   * fact. Wired so adding it later is a field, not a rewrite.
+   */
+  flightType: 'domestic',
 };
 
 export const navState = {

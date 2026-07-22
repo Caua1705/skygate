@@ -8,7 +8,7 @@ import { renderTimelineList } from '../screens/navigation/NavigationTimeline.js'
 import { renderRouteDiagram } from '../screens/navigation/NavigationRouteMap.js';
 import { renderSummaryStrip } from '../screens/navigation/NavigationShell.js';
 import { renderChoiceFooterInner } from '../screens/routeSummary/RouteSummaryScreen.js';
-import { deadlineClock, hasFlight } from '../services/flightSlack.js';
+import { gateCloseClock, hasFlight } from '../services/flightSlack.js';
 import { esc } from '../utils/format.js';
 import { switchFloor } from '../map/floorSwitch.js';
 import { autoFitRoute, fitStepToView } from '../map/mapFit.js';
@@ -323,8 +323,10 @@ export function setFlightTime(value) {
 
   const filled = hasFlight();
   block.classList.toggle('is-filled', filled);
+  // Must match flightField() in HomeScreen.js — the estimated gate closing is
+  // never shown as a bare time.
   help.innerHTML = filled
-    ? `Esteja no portão até <strong>${esc(deadlineClock())}</strong>.`
+    ? `Portão fecha <strong>~${esc(gateCloseClock())}</strong> (estimado).`
     : 'Adicione seu voo e veja quanto tempo sobra.';
 }
 

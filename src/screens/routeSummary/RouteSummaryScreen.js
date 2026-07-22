@@ -35,7 +35,7 @@ import { esc, fmtMin } from '../../utils/format.js';
 import { Button, Chip, dsIcon } from '../../components/ds/index.js';
 import { findOption, scoreOptions, slackHint } from '../../services/routeOptions.js';
 import {
-  deadlineClock, formatDuration, formatSlack, hasFlight, minutesUntilDeadline,
+  formatDuration, formatSlack, gateCloseClock, hasFlight, minutesUntilGateClose,
 } from '../../services/flightSlack.js';
 
 export function renderSummary() {
@@ -61,7 +61,7 @@ export function renderSummary() {
 
       <div class="sg-rc__scroll">
         ${tripLine()}
-        ${hasFlight() ? deadlineBanner() : flightInvite()}
+        ${hasFlight() ? marginBanner() : flightInvite()}
         ${optionsSection(options, selected)}
       </div>
 
@@ -107,23 +107,40 @@ function tripRow(label, node, fallback) {
 }
 
 /* ============================================================
-   2a. WITH a flight — state the deadline once, up top, so every "sobra ~X"
-   below has something to be relative to.
+   2a. WITH a flight — the margin, stated ONCE and slack-first.
+   ------------------------------------------------------------
+   Hierarchy is deliberate. The hero is the only number the passenger
+   actually needs to act on: how long they have from RIGHT NOW. The clock
+   times underneath are the receipt — why that number is what it is —
+   set small, and never shown as a bare hour: an estimated gate closing
+   printed like a fact reads as an airline announcement we never got.
+   Hence "portão fecha ~19:04 (estimado)", never "19:04".
    ============================================================ */
-function deadlineBanner() {
-  const left = minutesUntilDeadline();
+function marginBanner() {
+  const left = minutesUntilGateClose();
   const late = left !== null && left < 0;
+  const gate = gateCloseClock();
 
-  return `<section class="sg-rc__deadline${late ? ' is-late' : ''}" aria-label="Prazo para chegar ao portão">
-    <span class="sg-rc__deadline-icon" aria-hidden="true">
+  return `<section class="sg-rc__margin${late ? ' is-late' : ''}" aria-label="Sua margem até o portão fechar">
+    <span class="sg-rc__margin-icon" aria-hidden="true">
       ${dsIcon(late ? 'lucide:circle-alert' : 'lucide:plane-takeoff')}
     </span>
-    <p class="sg-rc__deadline-text">
+
+    <div class="sg-rc__margin-text">
       ${late
-        ? `O embarque do voo das <strong>${esc(planState.flightTime)}</strong> já começou.`
-        : `Voo <strong>${esc(planState.flightTime)}</strong> · esteja no portão até
-           <strong>${esc(deadlineClock())}</strong> — <strong>${esc(formatDuration(left))}</strong> a partir de agora.`}
-    </p>
+        ? `<p class="sg-rc__margin-hero">
+             <span class="sg-rc__margin-value">O portão já deve ter fechado</span>
+           </p>`
+        : `<p class="sg-rc__margin-hero">
+             <span class="sg-rc__margin-lead">Você tem</span>
+             <strong class="sg-rc__margin-value">~${esc(formatDuration(left))}</strong>
+           </p>`}
+      <p class="sg-rc__margin-basis">
+        portão fecha <strong>~${esc(gate)}</strong> <span class="sg-rc__margin-est">(estimado)</span>
+        <span class="sg-rc__margin-sep" aria-hidden="true">·</span>
+        voo ${esc(planState.flightTime)}
+      </p>
+    </div>
   </section>`;
 }
 
