@@ -4,6 +4,7 @@ import { render } from './router.js';
 import { findNode, getAirportSlug } from '../state/selectors.js';
 import { normalizeRoute } from '../services/normalize.js';
 import { attachStepDistances, buildSemanticSteps } from '../services/routeSteps.js';
+import { buildRouteOptions } from '../services/routeOptions.js';
 
 /* ============================================================
    15. ROUTE CALCULATION
@@ -40,6 +41,11 @@ export async function handleCalculate() {
     navState.activeStepIndex = 0;
     mapState.manualFloor = false;
 
+    // The WAYS of walking this route. The direct one is always first and is
+    // what the choice screen pre-selects — the traveller opts INTO a detour.
+    navState.routeOptions = buildRouteOptions(route);
+    navState.selectedOptionId = navState.routeOptions[0]?.id ?? '';
+
     // Set selected floor to origin floor
     const firstFloor = (route.segments ?? []).find(s => s.type === 'floor')?.floorId
       ?? findNode(planState.originCode)?.floorId
@@ -51,6 +57,8 @@ export async function handleCalculate() {
   } catch (err) {
     console.error('[SkyGate]', err);
     navState.route = null;
+    navState.routeOptions = [];
+    navState.selectedOptionId = '';
     uiState.error = routeError(err);
   } finally {
     uiState.loading = '';

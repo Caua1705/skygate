@@ -1,5 +1,5 @@
 import { SEARCH_CATEGORIES } from '../services/nodePresentation.js';
-import { _searchDebounce, bindInstructionSwipe, bindTimelinePlaceEvents } from './events.js';
+import { _searchDebounce, bindInstructionSwipe, bindRouteOptionEvents, bindTimelinePlaceEvents } from './events.js';
 import { app, appData, mapState, navState, planState, uiState } from '../state/appState.js';
 import { render, updateRouteOverlay } from './router.js';
 import { findNode } from '../state/selectors.js';
@@ -7,11 +7,14 @@ import { renderInstructionCardInner, renderOverlayOverview } from '../screens/na
 import { renderTimelineList } from '../screens/navigation/NavigationTimeline.js';
 import { renderRouteDiagram } from '../screens/navigation/NavigationRouteMap.js';
 import { renderSummaryStrip } from '../screens/navigation/NavigationShell.js';
+import { renderBudgetEcho, renderChoiceFooterNote, renderChoiceOptions } from '../screens/routeSummary/RouteSummaryScreen.js';
+import { budgetMinutes } from '../services/timeBudget.js';
 import { switchFloor } from '../map/floorSwitch.js';
 import { autoFitRoute, fitStepToView } from '../map/mapFit.js';
 import { prefersReducedMotion , $ } from '../utils/dom.js';
 import { hasPlaceDetails } from '../components/PlaceDetailSheet.js';
-import { formatMeters, pathMeters, segmentMeters } from '../services/routeSteps.js';
+import { attachStepDistances, buildSemanticSteps, formatMeters, pathMeters, segmentMeters } from '../services/routeSteps.js';
+import { findOption } from '../services/routeOptions.js';
 
 /* ============================================================
    14. ACTIONS
@@ -294,8 +297,106 @@ export function editRoute() {
   navState.routeFloorIds = new Set();
   navState.semanticSteps = [];
   navState.activeStepIndex = 0;
+  navState.routeOptions = [];
+  navState.selectedOptionId = '';
   app.mode = 'planning';
   render();
+}
+
+/* ============================================================
+   ROUTE CHOICE SCREEN — time budget + which way to walk
+   ============================================================ */
+
+/**
+ * A time-budget chip. Tapping the active one clears it, because the answer is
+ * optional and there must be a way back to "I would rather not say".
+ *
+ * Full re-render: choosing (or leaving) 'exact' adds or removes the time
+ * field, which is a structural change. Focus is put back where the traveller
+ * left it — on the field it just opened, or on the chip they pressed.
+ */
+export function setTimeBudget(key) {
+  const next = planState.timeBudget === key ? '' : key;
+  planState.timeBudget = next;
+  if (next !== 'exact') planState.budgetUntil = '';
+  render();
+  requestAnimationFrame(() => {
+    const target = next === 'exact'
+      ? $('budget-time')
+      : document.querySelector(`.sg-rc__chip[data-budget="${CSS.escape(key)}"]`);
+    target?.focus({ preventScroll: true });
+  });
+}
+
+/** The 'HH:MM' behind "Horário exato". Patched in place — see refreshRouteChoice. */
+export function setBudgetTime(value) {
+  planState.budgetUntil = String(value ?? '');
+  refreshRouteChoice();
+}
+
+/**
+ * Re-render everything the budget FEEDS (the echo line, the cards' fit badges,
+ * the footer note) without touching the controls that produced it. A full
+ * render() here would tear out the <input type="time"> mid-edit and drop the
+ * caret on every keystroke.
+ */
+export function refreshRouteChoice() {
+  const budget = budgetMinutes();
+
+  const echo = $('budget-echo');
+  if (echo) echo.innerHTML = renderBudgetEcho(budget);
+
+  const list = $('route-option-list');
+  if (list) {
+    list.innerHTML = renderChoiceOptions(undefined, undefined, budget);
+    bindRouteOptionEvents();
+  }
+  updateChoiceFooterNote(budget);
+}
+
+/**
+ * Pick a way to walk the route. Patched in place rather than re-rendered: the
+ * cards are real radios, and rebuilding them mid-interaction would drop focus
+ * out of the group and break arrow-key selection.
+ */
+export function selectRouteOption(id) {
+  if (!id || navState.selectedOptionId === id) return;
+  navState.selectedOptionId = id;
+  document.querySelectorAll('.sg-rc-opt').forEach(el => {
+    el.classList.toggle('is-selected', el.querySelector('.route-option-input')?.value === id);
+  });
+  updateChoiceFooterNote();
+}
+
+function updateChoiceFooterNote(budget) {
+  const note = $('sg-rc-selection');
+  if (note) note.outerHTML = renderChoiceFooterNote(undefined, budget ?? budgetMinutes());
+}
+
+/**
+ * Carry the chosen way into navigation.
+ *
+ * Today the locally-derived detours are annotations on ONE path from the
+ * backend, so their `path` is the base path and this is a no-op. Once Dijkstra
+ * returns genuinely different node sequences per alternative, each one arrives
+ * with its own `path`/`steps` and navigation picks them up here — the screens
+ * downstream read navState.route and never learn there was a choice.
+ */
+function applySelectedRouteOption() {
+  const option = findOption(navState.routeOptions ?? [], navState.selectedOptionId);
+  const path = option?.path ?? [];
+  if (!option || !path.length) return;
+
+  const base = navState.route;
+  const sameAsBase = path.length === (base?.path?.length ?? 0)
+    && path.every((code, i) => code === base.path[i]);
+  if (sameAsBase) return;
+
+  navState.route = { ...base, path, steps: option.steps ?? base.steps, estimatedMinutes: option.minutes };
+  navState.routeFloorIds = new Set(
+    path.map(code => findNode(code)?.floorId).filter(Boolean)
+  );
+  navState.semanticSteps = attachStepDistances(buildSemanticSteps(navState.route), path);
 }
 
 export function openOverview() {
@@ -338,6 +439,7 @@ export function returnToCurrentStep() {
 
 export function startNavigation() {
   if (!navState.semanticSteps.length) return;
+  applySelectedRouteOption();
   app.mode = 'navigation';
   navState.activeStepIndex = 0;
   // Always open on the timeline, whichever view was left behind last time.

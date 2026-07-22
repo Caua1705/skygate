@@ -8,6 +8,19 @@ export const planState = {
   destinationCode: '',
   routeMode: 'fastest',       // 'fastest' | 'accessible'
   accessibleRoute: false,     // compact toggle — replaces the two big mode cards
+
+  /**
+   * OPTIONAL time budget, asked on the route-choice screen as "quanto tempo
+   * você tem?" — deliberately not "horário do voo", because it also serves the
+   * passenger who is just killing time.
+   *
+   * `timeBudget` is the chosen preset key ('' | 'rush' | 'm30' | 'h1' | 'exact');
+   * `budgetUntil` is the 'HH:MM' backing the 'exact' preset. Everything the UI
+   * needs is derived from these by budgetMinutes() in services/timeBudget.js —
+   * nothing caches a minute count that would go stale as the clock moves.
+   */
+  timeBudget: '',
+  budgetUntil: '',
 };
 
 export const navState = {
@@ -15,6 +28,13 @@ export const navState = {
   semanticSteps: [],    // { text, icon, nodeType, isTransition, floorId, rawFrom, rawTo }
   activeStepIndex: 0,
   routeFloorIds: new Set(),
+  /**
+   * The WAYS of walking `route` offered on the choice screen, and which one
+   * the traveller picked — see services/routeOptions.js. Built once per
+   * calculation; `selectedOptionId` is what navigation is started with.
+   */
+  routeOptions: [],
+  selectedOptionId: '',
   /**
    * Which navigation view is on screen: 'timeline' (default) or 'trajeto',
    * the schematic metro diagram. All of them read the SAME steps and

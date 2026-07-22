@@ -1,5 +1,5 @@
 import { $ } from '../utils/dom.js';
-import { advanceStep, clearLocation, closeLocationDetail, closePlaceDetail, closeOverview, closeSearch, editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail, openPlaceFromMap, openPlaceOrLocationDetail, openOverview, openSearch, returnToCurrentStep, selectLocation, setRouteMode, showHelp, showRouteMap, showTimeline, startNavigation, swapLocations, toggleAccessibleRoute, traceRouteToLocation, tracePlaceRoute } from './actions.js';
+import { advanceStep, clearLocation, closeLocationDetail, closePlaceDetail, closeOverview, closeSearch, editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail, openPlaceFromMap, openPlaceOrLocationDetail, openOverview, openSearch, returnToCurrentStep, selectLocation, selectRouteOption, setBudgetTime, setRouteMode, setTimeBudget, showHelp, showRouteMap, showTimeline, startNavigation, swapLocations, toggleAccessibleRoute, traceRouteToLocation, tracePlaceRoute } from './actions.js';
 import { handleCalculate } from './routeController.js';
 import { init } from './bootstrap.js';
 import { app, navState, uiState } from '../state/appState.js';
@@ -46,11 +46,17 @@ export function bindEvents() {
     btn.addEventListener('click', () => openCategorySearch(btn.dataset.catKey))
   );
 
-  // Summary
+  // Route choice ("Escolha seu caminho")
   $('start-nav-btn')?.addEventListener('click', startNavigation);
-  $('view-map-btn')?.addEventListener('click', startNavigation); // same action, enters nav mode
   $('back-to-planning-btn')?.addEventListener('click', () => { app.mode = 'planning'; render(); });
   $('edit-route-btn')?.addEventListener('click', editRoute);
+  document.querySelectorAll('.sg-rc__chip[data-budget]').forEach(btn =>
+    btn.addEventListener('click', () => setTimeBudget(btn.dataset.budget))
+  );
+  // `input`, not `change`: the fit badges should follow the clock the traveller
+  // is typing, and the field is never re-rendered from under them.
+  $('budget-time')?.addEventListener('input', e => setBudgetTime(e.target.value));
+  bindRouteOptionEvents();
 
   // Navigation
   $('exit-nav-btn')?.addEventListener('click', exitNavigation);
@@ -125,6 +131,17 @@ export function bindFocusTrap(container) {
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
+}
+
+/**
+ * The route cards are real radios, so `change` covers click, Space and the
+ * arrow keys in one listener. Exported because the list is re-rendered in
+ * place whenever the time budget changes (refreshRouteChoice).
+ */
+export function bindRouteOptionEvents() {
+  document.querySelectorAll('.route-option-input').forEach(input =>
+    input.addEventListener('change', () => { if (input.checked) selectRouteOption(input.value); })
+  );
 }
 
 /**

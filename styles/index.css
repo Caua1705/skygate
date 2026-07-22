@@ -15,7 +15,7 @@
    class names shared with the old markup (.sg-access-row, .sg-toggle,
    .sg-quick-card). */
 @import url('./screens/home.css');
-/* Route summary rebuilt on the DS — own sg-rs* classes, tokens only. */
+/* Route CHOICE ("Escolha seu caminho") on the DS — own sg-rc* classes, tokens only. */
 @import url('./screens/route-summary.css');
 /* Navigation header + bottom sheet on the DS — own classes, tokens only. */
 @import url('./screens/navigation-sheet.css');
