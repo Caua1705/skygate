@@ -25,7 +25,11 @@ export function renderSearchOverlay() {
 
   return `<div class="sg-ds sg-search-overlay" id="search-overlay" role="dialog" aria-modal="true" aria-labelledby="search-title">
     <button type="button" class="sg-search-backdrop" id="search-backdrop" tabindex="-1" aria-label="Fechar busca"></button>
-    <div class="sg-search-sheet">
+    <!-- tabindex="-1" so opening the sheet can land focus HERE rather than on
+         the search input. The dialog is aria-modal, so focus has to move
+         inside it; putting it on the container satisfies that without the
+         input raising the keyboard. -->
+    <div class="sg-search-sheet" id="search-sheet" tabindex="-1">
       <div class="sg-search-handle" aria-hidden="true"></div>
       <div class="sg-search-header">
         <h2 id="search-title" class="sg-search-title">${esc(title)}</h2>

@@ -295,7 +295,8 @@
 .sg-overview-item.is-done .sg-overview-item__text { color: var(--sg-text-muted); }
 
 .sg-overview-item__floor {
-  font-size: 11px; font-weight: 650; color: var(--sg-teal-600); margin-top: 2px;
+  font-size: 12px;   /* 12px floor — was 11px */
+  font-weight: 650; color: var(--sg-teal-600); margin-top: 2px;
 }
 
 .sg-overview-connector {
@@ -333,14 +334,27 @@
   border: none; width: 100%; cursor: pointer;
 }
 
+/* A FIXED 85dvh, not "up to 88dvh".
+   With max-height the sheet sized to its content, so a short result list
+   produced a short sheet that then jumped taller as results came in. A fixed
+   height means the list gets a stable, known amount of room — and when the
+   keyboard opens, the JS above resizes the OVERLAY to the visual viewport, so
+   this 85% is re-measured against what is actually still on screen. */
 .sg-search-sheet {
   position: relative; z-index: 1;
   background: var(--surface);
   border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
-  max-height: 88dvh; display: flex; flex-direction: column;
+  /* 85% OF THE OVERLAY, not 85dvh. With no keyboard the overlay is inset:0,
+     so this IS 85dvh. With the keyboard up, the JS has shrunk the overlay to
+     the visual viewport and the sheet re-proportions to what is left on
+     screen — which a dvh value, measured against the full layout viewport,
+     could not do. */
+  height: 85%; flex: 0 0 auto; display: flex; flex-direction: column;
   box-shadow: var(--elev-3);
   animation: sheetUp var(--t-base) ease;
 }
+/* Programmatic focus target on open — never draw a ring for it. */
+.sg-search-sheet:focus { outline: none; }
 
 .sg-search-handle {
   width: 40px; height: 4px; border-radius: var(--radius-pill);
@@ -349,7 +363,7 @@
 
 .sg-search-header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: var(--space-4) var(--space-5) var(--space-3); flex-shrink: 0;
+  padding: var(--space-2) var(--space-4) var(--space-3); flex-shrink: 0;
 }
 .sg-search-title {
   font-family: var(--font-display);
@@ -365,7 +379,7 @@
 /* ---- Search input ---- */
 .sg-search-input-wrap {
   display: flex; align-items: center; gap: var(--space-3);
-  min-height: 52px; margin: 0 var(--space-5);
+  min-height: var(--tap-min); margin: 0 var(--space-4);
   background: var(--surface-2); border: 1.5px solid var(--border);
   border-radius: var(--radius-md); padding: 0 var(--space-4); flex-shrink: 0;
   transition: border-color var(--ds-transition), box-shadow var(--ds-transition), background var(--ds-transition);
@@ -392,7 +406,7 @@
 
 /* ---- Category chips (horizontal scroll, hidden bar, next peeks in) ---- */
 .sg-quick-chips {
-  display: flex; gap: var(--space-2); padding: var(--space-4) var(--space-5) var(--space-2);
+  display: flex; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-2);
   overflow-x: auto; scrollbar-width: none; flex-shrink: 0;
 }
 .sg-quick-chips::-webkit-scrollbar { display: none; }
@@ -416,14 +430,18 @@
 
 /* ---- Results ---- */
 .sg-search-results {
-  flex: 1; overflow-y: auto; overscroll-behavior: contain;
+  /* min-height:0 — without it the default `auto` floors this item at its
+     content height, so a long list makes the SHEET overflow instead of this
+     box scrolling inside it. */
+  flex: 1 1 auto; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom, 0px));
 }
 .sg-search-results::-webkit-scrollbar { width: 4px; }
 .sg-search-results::-webkit-scrollbar-thumb { background: var(--border); border-radius: var(--radius-pill); }
 
-.sg-search-group { padding: var(--space-4) var(--space-5) var(--space-1); }
+.sg-search-group { padding: var(--space-3) var(--space-4) var(--space-1); }
 .sg-search-group__label {
   font-size: var(--text-xs); font-weight: var(--weight-bold); text-transform: uppercase;
   letter-spacing: 0.09em; color: var(--text-muted); margin-bottom: var(--space-1);
@@ -433,7 +451,7 @@
 
 .sg-search-item {
   display: flex; align-items: center; gap: var(--space-3);
-  flex: 1; min-width: 0; min-height: 64px; padding: var(--space-2) var(--space-2);
+  flex: 1; min-width: 0; min-height: 56px; padding: var(--space-2);
   border: none; background: transparent;
   border-radius: var(--radius-md); text-align: left; cursor: pointer;
   transition: background var(--ds-transition);

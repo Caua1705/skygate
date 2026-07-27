@@ -210,7 +210,63 @@ export function closeFloorMenuOnOutside(e) {
   }
 }
 
+/**
+ * Keep the search sheet pinned to the VISUAL viewport.
+ *
+ * Without this, opening the keyboard on iOS leaves the layout viewport at full
+ * height, so the sheet's lower half — the results list — sits behind the
+ * keyboard. Sizing the overlay to visualViewport.height and offsetting it by
+ * offsetTop puts the sheet's bottom edge exactly on top of the keyboard, so
+ * the list keeps whatever room is left instead of being covered.
+ *
+ * The listener lives on the (global) visualViewport, but the overlay is torn
+ * out and rebuilt by every render(), so it is re-attached or detached from
+ * bindSearchOverlayEvents() on each pass — see the guard there.
+ */
+let _vvHandler = null;
+/* Focus is moved into the sheet exactly ONCE per opening. bindEvents() runs on
+   every render, and re-focusing there would pull the caret out of the search
+   field any time anything else re-rendered. Reset when the overlay is gone. */
+let _searchFocused = false;
+
+function detachSearchViewport_() {
+  const vv = window.visualViewport;
+  if (vv && _vvHandler) {
+    vv.removeEventListener('resize', _vvHandler);
+    vv.removeEventListener('scroll', _vvHandler);
+  }
+  _vvHandler = null;
+}
+
+function attachSearchViewport_(overlay) {
+  const vv = window.visualViewport;
+  if (!vv) return;               // no support: the sheet keeps its dvh height
+  detachSearchViewport_();
+  _vvHandler = () => {
+    // The overlay may already be gone (closed between frames).
+    if (!overlay.isConnected) { detachSearchViewport_(); return; }
+    overlay.style.height = `${vv.height}px`;
+    overlay.style.transform = `translateY(${vv.offsetTop}px)`;
+  };
+  vv.addEventListener('resize', _vvHandler);
+  vv.addEventListener('scroll', _vvHandler);
+  _vvHandler();
+}
+
 export function bindSearchOverlayEvents() {
+  const overlay = $('search-overlay');
+  if (!overlay) { detachSearchViewport_(); _searchFocused = false; return; }
+  attachSearchViewport_(overlay);
+
+  /* Focus the SHEET, not the field. The dialog is aria-modal, so focus has to
+     move inside it or a keyboard/screen-reader user is stranded on a trigger
+     the modal just hid. A container with tabindex="-1" takes focus without
+     summoning the keyboard, and Tab from there reaches the field first. */
+  if (!_searchFocused) {
+    _searchFocused = true;
+    requestAnimationFrame(() => $('search-sheet')?.focus({ preventScroll: true }));
+  }
+
   $('search-backdrop')?.addEventListener('click', closeSearch);
   $('close-search')?.addEventListener('click', closeSearch);
   const input = $('search-input');
@@ -225,7 +281,12 @@ export function bindSearchOverlayEvents() {
       clearTimeout(_searchDebounce);
       _searchDebounce = setTimeout(updateSearchResults_, DEBOUNCE_MS);
     });
-    requestAnimationFrame(() => input.focus({ preventScroll: true }));
+    /* NO AUTOFOCUS — deliberate, do not restore.
+       Focusing here raised the keyboard the instant the sheet opened, which
+       ate ~55% of the screen and left about one result row visible. Origin in
+       particular is almost always PICKED from the list, not typed, so the
+       keyboard was in the way of the common path. The field is the first
+       thing in the sheet and one tap away when someone does want to type. */
   }
   bindSearchItemEvents();
   document.querySelectorAll('.sg-chip').forEach(btn =>

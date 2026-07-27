@@ -25,7 +25,14 @@ http.createServer((req, res) => {
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not found: ' + urlPath); return; }
     const ext = path.extname(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    // no-store: with no cache header at all, Chrome applies HEURISTIC caching
+    // and keeps serving stale ES modules across reloads — an edit to a file
+    // under src/ would silently not take effect, which makes it impossible to
+    // trust what you are looking at while developing.
+    res.writeHead(200, {
+      'Content-Type': MIME[ext] || 'application/octet-stream',
+      'Cache-Control': 'no-store, must-revalidate',
+    });
     res.end(data);
   });
 }).listen(port, () => {
