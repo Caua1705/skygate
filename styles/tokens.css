@@ -84,7 +84,7 @@ a { text-decoration: none; color: inherit; }
   --nav-map-bg:       #16263a;
   --nav-map-h:        55%;
   --nav-sheet-overlap: 8px;   /* sheet lifts slightly over the map */
-  --nav-sheet-radius: 30px;
+  --nav-sheet-radius: var(--radius-sheet);   /* was 30px — folded into the system */
   --nav-sheet-pad:    22px;
   --nav-navy:         #0f2540;
   --nav-teal:         #2dd4bf;
@@ -96,9 +96,33 @@ a { text-decoration: none; color: inherit; }
   --nav-fab-shadow:   0 8px 24px rgba(6, 18, 33, .38);
   --nav-sheet-w:      420px;  /* desktop only */
 
-  /* Radius */
-  --r-xs: 6px;  --r-sm: 8px;  --r-md: 12px;
-  --r-lg: 16px; --r-xl: 20px; --r-2xl: 24px;
+  /* ============================================================
+     RADIUS — THE WHOLE SYSTEM IS FOUR VALUES
+     ------------------------------------------------------------
+     --radius-md    12px   fields, tiles, small buttons, rectangular chips,
+                           tooltips, popovers
+     --radius-lg    16px   cards (route cards, detail cards, Home blocks)
+     --radius-pill  999px  primary buttons, pill chips, toggles, grips
+     --radius-sheet 28px   DECLARED EXCEPTION — bottom sheets, TOP CORNERS
+                           ONLY. A sheet is not a card; it is the edge of the
+                           screen lifting, and it needs the larger curve to
+                           read that way. Never use it on four corners.
+
+     If something does not fit one of these, that is a question about the
+     design, not a reason for a fifth value.
+
+     Defined in :root (geometry, not theme) so both the legacy scope and
+     .sg-ds resolve them.
+     ============================================================ */
+  --radius-md:    12px;
+  --radius-lg:    16px;
+  --radius-pill:  999px;
+  --radius-sheet: 28px;
+
+  /* v4 aliases — kept only so the legacy screens keep rendering. Every one
+     of them now resolves to one of the four above. Do not use in new code. */
+  --r-xs: var(--radius-md);  --r-sm: var(--radius-md);  --r-md: var(--radius-md);
+  --r-lg: var(--radius-lg);  --r-xl: var(--radius-lg);  --r-2xl: var(--radius-sheet);
 
   /* Transitions */
   --t-fast:   120ms ease;
@@ -198,13 +222,13 @@ a { text-decoration: none; color: inherit; }
   --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
   --space-5: 24px;  --space-6: 32px;  --space-7: 48px;  --space-8: 64px;
 
-  /* ---- Radius ---- */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;   /* cards */
-  --radius-2xl: 28px;  /* bottom sheet */
-  --radius-pill: 999px;
+  /* ---- Radius ----
+     The four canonical values live in :root (see the block above). These are
+     aliases kept so existing rules keep resolving; --radius-sm and
+     --radius-xl are NOT separate steps any more. */
+  --radius-sm:  var(--radius-md);    /* was 8px  */
+  --radius-xl:  var(--radius-lg);    /* was 20px */
+  --radius-2xl: var(--radius-sheet); /* sheets, top corners only */
 
   /* ---- Elevation ---- */
   --elev-1: 0 1px 2px rgba(15, 23, 42, .06), 0 1px 3px rgba(15, 23, 42, .08);

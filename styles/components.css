@@ -11,7 +11,7 @@
 }
 
 .sg-planning-logo {
-  width: 30px; height: 30px; border-radius: 7px;
+  width: 30px; height: 30px; border-radius: var(--radius-md);
   object-fit: cover; flex-shrink: 0;
   border: 1px solid var(--slate-200);
 }
@@ -46,7 +46,7 @@
 
 .sg-icon-btn {
   display: grid; place-items: center;
-  width: 40px; height: 40px; border-radius: 12px;
+  width: 40px; height: 40px; border-radius: var(--radius-md);
   color: var(--sg-text-secondary); font-size: 20px; flex-shrink: 0;
   transition: background var(--t-fast), color var(--t-fast);
 }
@@ -82,7 +82,7 @@
 
 /* Every interactive DS element shares one visible focus treatment. */
 .sg-ds :focus-visible,
-.sg-ds-dark :focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-sm); }
+.sg-ds-dark :focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-md); }
 
 /* ---------- Button ---------- */
 .ds-btn {
@@ -137,7 +137,7 @@
 
 /* ---------- Card ---------- */
 .ds-card {
-  background: var(--surface); border-radius: var(--radius-xl);
+  background: var(--surface); border-radius: var(--radius-lg);
   padding: var(--space-5); box-shadow: var(--elev-2); border: 1px solid var(--border);
 }
 .ds-card--flat  { box-shadow: none; }
@@ -209,7 +209,7 @@ button.ds-chip { cursor: pointer; min-height: var(--tap-min); }
 
 /* ---------- Sheet ---------- */
 .ds-sheet {
-  background: var(--surface); border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  background: var(--surface); border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   box-shadow: var(--elev-3); padding: var(--space-3) var(--space-5) var(--space-5);
 }
 .ds-sheet__grip { width: 40px; height: 4px; border-radius: var(--radius-pill);

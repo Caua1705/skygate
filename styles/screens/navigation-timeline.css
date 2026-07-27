@@ -269,7 +269,7 @@
   left: 50%;
   width: 2px;
   margin-left: -1px;
-  border-radius: 1px;
+  border-radius: var(--radius-pill);
   background: rgba(120, 205, 245, .16);
   transform-origin: top center;
 }

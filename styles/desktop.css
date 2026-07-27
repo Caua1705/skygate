@@ -35,14 +35,14 @@
   /* Overlay overlays: centered */
   .sg-search-overlay { justify-content: center; align-items: center; }
   .sg-search-sheet {
-    border-radius: var(--radius-2xl);
+    border-radius: var(--radius-lg);
     width: min(600px, calc(100vw - 32px)); max-height: 80dvh;
   }
   .sg-search-handle { display: none; }
 
   .sg-detail-overlay { justify-content: center; align-items: center; }
   .sg-detail-sheet {
-    border-radius: var(--sg-radius-card);
+    border-radius: var(--radius-lg);
     width: min(480px, calc(100vw - 32px)); max-height: 85dvh;
   }
   .sg-detail-handle { display: none; }

@@ -229,7 +229,7 @@
   box-sizing: border-box;
   display: flex; flex-direction: column; justify-content: center;
   padding: 9px 12px;
-  border-radius: 11px;
+  border-radius: var(--radius-md);
   background: rgba(8, 24, 42, .66);
   border: 1px solid rgba(120, 205, 245, .20);
   box-shadow:
@@ -417,7 +417,7 @@
   position: absolute; top: calc(100% + 5px);
   max-width: 132px;
   padding: 4px 9px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: rgba(7, 26, 46, .78);
   border: 1px solid rgba(120, 205, 245, .22);
   backdrop-filter: blur(8px);
@@ -451,7 +451,7 @@
 .sg-nav-brand__btn {
   display: flex; flex-direction: column; gap: 10px;
   text-align: left; padding: 4px; margin: -4px;
-  border-radius: 14px;
+  border-radius: var(--radius-md);
   transition: background var(--t-fast);
 }
 .sg-nav-brand__btn:hover { background: rgba(255,255,255,.07); }
@@ -550,7 +550,7 @@
   transform: translateY(-50%);
   background: rgba(9, 27, 48, .96);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255,255,255,.13); border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.13); border-radius: var(--radius-lg);
   overflow: hidden; min-width: 172px;
   box-shadow: var(--nav-fab-shadow);
   animation: popIn var(--t-base) ease; transform-origin: right center;
@@ -581,7 +581,7 @@
   display: flex; align-items: center; gap: 7px;
   height: 40px; padding: 0 18px;
   background: var(--map-accent-deep); color: #ffffff;
-  border-radius: 20px; font-size: 13px; font-weight: 700;
+  border-radius: var(--radius-pill); font-size: 13px; font-weight: 700;
   box-shadow: var(--nav-fab-shadow);
   transition: opacity var(--t-base), background var(--t-fast);
   white-space: nowrap;
@@ -596,7 +596,7 @@
   top: calc(var(--safe-top) + 108px);
   left: 50%; transform: translateX(-50%) translateY(-6px);
   background: var(--nav-navy); color: #ffffff;
-  padding: 8px 18px; border-radius: 20px;
+  padding: 8px 18px; border-radius: var(--radius-pill);
   font-size: 12.5px; font-weight: 700; white-space: nowrap;
   opacity: 0; pointer-events: none;
   transition: opacity 200ms, transform 200ms;

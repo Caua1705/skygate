@@ -37,7 +37,7 @@
   flex-direction: column;
   max-height: 90dvh;
   background: var(--surface);
-  border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
   box-shadow: var(--elev-3);
   overflow: hidden;
   animation: sgPlaceSheetIn 280ms cubic-bezier(.32, .72, 0, 1) both;
@@ -281,7 +281,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font-size: var(--text-sm);
 }
 .sg-place__hours-day { color: var(--text-muted); font-weight: var(--weight-medium); }
@@ -345,7 +345,7 @@
   .sg-place-sheet {
     width: min(460px, calc(100vw - 32px));
     max-height: 84dvh;
-    border-radius: var(--radius-2xl);
+    border-radius: var(--radius-lg);
     animation-name: sgPlaceModalIn;
   }
   .sg-place-overlay.is-closing .sg-place-sheet { animation-name: sgPlaceModalOut; }

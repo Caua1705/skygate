@@ -170,9 +170,11 @@
   --sg-disabled-text: #94a3b7;
   --sg-shadow-card: 0 24px 60px rgba(7, 26, 51, 0.10), 0 4px 14px rgba(7, 26, 51, 0.04);
   --sg-shadow-control: 0 8px 24px rgba(7, 26, 51, 0.10);
-  --sg-radius-card: 28px;
-  --sg-radius-button: 17px;
-  --sg-radius-shortcut: 20px;
+  /* Folded into the four-value radius system (see tokens.css). Kept as names
+     only because rules in this file and in overlays.css still reference them. */
+  --sg-radius-card: var(--radius-sheet);   /* was 28px */
+  --sg-radius-button: var(--radius-pill);  /* was 17px */
+  --sg-radius-shortcut: var(--radius-lg);  /* was 20px */
 }
 
 /* ── Page canvas ───────────────────────────────────────── */
