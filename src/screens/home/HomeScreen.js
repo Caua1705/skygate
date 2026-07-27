@@ -103,28 +103,46 @@ function flightField() {
   const filled = hasFlight();
   const gateClose = filled ? gateCloseClock() : '';
 
-  /* Stacked, not a three-column row: a native <input type="time"> is ~99px
-     wide (it carries its own picker glyph), which left the label too little
-     room and wrapped "Horário do voo" onto two lines at 390px. The icon
-     anchors the block on the left; everything else stacks beside it. */
-  return `<div class="sg-home__flight${filled ? ' is-filled' : ''}">
-    <span class="sg-home__flight-icon" aria-hidden="true">${dsIcon('lucide:plane-takeoff')}</span>
+  /* COLLAPSED BY DEFAULT — the field is optional, so it must not cost the same
+     vertical budget as the origin/destination pair it sits under. It opens
+     already expanded once a time is set, because then it carries a real answer
+     ("portão fecha ~19:04") the traveller came back to read.
+
+     <details>/<summary> on purpose, NOT a JS disclosure: the platform gives the
+     open/closed state, the Enter/Space handling and the aria-expanded for free,
+     and none of it touches app state — which keeps this a presentation change.
+
+     The two summary labels are BOTH rendered and swapped in CSS on `.is-filled`.
+     setFlightTime() (actions.js) patches that class on this very element without
+     a re-render, so the collapsed line follows the value for free; rendering the
+     text in JS instead would leave it stale until the next render(). */
+  return `<details class="sg-home__flight${filled ? ' is-filled' : ''}"${filled ? ' open' : ''}>
+    <summary class="sg-home__flight-summary">
+      <span class="sg-home__flight-icon" aria-hidden="true">${dsIcon('lucide:plane-takeoff')}</span>
+      <span class="sg-home__flight-summary-text">
+        <span class="sg-home__flight-add">Adicionar horário do voo</span>
+        <span class="sg-home__flight-set">Horário do voo</span>
+      </span>
+      <span class="sg-home__flight-caret" aria-hidden="true">${dsIcon('lucide:chevron-down')}</span>
+    </summary>
 
     <div class="sg-home__flight-body">
-      <label class="sg-home__flight-label" for="flight-time">Horário do voo</label>
       <p class="sg-home__flight-copy" id="flight-help">
         ${filled
           ? `Portão fecha <strong>~${esc(gateClose)}</strong> (estimado).`
           : 'Adicione seu voo e veja quanto tempo sobra.'}
       </p>
       <div class="sg-home__flight-control">
+        <!-- aria-label, not a visible <label for>: a <label> inside <summary>
+             would fight the disclosure for the same click. -->
         <input type="time" id="flight-time" class="sg-home__flight-input"
-          value="${esc(value)}" step="300" aria-describedby="flight-help">
+          value="${esc(value)}" step="300"
+          aria-label="Horário do voo" aria-describedby="flight-help">
         ${filled ? `<button type="button" class="sg-home__flight-clear" id="flight-clear"
           aria-label="Remover horário do voo">${dsIcon('lucide:x')}</button>` : ''}
       </div>
     </div>
-  </div>`;
+  </details>`;
 }
 
 function routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, offline }) {
@@ -169,19 +187,21 @@ function routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, o
 
     <!-- Class names carried over from the previous markup on purpose:
          actions.js patches .sg-access-row__icon in place when it flips. -->
+    <!-- ONE compact line: icon, label, switch. The old second line ("Usa
+         elevadores e evita escadas.") is gone from the layout, not from the
+         product — #plan-status already announces exactly that sentence to
+         screen readers on every flip (actions.js/toggleAccessibleRoute), so
+         dropping the visible copy costs no accessibility. aria-describedby
+         went with it rather than being left pointing at a removed node. -->
     <div class="sg-access-row sg-home__access">
       ${dsIcon('solar:accessibility-bold', `sg-access-row__icon${isAccessible ? ' is-on' : ''}`)}
-      <div class="sg-home__access-text">
-        <span class="sg-home__access-title" id="access-title">Rota acessível</span>
-        <span class="sg-home__access-desc" id="access-desc">Usa elevadores e evita escadas.</span>
-      </div>
+      <span class="sg-home__access-title" id="access-title">Rota acessível</span>
       <button type="button"
         class="sg-toggle sg-home__toggle${isAccessible ? ' is-on' : ''}"
         id="accessible-toggle"
         role="switch"
         aria-checked="${isAccessible}"
-        aria-labelledby="access-title"
-        aria-describedby="access-desc">
+        aria-labelledby="access-title">
         <span class="sg-toggle__thumb" aria-hidden="true"></span>
       </button>
     </div>
@@ -241,9 +261,11 @@ export function renderPlanning() {
         className: 'sg-home__header',
       })}
 
+      <!-- Title only. The subtitle ("Escolha seu ponto de partida e destino")
+           said what the two field placeholders below already say, and cost a
+           whole line above the fold. -->
       <div class="sg-home__heading">
         <h1 class="sg-home__title">Encontre seu caminho</h1>
-        <p class="sg-home__subtitle">Escolha seu ponto de partida e destino.</p>
       </div>
 
       <main class="sg-home__main">

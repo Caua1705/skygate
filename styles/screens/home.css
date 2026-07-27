@@ -76,29 +76,25 @@
 .sg-ds.sg-home .sg-home__header .ds-iconbtn:hover { background: var(--surface-2); }
 
 /* ---- Heading ----
-   Generous vertical rhythm is the whole point of this block: --space-5 of
-   air above the title separates it from the header, --space-6 below
-   separates it from the card. */
+   Was --space-5/--space-5/--space-6 (24/24/32). The title is now the only
+   thing in this block, so the air around it is what pushed the CTA under the
+   fold — flattened to --space-4 (16px) all round. */
 .sg-home__heading {
   flex: 0 0 auto;
-  padding: var(--space-5) var(--space-5) var(--space-6);
+  padding: var(--space-4) var(--space-5);
 }
 
-/* Navy title on the light page. */
+/* Navy title on the light page.
+   --text-2xl (28px), not --text-3xl (36px): at 36px "Encontre seu caminho"
+   wrapped to two lines at 390px, and the h1 is capped at 28px by the type
+   scale for this screen. margin-bottom is gone with the subtitle. */
 .sg-home__title {
   font-family: var(--font-display);
-  font-size: var(--text-3xl);
+  font-size: var(--text-2xl);
   font-weight: var(--weight-extra);
   line-height: var(--leading-tight);
   letter-spacing: -0.02em;
   color: var(--text);
-  margin: 0 0 var(--space-3);
-}
-
-.sg-home__subtitle {
-  font-size: var(--text-lg);
-  line-height: var(--leading-normal);
-  color: var(--text-muted);
   margin: 0;
 }
 
@@ -124,8 +120,10 @@
    ROUTE CARD
    ============================================================ */
 
+/* 16px all round (was 32/24). This is the single biggest density win on the
+   screen: the card holds every control that has to clear the fold. */
 .sg-ds.sg-home .sg-home__card {
-  padding: var(--space-6) var(--space-5);
+  padding: var(--space-4);
 }
 
 /* The journey block is a 2-column grid: fields | swap.
@@ -316,11 +314,13 @@
   cursor: not-allowed;
 }
 
-/* ---- Divider ---- */
+/* ---- Divider ----
+   Was --space-5 (24px) top AND bottom = 48px between blocks. Now --space-2
+   (8px) each side = 16px total, the top of the requested 12-16px band. */
 .sg-home__divider {
   height: 1px;
   background: var(--border);
-  margin: var(--space-5) 0;
+  margin: var(--space-2) 0;
 }
 
 /* ============================================================
@@ -338,47 +338,72 @@
    job and should stop competing with the CTA.
    ============================================================ */
 
+/* COLLAPSED: one 48px row, no fill, no border — a quiet disclosure that reads
+   as an option rather than a second input competing with origin/destination.
+   The turquoise tint the block used to carry full-time is gone: it was the
+   thing making an optional field look as heavy as the required pair. */
 .sg-home__flight {
+  border-radius: var(--radius-md);
+}
+
+/* The summary IS the tap target, so it owns the 48px minimum. */
+.sg-home__flight-summary {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-3);
-  padding: var(--space-3);
-  border-radius: var(--radius-lg);
-  background: rgba(41, 171, 226, .10);
-  border: 1px solid rgba(41, 171, 226, .28);
-  transition: background var(--ds-transition), border-color var(--ds-transition);
+  min-height: var(--tap-min);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  list-style: none;   /* kill the native disclosure triangle... */
+  transition: background var(--ds-transition);
 }
-.sg-home__flight.is-filled {
-  background: var(--surface-2);
-  border-color: var(--border);
-}
+/* ...including WebKit's, which ignores list-style. */
+.sg-home__flight-summary::-webkit-details-marker { display: none; }
+.sg-home__flight-summary:hover { background: var(--surface-2); }
 
 .sg-home__flight-icon {
   flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-md);
-  background: var(--surface);
+  background: rgba(41, 171, 226, .12);
   color: var(--sky-ink);
-  font-size: 20px;
-  box-shadow: var(--elev-1);
+  font-size: 18px;
 }
 
-.sg-home__flight-body {
+.sg-home__flight-summary-text {
   flex: 1 1 auto;
   min-width: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-semibold);
+  color: var(--text);
+}
+
+/* The two labels are both in the DOM; `.is-filled` (patched onto the root by
+   actions.js/setFlightTime without a re-render) picks which one shows. */
+.sg-home__flight-set { display: none; }
+.sg-home__flight.is-filled .sg-home__flight-add { display: none; }
+.sg-home__flight.is-filled .sg-home__flight-set { display: inline; }
+
+.sg-home__flight-caret {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  color: var(--text-muted);
+  transition: transform var(--ds-transition);
+}
+.sg-home__flight[open] .sg-home__flight-caret { transform: rotate(180deg); }
+
+/* EXPANDED body. Indented to line up with the summary label, not the icon. */
+.sg-home__flight-body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-}
-.sg-home__flight-label {
-  display: block;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  color: var(--text);
-  cursor: pointer;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) calc(32px + var(--space-3) + var(--space-2));
 }
 .sg-home__flight-copy {
   margin: 0;
@@ -444,33 +469,25 @@
   border: none;
 }
 
+/* 22px, not 26px: on a single-line row the old size out-weighed the label
+   it belongs to. */
 .sg-ds.sg-home .sg-access-row__icon {
   flex: 0 0 auto;
-  font-size: 26px;
+  font-size: 22px;
   color: var(--text-muted);
   transition: color var(--ds-transition);
 }
 
 .sg-ds.sg-home .sg-access-row__icon.is-on { color: var(--sky-ink); }
 
-.sg-home__access-text {
+/* Now a direct flex child — the .sg-home__access-text column wrapper went
+   away with the description line. */
+.sg-home__access-title {
   flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.sg-home__access-title {
   font-size: var(--text-base);
   font-weight: var(--weight-semibold);
   color: var(--text);
-}
-
-.sg-home__access-desc {
-  font-size: var(--text-sm);
-  line-height: var(--leading-snug);
-  color: var(--text-muted);
 }
 
 /* Toggle switch */
@@ -509,34 +526,40 @@
 .sg-ds.sg-home .sg-home__toggle::after {
   content: '';
   position: absolute;
-  inset: -7px;   /* 32 + 14 = 46px effective, clears 44 at any pixel ratio */
+  inset: -8px;   /* 32 + 16 = 48px effective, matching --tap-min exactly */
 }
 
 /* ---- CTA ----
    The primary action, and it should read as the strongest thing in the
    card when enabled: taller, larger type, its own elevation. The arrow
    is pushed to the right edge so the label stays optically centred. */
-.sg-home__action { margin-top: var(--space-5); }
+.sg-home__action { margin-top: var(--space-4); }
 
+/* 48px (--tap-min), down from 56. The label drops to --text-base (16px) with
+   it: --text-lg at 48px left almost no optical padding above and below. The
+   button is still the strongest thing in the card — it is the only filled
+   navy surface on the screen, which does that job without extra height. */
 .sg-ds.sg-home .sg-home__action .ds-btn {
   position: relative;
-  min-height: 56px;
-  padding: var(--space-4) var(--space-6);
-  font-size: var(--text-lg);
+  min-height: var(--tap-min);
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--text-base);
   font-weight: var(--weight-bold);
   letter-spacing: -0.01em;
 }
 
+/* Shadow blur 18px -> 8px. The big soft drop read as ~10px of extra vertical
+   weight under the button and pushed the fold down without drawing anything. */
 .sg-ds.sg-home .sg-home__action .ds-btn:not(:disabled) {
-  box-shadow: 0 6px 18px rgba(14, 42, 107, .26);
+  box-shadow: 0 2px 8px rgba(14, 42, 107, .24);
 }
 
 .sg-ds.sg-home .sg-home__action .ds-btn:not(:disabled):hover {
-  box-shadow: 0 8px 22px rgba(14, 42, 107, .32);
+  box-shadow: 0 4px 10px rgba(14, 42, 107, .30);
 }
 
 .sg-ds.sg-home .sg-home__action .ds-btn:not(:disabled):active {
-  box-shadow: 0 3px 10px rgba(14, 42, 107, .24);
+  box-shadow: 0 1px 4px rgba(14, 42, 107, .22);
 }
 
 /* Arrow parked on the right edge rather than trailing the label. */
@@ -626,15 +649,21 @@
    QUICK ACCESS
    ============================================================ */
 
-.sg-home__quick { margin-top: var(--space-7); }
+/* --space-5 (24px), not --space-7 (48px): the shortcuts are the next block
+   down, not a new chapter. */
+.sg-home__quick { margin-top: var(--space-5); }
 
+/* 20px section title. Hardcoded on purpose: --text-xl is 22px and the scale
+   is deliberately NOT being re-cut in this pass (most font sizes in the
+   codebase are still loose values, so moving the ladder would only shrink the
+   tokenised third and widen the gap). */
 .sg-home__section-title {
   font-family: var(--font-display);
-  font-size: var(--text-xl);
+  font-size: 20px;
   font-weight: var(--weight-bold);
   line-height: var(--leading-snug);
   color: var(--text);
-  margin: 0 0 var(--space-4);
+  margin: 0 0 var(--space-3);
   padding: 0;   /* flush with the first shortcut */
 }
 
