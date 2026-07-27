@@ -107,12 +107,14 @@
   -webkit-overflow-scrolling: touch;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  /* 12px between sections, down from 24. Every 12px saved up here is 12px more
+     of the third route card showing through at the bottom. */
+  gap: var(--space-3);
   /* The footer is a FLEX SIBLING, not an overlay — it takes its own height out
      of this column, so the scroll already ends where the footer begins. The
      old `padding-bottom: 132px` here was written for a fixed footer that
      never shipped, and left 132px of dead space under the last card. */
-  padding: var(--space-2) var(--space-5) var(--space-5);
+  padding: var(--space-2) var(--space-4) var(--space-4);
 }
 /* The scroll is a flex column, so children with overflow:hidden would be
    squashed to fit instead of making the container scroll. */
@@ -292,28 +294,30 @@
    Present and confident, never a blocker: this is the app pointing at
    the best of itself.
    ============================================================ */
+/* A quiet two-column row, not a raised card. It lost its elevation and its
+   full-width button on purpose: with both, it had a stronger silhouette than
+   the route cards underneath, which are the actual decision on this screen. */
 .sg-rc__invite {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--space-2) var(--space-3);
-  padding: var(--space-4);
-  border-radius: var(--radius-xl);
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   border: 1px solid rgba(41, 171, 226, .30);
-  box-shadow: var(--elev-1);
 }
 .sg-rc__invite-icon {
-  grid-row: 1;
+  flex: 0 0 auto;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   border-radius: var(--radius-md);
   background: rgba(41, 171, 226, .14);
   color: var(--sky-ink);
-  font-size: 21px;
+  font-size: 18px;
 }
-.sg-rc__invite-text { grid-column: 2; min-width: 0; }
+.sg-rc__invite-text { flex: 1 1 auto; min-width: 0; }
 .sg-rc__invite-title {
   margin: 0 0 2px;
   font-family: var(--font-display);
@@ -327,7 +331,28 @@
   line-height: var(--leading-snug);
   color: var(--text-muted);
 }
-.sg-ds.sg-rc .sg-rc__invite-cta { grid-column: 1 / -1; margin-top: var(--space-2); }
+
+/* Inline action. Still a real <button>; only the presentation is a link.
+   The 48px tap floor is bought with a negative inline margin so the glyph
+   still lines up with the copy above it instead of being indented by its
+   own padding. */
+.sg-ds.sg-rc .sg-rc__invite-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap-min);
+  margin-left: calc(var(--space-2) * -1);
+  padding: 0 var(--space-2);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--sky-ink);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+}
+.sg-ds.sg-rc .sg-rc__invite-link:hover { text-decoration: underline; }
+.sg-ds.sg-rc .sg-rc__invite-link iconify-icon { font-size: 16px; }
 
 /* ============================================================
    3. ROUTE CARDS — the hero.
@@ -338,13 +363,15 @@
 .sg-rc__options { display: flex; flex-direction: column; gap: var(--space-3); }
 .sg-rc__list    { display: flex; flex-direction: column; gap: var(--space-3); }
 
+/* ~100px tall, so two whole cards plus a slice of the third are in view and
+   the slice itself is the scroll affordance. 12px padding, not 16. */
 .sg-ds.sg-rc .sg-rc-opt {
   position: relative;
   display: block;
-  padding: var(--space-4);
-  padding-right: calc(var(--space-4) + 26px);
+  padding: var(--space-3);
+  padding-right: calc(var(--space-3) + 24px);
   border: 1.5px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   background: var(--surface);
   box-shadow: var(--elev-1);
   cursor: pointer;
@@ -369,24 +396,24 @@
   pointer-events: none;
 }
 
-.sg-rc-opt__body { display: flex; flex-direction: column; gap: var(--space-2); }
+.sg-rc-opt__body { display: flex; flex-direction: column; gap: 6px; }
 
 .sg-rc-opt__head {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   min-width: 0;
 }
 .sg-rc-opt__icon {
   flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
   border-radius: var(--radius-md);
   background: rgba(41, 171, 226, .14);
   color: var(--sky-ink);
-  font-size: 22px;
+  font-size: 18px;
 }
 .sg-rc-opt.is-selected .sg-rc-opt__icon { background: var(--navy-900); color: #FFFFFF; }
 
@@ -406,9 +433,13 @@
   gap: 3px;
   color: var(--text);
 }
+/* 20px — the section-title size, NOT --text-2xl (28px). Inside a list item
+   the old size read like a dashboard metric and out-shouted the route name
+   it belongs to; the number matters, but it is one attribute of the card,
+   not the card's headline. */
 .sg-rc-opt__time strong {
   font-family: var(--font-display);
-  font-size: var(--text-2xl);
+  font-size: 20px;
   font-weight: var(--weight-extra);
   line-height: 1;
   letter-spacing: -0.02em;
@@ -445,14 +476,14 @@
   align-items: center;
   gap: 6px;
   align-self: flex-start;
-  padding: 4px var(--space-3);
+  padding: 3px var(--space-2);
   border-radius: var(--radius-pill);
   background: var(--navy-900);
   color: #FFFFFF;
-  font-size: 11px;
+  font-size: var(--text-xs);   /* 12px floor — was 11px */
   font-weight: var(--weight-bold);
   text-transform: uppercase;
-  letter-spacing: .05em;
+  letter-spacing: .04em;
 }
 .sg-rc-opt__rec iconify-icon { font-size: 13px; color: var(--sky-400); }
 
@@ -491,18 +522,32 @@
 .sg-rc-opt.is-doomed .sg-rc-opt__icon { background: var(--danger-soft); color: var(--danger); }
 
 /* ---- Places this route walks past ---- */
+/* ONE row that scrolls sideways, not a wrapping cloud. With three long place
+   names ("Casa do Pão de Queijo - Embarque Internacional") this block wrapped
+   to three lines and was 117px of a 206px card — more than the route name,
+   the time and the meta row put together. Same horizontal-scroll pattern as
+   .sg-quick-chips in the search sheet, so nothing is hidden, just queued. */
 .sg-rc-opt__places {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--space-2);
-  padding-top: var(--space-1);
+  padding-top: 2px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.sg-rc-opt__places::-webkit-scrollbar { display: none; }
+
 .sg-rc-place {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  padding: 5px var(--space-3) 5px var(--space-2);
+  gap: 5px;
+  flex: 0 0 auto;
+  /* Long enough to read a real place name, short enough that a second pill
+     always peeks in and advertises the scroll. */
+  max-width: 200px;
+  padding: 4px var(--space-2) 4px 5px;
   border-radius: var(--radius-pill);
   border: 1px solid var(--border);
   background: var(--surface-2);
@@ -513,8 +558,9 @@
 .sg-rc-place__icon {
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--surface);
   color: var(--sky-ink);
@@ -531,8 +577,8 @@
   flex: 0 0 auto;
   font-weight: var(--weight-bold);
   text-transform: uppercase;
-  letter-spacing: .04em;
-  font-size: 10px;
+  letter-spacing: .03em;
+  font-size: var(--text-xs);   /* 12px floor — was 10px */
 }
 /* Turquoise = open, soft amber = closed. Deliberately NOT --success. */
 .sg-rc-place__status.is-open   { color: var(--sky-ink); }
@@ -567,16 +613,9 @@
            max(var(--space-5), env(safe-area-inset-bottom, 0px));
   background: linear-gradient(180deg, rgba(244, 246, 250, 0) 0%, var(--bg) 24%);
 }
-.sg-rc__footer-note {
-  margin: 0 0 var(--space-2);
-  text-align: center;
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.sg-rc__footer-note strong { color: var(--text); font-weight: var(--weight-bold); }
+/* .sg-rc__footer-note is gone: it printed "Mais rápida · 1 min", which the
+   selected card already states directly above it. The element survives as an
+   sr-only live region (see renderChoiceFooterNote) and needs no styling. */
 
 /* ---- Risk gate: an unviable route can be walked, but not by accident ---- */
 .sg-rc__risk {
@@ -618,17 +657,19 @@
   cursor: pointer;
 }
 
+/* 48px and a tight shadow, matching Home's CTA exactly — the two primary
+   actions in the flow should not be different sizes. */
 .sg-ds.sg-rc .sg-rc__cta {
-  min-height: 56px;
-  font-size: var(--text-lg);
+  min-height: var(--tap-min);
+  font-size: var(--text-base);
   font-weight: var(--weight-bold);
-  box-shadow: 0 6px 18px rgba(14, 42, 107, .26);
+  box-shadow: 0 2px 8px rgba(14, 42, 107, .24);
 }
 /* Starting a route that arrives after boarding should never look like the
    happy path. */
 .sg-ds.sg-rc .sg-rc__cta.is-risky:not(:disabled) {
   background: var(--danger);
-  box-shadow: 0 6px 18px rgba(185, 28, 28, .26);
+  box-shadow: 0 2px 8px rgba(185, 28, 28, .24);
 }
 
 /* ============================================================
@@ -637,7 +678,7 @@
 .sg-ds.sg-rc :is(
   .sg-rc__back,
   .sg-rc__edit,
-  .sg-rc__invite-cta,
+  .sg-rc__invite-link,
   .sg-rc__risk-ack input,
   .sg-rc__cta
 ):focus-visible {

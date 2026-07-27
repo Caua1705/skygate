@@ -149,23 +149,20 @@ function marginBanner() {
    Present and visible, never a blocker.
    ============================================================ */
 function flightInvite() {
+  /* One line of copy and an INLINE action, not a block button. This card is an
+     invitation; the route cards below are the decision. A full-width outline
+     button gave it the same silhouette as the primary CTA and made it read as
+     the thing to press. The <button> stays a real button (same #add-flight-btn
+     hook, same handler) — only its presentation is a link. */
   return `<section class="sg-rc__invite">
     <span class="sg-rc__invite-icon" aria-hidden="true">${dsIcon('lucide:plane-takeoff')}</span>
     <div class="sg-rc__invite-text">
       <h2 class="sg-rc__invite-title">Vai pegar um voo?</h2>
-      <p class="sg-rc__invite-copy">
-        Com o horário do voo, o SkyGate mostra quanto tempo sobra em cada caminho
-        e recomenda o melhor para a sua margem.
-      </p>
+      <p class="sg-rc__invite-copy">Veja quanto tempo sobra em cada caminho.</p>
+      <button type="button" class="sg-rc__invite-link" id="add-flight-btn">
+        ${dsIcon('lucide:plus')}<span>Adicionar horário do voo</span>
+      </button>
     </div>
-    ${Button({
-      label: 'Adicionar horário do voo',
-      variant: 'outline',
-      icon: 'lucide:plus',
-      block: true,
-      id: 'add-flight-btn',
-      className: 'sg-rc__invite-cta',
-    })}
   </section>`;
 }
 
@@ -306,12 +303,22 @@ export function renderChoiceFooterInner(
     })}`;
 }
 
+/**
+ * VISUALLY GONE, still announced. The line read "Mais rápida · 1 min", which
+ * is exactly what the selected card already shows a few pixels above — the
+ * footer was repeating the card's own headline back at it and spending a row
+ * of the fold to do it.
+ *
+ * It stays in the DOM as an sr-only live region because selecting a card
+ * patches the footer WITHOUT a re-render (actions.js/selectRouteOption), and
+ * this was the only thing telling a screen-reader user the choice took.
+ */
 function renderChoiceFooterNote(selected) {
   if (!selected) return '';
   const slack = selected.slack;
   const tail = slack ? ` · ${formatSlack(slack.slackMin)}` : '';
 
-  return `<p class="sg-rc__footer-note" id="sg-rc-selection" aria-live="polite">
-    <strong>${esc(selected.name)}</strong> · ${esc(fmtMin(selected.minutes))} min${esc(tail)}
+  return `<p class="sr-only" id="sg-rc-selection" aria-live="polite">
+    ${esc(selected.name)} · ${esc(fmtMin(selected.minutes))} min${esc(tail)}
   </p>`;
 }
