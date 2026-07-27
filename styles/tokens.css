@@ -7,7 +7,7 @@
 
 /* --- RESET --- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html  { height: 100%; -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+html  { height: 100%; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scroll-behavior: smooth; }
 body  {
   min-height: 100dvh; height: 100%;
   font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
@@ -213,7 +213,11 @@ a { text-decoration: none; color: inherit; }
 
   /* ---- Interaction ---- */
   --focus-ring: 0 0 0 3px #FFFFFF, 0 0 0 5px var(--sky-ink);
-  --tap-min: 44px;    /* minimum touch target */
+  /* 48px, the density pass's single floor for any tap target (was 44px).
+     Raising it is safe for the fold: every fold-critical control on Home is
+     either content-driven and already taller, or sits BESIDE the stacked
+     column rather than in it. */
+  --tap-min: 48px;
   --ds-transition: 160ms cubic-bezier(.4, 0, .2, 1);
 }
 
