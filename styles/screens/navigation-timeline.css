@@ -49,29 +49,26 @@
 }
 
 /* ── Header ─────────────────────────────────────────── */
+/* ONE row, vertically centred — was two stacked bands (logo, then the
+   destination underneath it). align-items: center, not flex-start, now that
+   everything in here is a single line. */
 .sg-tl-hdr {
   flex: 0 0 auto;
   position: relative;
   z-index: 2;
   display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: calc(var(--safe-top) + var(--space-4)) var(--space-4) var(--space-4);
+  align-items: center;
+  gap: var(--space-2);
+  padding: calc(var(--safe-top) + var(--space-2)) var(--space-3) var(--space-2);
   background: linear-gradient(180deg, rgba(8, 21, 40, .72) 0%, rgba(8, 21, 40, .28) 70%, rgba(8, 21, 40, 0) 100%);
 }
 
-.sg-tl-hdr__brand {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-/* align-self, not stretch: a column flex container would otherwise smear
-   the auto-width logo across the whole header. */
-.sg-tl-hdr__logo { height: 28px; width: auto; display: block; align-self: flex-start; }
+/* 22px, down from 28: it now shares a row with the destination and the two
+   buttons, and the destination is what earns the width. */
+.sg-tl-hdr__logo { height: 22px; width: auto; display: block; flex: 0 0 auto; }
 
 .sg-tl-hdr__dest {
+  flex: 1 1 auto;
   display: flex;
   align-items: center;
   gap: var(--space-1);
@@ -117,8 +114,8 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-1);
-  margin: 0 var(--space-4) var(--space-3);
-  padding: var(--space-1);
+  margin: 0 var(--space-3) var(--space-2);
+  padding: 3px;
   border-radius: var(--radius-lg);
   background: rgba(4, 14, 28, .55);
   border: 1px solid rgba(120, 205, 245, .14);
@@ -129,8 +126,8 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  min-height: 40px;
-  padding: var(--space-2);
+  min-height: 36px;
+  padding: var(--space-1) var(--space-2);
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
@@ -180,26 +177,31 @@
    Pinned, not scrolled: "how is the trip going" is a question about the
    journey, so it belongs to the frame and stays put while either body
    scrolls underneath it. */
+/* A THIN LINE, not a card. It was a 16px-padded rounded block with a border,
+   and it was the fourth stacked band of chrome before any route content.
+   nowrap so it can never become two rows; the three items are short. */
 .sg-tl__strip {
   flex: 0 0 auto;
   position: relative;
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-  margin: 0 var(--space-4) var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-lg);
+  gap: var(--space-2);
+  flex-wrap: nowrap;
+  margin: 0 var(--space-3) var(--space-2);
+  padding: 3px var(--space-3);
+  border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, .05);
   border: 1px solid rgba(120, 205, 245, .14);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);             /* 12px — the floor, not below it */
   color: rgba(255, 255, 255, .78);       /* 9.5:1 on the strip */
+  white-space: nowrap;
+  overflow: hidden;
 }
 .sg-tl__strip-item { display: inline-flex; align-items: center; gap: var(--space-1); }
 .sg-tl__strip-item b { color: #FFFFFF; font-weight: var(--weight-bold); }
-.sg-tl__strip-item iconify-icon { font-size: 15px; color: var(--tl-accent-soft); }
-.sg-tl__strip-sep { width: 1px; height: 14px; background: rgba(255, 255, 255, .16); }
+.sg-tl__strip-item iconify-icon { font-size: 13px; color: var(--tl-accent-soft); }
+.sg-tl__strip-sep { width: 1px; height: 11px; flex: 0 0 auto; background: rgba(255, 255, 255, .16); }
 
 /* ── The timeline ───────────────────────────────────── */
 .sg-tl { list-style: none; margin: 0; padding: 0; }

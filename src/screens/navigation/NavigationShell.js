@@ -101,13 +101,17 @@ export function renderNavigationShell({ view, body, bodyClass = '' }) {
         <button type="button" class="sg-tl-hdr__btn" id="exit-nav-btn" aria-label="Sair da navegação">
           ${dsIcon('solar:arrow-left-linear')}
         </button>
-        <div class="sg-tl-hdr__brand">
-          <img class="sg-tl-hdr__logo" src="assets/logo-skygate-white.png" alt="SkyGate">
-          <span class="sg-tl-hdr__dest">
-            ${dsIcon('solar:map-point-bold', 'sg-tl-hdr__pin')}
-            <span>FOR · Chegue a ${esc(destName)}</span>
-          </span>
-        </div>
+        <!-- ONE row: back | logo | destination | help. The logo and the
+             destination used to stack, which cost the screen a whole band
+             before any route content. The logo shrinks to make room; the
+             destination is the thing a navigating passenger reads, and it
+             also appears as the last item of the timeline, so ellipsising a
+             very long name here loses nothing. -->
+        <img class="sg-tl-hdr__logo" src="assets/logo-skygate-white.png" alt="SkyGate">
+        <span class="sg-tl-hdr__dest">
+          ${dsIcon('solar:map-point-bold', 'sg-tl-hdr__pin')}
+          <span>FOR · Chegue a ${esc(destName)}</span>
+        </span>
         <button type="button" class="sg-tl-hdr__btn" id="help-btn" aria-label="Ajuda">
           ${dsIcon('solar:question-circle-linear')}
         </button>
