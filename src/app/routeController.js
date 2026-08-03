@@ -82,6 +82,8 @@ export async function handleCalculate() {
     );
     navState.semanticSteps = attachStepDistances(buildSemanticSteps(route), route.path);
     navState.activeStepIndex = 0;
+    navState.hasStarted = false;
+    navState.view = 'map';
     mapState.manualFloor = false;
 
     // Real ways of walking returned by the backend. When there is only one
@@ -109,7 +111,13 @@ export async function handleCalculate() {
     uiState.error = routeError(err);
   } finally {
     uiState.loading = '';
+    const routeFailed = Boolean(uiState.error);
     render();
+    if (routeFailed) {
+      requestAnimationFrame(() => {
+        document.getElementById('retry-route-btn')?.focus({ preventScroll: true });
+      });
+    }
   }
 }
 

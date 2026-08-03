@@ -1,13 +1,12 @@
 /**
- * Sheet — bottom sheet: white, top corners rounded (--radius-2xl), grip on top.
+ * Sheet — bottom sheet: white, top corners rounded (--radius-2xl).
  *
  * @example
  *   Sheet({ title: 'Portão 12', body: 'Siga em frente por 40 metros.' })
  *   Sheet({ title: 'Rota', html: MetricGroup([...]) + Button({ label: 'Iniciar' }) })
  *
- * The grip is decorative (aria-hidden) — it signals draggability but is not
- * itself a control. Wire the drag on the container, and keep a keyboard
- * path (Esc / a close button) so the sheet is not drag-only.
+ * A grip is opt-in because it promises a working drag interaction. Only set
+ * `grip: true` after wiring drag detents and an equivalent keyboard path.
  */
 import { esc } from '../../utils/format.js';
 
@@ -15,7 +14,7 @@ export function Sheet({
   title = '',
   body = '',
   html = '',
-  grip = true,
+  grip = false,
   labelledBy = '',
   className = '',
 } = {}) {

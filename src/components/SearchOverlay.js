@@ -27,7 +27,6 @@ export function renderSearchOverlay() {
          inside it; putting it on the container satisfies that without the
          input raising the keyboard. -->
     <div class="sg-search-sheet" id="search-sheet" tabindex="-1">
-      <div class="sg-search-handle" aria-hidden="true"></div>
       <div class="sg-search-header">
         <h2 id="search-title" class="sg-search-title">${esc(title)}</h2>
         <button type="button" class="sg-icon-btn" id="close-search" aria-label="Fechar busca">

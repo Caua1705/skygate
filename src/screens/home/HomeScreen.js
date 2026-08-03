@@ -14,7 +14,7 @@
  *                             .sg-access-row / .sg-access-row__icon)
  *   #flight-time              horário do voo ('HH:MM'); #flight-clear removes it
  *   #calc-btn                 handleCalculate -> RouteSummaryScreen
- *   #help-btn #retry-btn #dismiss-error
+ *   #help-btn #retry-btn #retry-route-btn #dismiss-error
  *   .sg-home-quick[data-cat-key]  quick-action shortcuts (own class, not
  *                             .sg-quick-card — see events.js and home.css)
  *   #origin-btn #destination-btn   focus targets after clearLocation
@@ -190,7 +190,8 @@ function routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, o
         <span>${esc(uiState.error)}</span>
         ${offline
           ? `<button type="button" id="retry-btn" class="sg-home__error-retry">Tentar novamente</button>`
-          : `<button type="button" id="dismiss-error" class="sg-home__error-close" aria-label="Fechar alerta">
+          : `<button type="button" id="retry-route-btn" class="sg-home__error-action">Tentar de novo</button>
+             <button type="button" id="dismiss-error" class="sg-home__error-close" aria-label="Fechar alerta">
                ${dsIcon('solar:close-circle-bold')}
              </button>`}
       </div>` : ''}
@@ -268,6 +269,37 @@ function routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, o
   return Card({ variant: 'raised', html: body, className: 'sg-home__card' });
 }
 
+/**
+ * A layout-matched first-load scaffold keeps the hierarchy stable while the
+ * airport map arrives. Users see what is becoming available instead of a
+ * spinner floating in a blank page, which reduces perceived wait and shift.
+ */
+function loadingScaffold(message) {
+  return `<div class="sg-home__loading" role="status" aria-live="polite">
+    <span class="sr-only">${esc(message)}</span>
+    <div class="sg-home__loading-card" aria-hidden="true">
+      <div class="sg-home__skeleton-route">
+        <span class="sg-home__skeleton-dot"></span>
+        <span class="sg-home__skeleton-field">
+          <span class="sg-home__skeleton-line is-label"></span>
+          <span class="sg-home__skeleton-line is-value"></span>
+        </span>
+      </div>
+      <div class="sg-home__skeleton-route">
+        <span class="sg-home__skeleton-dot is-filled"></span>
+        <span class="sg-home__skeleton-field">
+          <span class="sg-home__skeleton-line is-label"></span>
+          <span class="sg-home__skeleton-line is-value is-short"></span>
+        </span>
+      </div>
+      <span class="sg-home__skeleton-rule"></span>
+      <span class="sg-home__skeleton-row"></span>
+      <span class="sg-home__skeleton-button"></span>
+    </div>
+    <p class="sg-home__loading-copy" aria-hidden="true">${esc(message)}</p>
+  </div>`;
+}
+
 function offlineCard() {
   return Card({
     variant: 'raised',
@@ -332,10 +364,11 @@ export function renderPlanning() {
       <div class="sg-home__main">
         <div class="sg-home__scroll">
           ${blocked ? `
-            <div class="sg-home__state" role="status" aria-live="polite">
-              <div class="sg-spinner"></div>
-              <p>${uiState.loading === 'airports' ? 'Conectando ao aeroporto…' : 'Carregando dados…'}</p>
-            </div>
+            ${loadingScaffold(
+              uiState.loading === 'airports'
+                ? 'Conectando ao aeroporto…'
+                : 'Preparando o mapa do terminal…'
+            )}
           ` : `
             ${offline ? offlineCard() : `
             ${routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, offline: false })}

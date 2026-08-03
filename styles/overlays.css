@@ -469,20 +469,13 @@
   box-shadow: var(--elev-3);
   animation: sheetUp var(--t-base) ease;
 }
-/* Programmatic focus target on open — never draw a ring for it, and keep its
-   own geometry. The global `.sg-ds :focus-visible` rule sets outline, shadow
-   AND border-radius on whatever is focused, which is fine for a button but
-   would square off the sheet's top corners the moment it takes focus. */
+/* Programmatic focus target on open: never draw an interactive ring for the
+   dialog container itself. */
 .sg-search-sheet:focus,
 .sg-search-sheet:focus-visible {
   outline: none;
   box-shadow: var(--elev-3);
   border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
-}
-
-.sg-search-handle {
-  width: 40px; height: 4px; border-radius: var(--radius-pill);
-  background: var(--border-strong); opacity: .5; margin: var(--space-3) auto 0;
 }
 
 .sg-search-header {
@@ -504,7 +497,7 @@
 .sg-search-input-wrap {
   display: flex; align-items: center; gap: var(--space-3);
   min-height: var(--tap-min); margin: 0 var(--space-4);
-  background: var(--surface-2); border: 1.5px solid var(--border);
+  background: var(--surface-2); border: 1px solid var(--border-strong);
   border-radius: var(--radius-md); padding: 0 var(--space-4); flex-shrink: 0;
   transition: border-color var(--ds-transition), box-shadow var(--ds-transition), background var(--ds-transition);
 }
@@ -539,7 +532,7 @@
   display: inline-flex; align-items: center; gap: var(--space-2);
   flex-shrink: 0; min-width: 0; max-width: calc(100vw - var(--space-6));
   min-height: var(--tap-min); padding: 0 var(--space-4);
-  border-radius: var(--radius-pill); border: 1.5px solid var(--border);
+  border-radius: var(--radius-pill); border: 1px solid var(--border-strong);
   background: var(--surface); font-size: var(--text-sm); font-weight: var(--weight-semibold);
   color: var(--text-muted); white-space: nowrap; cursor: pointer;
   transition: background var(--ds-transition), border-color var(--ds-transition), color var(--ds-transition);

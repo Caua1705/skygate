@@ -69,7 +69,14 @@ export function renderPlaceDetailSheet() {
   if (!place) return '';
 
   const status = getOpenStatus(place.opening_hours);
-  const canRoute = place.id !== planState.destinationCode;
+  const isOrigin = place.id === planState.originCode;
+  const isDestination = place.id === planState.destinationCode;
+  const canRoute = !isOrigin && !isDestination;
+  const routeLabel = isOrigin
+    ? 'J\u00e1 \u00e9 sua origem'
+    : isDestination
+      ? 'J\u00e1 \u00e9 seu destino'
+      : 'Tra\u00e7ar rota at\u00e9 aqui';
   const href = contactHref(place.contact);
   const website = websiteHref(place.website);
   const hours = hoursRows(place.opening_hours, status.todayKey);
@@ -143,7 +150,7 @@ export function renderPlaceDetailSheet() {
       <div class="sg-place__actions sg-place__in" style="--d:${d + 6}">
         <button type="button" class="ds-btn ds-btn--primary ds-btn--block sg-place__route"
           id="place-route-btn" data-code="${esc(place.id)}"${canRoute ? '' : ' disabled'}>
-          ${dsIcon('solar:routing-2-bold')}<span>${canRoute ? 'Traçar rota até aqui' : 'Já é o seu destino'}</span>
+          ${dsIcon('solar:routing-2-bold')}<span>${esc(routeLabel)}</span>
         </button>
       </div>
     </div>

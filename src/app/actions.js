@@ -1,9 +1,9 @@
-import { SEARCH_CATEGORIES } from '../services/nodePresentation.js';
+import { getPublicNodeLabel, SEARCH_CATEGORIES } from '../services/nodePresentation.js';
 import {
   _searchDebounce,
   bindChoiceFooterEvents,
   bindFocusTrap,
-  bindInstructionSwipe,
+  bindNavigationTabs,
   bindRouteOptionEvents,
   bindTimelinePlaceEvents,
   releaseModalBackground,
@@ -14,7 +14,7 @@ import { findNode } from '../state/selectors.js';
 import { renderInstructionCardInner, renderOverlayOverview } from '../screens/navigation/NavigationScreen.js';
 import { renderTimelineList } from '../screens/navigation/NavigationTimeline.js';
 import { renderRouteDiagram } from '../screens/navigation/NavigationRouteMap.js';
-import { renderSummaryStrip } from '../screens/navigation/NavigationShell.js';
+import { navigationPrimaryLabel, renderSummaryStrip } from '../screens/navigation/NavigationShell.js';
 import {
   renderChoiceFooterInner,
   renderChoiceOptions,
@@ -42,22 +42,6 @@ import { buildSegments, normalizeStep } from '../services/normalize.js';
  */
 const ENTRANCE_MS = 1500;
 
-/**
- * How long the timeline entrance runs, in ms. Must outlast the last node's
- * stagger — see `--i` in the .sg-tl__item rules — so a long route's bottom
- * rows are not frozen mid-fade when the class comes off. The stagger is
- * capped in CSS, which is what keeps this a constant and not a function of
- * the step count.
- */
-const TIMELINE_ENTRANCE_MS = 1400;
-
-/**
- * How long the "Ver trajeto" entrance runs, in ms. Must outlast the slowest
- * keyframe in the `.sg-nav-screen--trajeto.is-entering` block in
- * navigation-route-map.css (the marker pop: 760ms delay + 520ms).
- */
-const ROUTE_MAP_ENTRANCE_MS = 1400;
-
 export function openSearch(kind) {
   if (!['origin', 'destination'].includes(kind)) return;
   clearTimeout(_searchDebounce);
@@ -79,10 +63,39 @@ export function closeSearch() {
 }
 
 export let _detailTriggerEl = null;
+let _detailTriggerSel = '';
+
+/** A full render detaches the opener; keep a selector for its replacement. */
+function stableDetailTriggerSelector(el) {
+  if (!el || el === document.body) return '';
+  if (el.id) return `#${CSS.escape(el.id)}`;
+
+  const code = el.dataset?.code;
+  if (code && el.classList.contains('sg-search-item__info')) {
+    return `.sg-search-item__info[data-code="${CSS.escape(code)}"]`;
+  }
+  if (code && el.classList.contains('sg-poi')) {
+    return `.sg-poi[data-code="${CSS.escape(code)}"]`;
+  }
+
+  const placeCode = el.dataset?.placeCode;
+  if (placeCode && el.classList.contains('sg-tl__hit')) {
+    return `.sg-tl__hit[data-place-code="${CSS.escape(placeCode)}"]`;
+  }
+  return '';
+}
+
+function detailFocusFallback() {
+  return $('search-input')
+    ?? document.querySelector('.sg-nav-tab[aria-selected="true"]')
+    ?? $('nav-next')
+    ?? $('calc-btn');
+}
 
 export function openLocationDetail(code) {
   if (!code || !findNode(code)) return;
   _detailTriggerEl = document.activeElement;
+  _detailTriggerSel = stableDetailTriggerSelector(_detailTriggerEl);
   uiState.modalNodeCode = code;
   render();
   requestAnimationFrame(() => $('close-detail')?.focus({ preventScroll: true }));
@@ -93,8 +106,15 @@ export function closeLocationDetail() {
   uiState.modalNodeCode = '';
   render();
   const trigger = _detailTriggerEl;
+  const selector = _detailTriggerSel;
   _detailTriggerEl = null;
-  requestAnimationFrame(() => trigger?.focus?.({ preventScroll: true }));
+  _detailTriggerSel = '';
+  requestAnimationFrame(() => {
+    const target = trigger && document.contains(trigger)
+      ? trigger
+      : (selector && document.querySelector(selector)) || detailFocusFallback();
+    target?.focus?.({ preventScroll: true });
+  });
 }
 
 export function traceRouteToLocation(code) {
@@ -115,13 +135,7 @@ const PLACE_EXIT_MS = 240;
  * detached by the time we close it. Remember how to find its replacement.
  */
 function placeTriggerSelector(el) {
-  if (!el || el === document.body) return '';
-  if (el.id) return `#${el.id}`;
-  const code = el.dataset?.code;
-  if (code && el.classList.contains('sg-search-item__info')) {
-    return `.sg-search-item__info[data-code="${code}"]`;
-  }
-  return '';
+  return stableDetailTriggerSelector(el);
 }
 
 /**
@@ -215,7 +229,7 @@ function unmountPlaceDetail() {
   requestAnimationFrame(() => {
     const target = (trigger && document.contains(trigger))
       ? trigger
-      : (sel && document.querySelector(sel)) || $('search-input');
+      : (sel && document.querySelector(sel)) || detailFocusFallback();
     target?.focus?.({ preventScroll: true });
   });
 }
@@ -247,6 +261,13 @@ export function selectLocation(kind, code) {
   clearTimeout(_searchDebounce);
   if (app.mode !== 'planning') { app.mode = 'planning'; }
   render();
+  if (!uiState.searchOpenFor) {
+    requestAnimationFrame(() => {
+      const status = $('plan-status');
+      if (status) status.textContent = 'Origem e destino selecionados. Tra\u00e7ar rota dispon\u00edvel.';
+      $('calc-btn')?.focus({ preventScroll: true });
+    });
+  }
 }
 
 export function clearLocation(kind) {
@@ -266,6 +287,11 @@ export function swapLocations() {
   [planState.originCode, planState.destinationCode] = [planState.destinationCode, planState.originCode];
   navState.route = null;
   render();
+  requestAnimationFrame(() => {
+    const status = $('plan-status');
+    if (status) status.textContent = 'Origem e destino invertidos.';
+    $('swap-btn')?.focus({ preventScroll: true });
+  });
 }
 
 export function setRouteMode(mode) {
@@ -321,6 +347,7 @@ export function editRoute() {
   navState.routeFloorIds = new Set();
   navState.semanticSteps = [];
   navState.activeStepIndex = 0;
+  navState.hasStarted = false;
   navState.routeOptions = [];
   navState.selectedOptionId = '';
   uiState.riskAcknowledged = false;
@@ -424,6 +451,7 @@ export function selectRouteOption(id) {
   // Progress belongs to the path it was confirmed on. A different route
   // starts at its own first step instead of inheriting an unrelated index.
   navState.activeStepIndex = 0;
+  navState.hasStarted = false;
   uiState.riskAcknowledged = false;
   document.querySelectorAll('.sg-rc-opt').forEach(el => {
     el.classList.toggle('is-selected', el.querySelector('.route-option-input')?.value === id);
@@ -468,7 +496,12 @@ export function refreshSummaryTiming() {
     const target = focusedOption
       ? document.querySelector(`.route-option-input[value="${CSS.escape(focusedOption)}"]`)
       : focusedId ? $(focusedId) : null;
-    target?.focus?.({ preventScroll: true });
+    if (target && !target.matches(':disabled')) {
+      target.focus({ preventScroll: true });
+      return;
+    }
+    ($('risk-ack') ?? document.querySelector('.route-option-input:checked'))
+      ?.focus({ preventScroll: true });
   });
 }
 
@@ -548,12 +581,16 @@ export function returnToCurrentStep() {
   if (stepFloor) { switchFloor(stepFloor, false); }
   mapState.manualFloor = false;
   const rb = $('return-btn');
-  if (rb) rb.classList.add('is-hidden');
-  requestAnimationFrame(() => autoFitRoute());
+  if (rb) rb.hidden = true;
+  requestAnimationFrame(() => {
+    autoFitRoute();
+    $('fit-segment-btn')?.focus({ preventScroll: true });
+  });
 }
 
 export function startNavigation() {
   if (!navState.semanticSteps.length) return;
+  const isResume = navState.hasStarted;
   // Belt and braces: the CTA is already disabled in this state, but the guard
   // means no other caller can start a route that arrives after gate closing
   // without the passenger having said so.
@@ -572,9 +609,10 @@ export function startNavigation() {
     Math.max(0, navState.activeStepIndex),
     Math.max(0, navState.semanticSteps.length - 1),
   );
-  // The real floor plan is the spatial source of truth. Instructions remain
-  // one tap away in the companion Etapas view.
-  navState.view = 'map';
+  // A resumed trip returns to the view the passenger was using. A new or
+  // restarted trip opens on the floor plan, the spatial source of truth.
+  if (!isResume) navState.view = 'map';
+  navState.hasStarted = true;
 
   const activeStep = navState.semanticSteps[navState.activeStepIndex];
   const targetFloor = activeStep?.floorId || findNode(planState.originCode)?.floorId || mapState.selectedFloorId;
@@ -582,30 +620,18 @@ export function startNavigation() {
   mapState.manualFloor = false;
 
   render();
-  playMapEntrance();
-  bindInstructionSwipe();
+  if (navState.view === 'map') playMapEntrance();
 }
 
 export function restartNavigation() {
   if (!navState.route) return;
   navState.activeStepIndex = 0;
+  navState.hasStarted = false;
+  navState.view = 'map';
   startNavigation();
 }
 
-/**
- * Timeline entrance: the nodes fade in top-to-bottom and the connector grows
- * down behind them. Driven by one class, like the map entrance, and removed
- * when it ends — the list is re-rendered in place on every step change, and
- * a class left on would replay the whole opening each time.
- */
-function playTimelineEntrance() {
-  const screen = $('nav-screen');
-  if (!screen || prefersReducedMotion()) return;
-  screen.classList.add('is-entering');
-  setTimeout(() => screen.classList.remove('is-entering'), TIMELINE_ENTRANCE_MS);
-}
-
-/** Open the real floor map on the passenger's confirmed active step. */
+/** Open the route map on the passenger's confirmed active step. */
 export function showRouteMap() {
   if (!navState.route) return;
   // The toggle shows both tabs in both views, so the active one gets clicked.
@@ -617,8 +643,9 @@ export function showRouteMap() {
   if (step?.floorId) mapState.selectedFloorId = step.floorId;
   mapState.manualFloor = false;
   render();
-  playMapEntrance();
-  bindInstructionSwipe();
+  // Switching views should feel instant. The full route-draw choreography is
+  // reserved for starting navigation; here we only re-frame the current leg.
+  requestAnimationFrame(() => autoFitRoute(180));
   requestAnimationFrame(() => $('tab-route-btn')?.focus({ preventScroll: true }));
 }
 
@@ -631,7 +658,6 @@ export function showFloorPlan() {
   mapState.manualFloor = false;
   render();
   playMapEntrance();
-  bindInstructionSwipe();
 }
 
 /** Back to the timeline, on the same step. Idempotent, like showRouteMap(). */
@@ -639,21 +665,8 @@ export function showTimeline() {
   if (navState.view === 'timeline') return;
   navState.view = 'timeline';
   render();
-  playTimelineEntrance();
   scrollTimelineToCurrent('auto');
   requestAnimationFrame(() => $('tab-steps-btn')?.focus({ preventScroll: true }));
-}
-
-/**
- * Diagram entrance: the walked line draws itself, then the stops land. Same
- * contract as the other two — one class, removed when it ends, because the
- * diagram is re-rendered in place on every step change.
- */
-function playRouteMapEntrance() {
-  const screen = $('nav-screen');
-  if (!screen || prefersReducedMotion()) return;
-  screen.classList.add('is-entering');
-  setTimeout(() => screen.classList.remove('is-entering'), ROUTE_MAP_ENTRANCE_MS);
 }
 
 function playMapEntrance() {
@@ -700,12 +713,15 @@ export function finishNavigation() {
   if (app.mode !== 'navigation' || !navState.semanticSteps.length) return;
 
   const completedDestination = planState.destinationCode;
+  const completedNode = findNode(completedDestination);
+  const completedLabel = completedNode ? getPublicNodeLabel(completedNode) : 'seu destino';
   planState.originCode = completedDestination;
   planState.destinationCode = '';
 
   navState.route = null;
   navState.semanticSteps = [];
   navState.activeStepIndex = 0;
+  navState.hasStarted = false;
   navState.routeFloorIds = new Set();
   navState.routeOptions = [];
   navState.selectedOptionId = '';
@@ -725,8 +741,39 @@ export function finishNavigation() {
   render();
   requestAnimationFrame(() => {
     $('nav-live')?.replaceChildren(document.createTextNode('Rota finalizada.'));
+    showCompletionToast(completedLabel);
     $('destination-btn')?.focus({ preventScroll: true });
   });
+}
+
+/**
+ * Completion must be visible as well as announced. The toast is deliberately
+ * transient and presentation-only: finishing has already committed all state,
+ * so dismissing it can never affect the next route.
+ */
+function showCompletionToast(destinationLabel) {
+  const screen = $('planning-root');
+  if (!screen) return;
+
+  const toast = document.createElement('div');
+  toast.className = 'sg-completion-toast';
+  toast.setAttribute('aria-hidden', 'true');
+  toast.innerHTML = `
+    <span class="sg-completion-toast__icon">
+      <iconify-icon icon="lucide:check" aria-hidden="true"></iconify-icon>
+    </span>
+    <span class="sg-completion-toast__copy">
+      <strong>Você chegou</strong>
+      <small>Rota até ${esc(destinationLabel)} concluída.</small>
+    </span>
+  `;
+  screen.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('is-visible'));
+  setTimeout(() => {
+    toast.classList.remove('is-visible');
+    toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+    setTimeout(() => toast.remove(), 320);
+  }, 4200);
 }
 
 /** The stable footer action: advance until the final step, then finish. */
@@ -796,7 +843,7 @@ function applyStepChange(idx) {
 export function updateRouteMap() {
   // The panel id is shared with the timeline, so check it is actually the
   // diagram before overwriting it.
-  const el = $('navigation-view');
+  const el = $('navigation-panel');
   if (!el?.classList.contains('sg-rt__map')) return;
   el.innerHTML = renderRouteDiagram();
   updateTimelineFooter();
@@ -847,9 +894,9 @@ function updateTimelineFooter() {
   if (next) {
     next.disabled = false;
     const label = next.querySelector('span');
-    if (label) label.textContent = isLast ? 'Finalizar rota' : 'Próxima etapa';
+    if (label) label.textContent = navigationPrimaryLabel();
     const icon = next.querySelector('iconify-icon:last-of-type');
-    if (icon) icon.setAttribute('icon', isLast ? 'solar:flag-2-bold' : 'solar:arrow-right-linear');
+    if (icon) icon.setAttribute('icon', isLast ? 'solar:flag-2-bold' : 'lucide:check');
   }
   const strip = document.querySelector('.sg-tl__strip');
   if (strip) strip.outerHTML = renderSummaryStrip();
@@ -877,16 +924,23 @@ export function scrollTimelineToCurrent(behavior) {
 export function updateInstructionCard() {
   const card = $('instruction-card');
   if (!card) return;
+  const focusedId = document.activeElement?.id ?? '';
 
   card.innerHTML = renderInstructionCardInner();
-  // The card itself no longer scrolls — its middle band does.
-  card.querySelector('.sg-navsheet__scroll')?.scrollTo(0, 0);
 
   // Re-bind the controls the sheet owns
   $('nav-next')?.addEventListener('click', activateNavigationPrimary);
   $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
   $('instr-steps-btn')?.addEventListener('click', openOverview);
-  bindInstructionSwipe();
+  bindNavigationTabs();
+  requestAnimationFrame(() => {
+    const previousControl = focusedId ? $(focusedId) : null;
+    if (previousControl && !previousControl.matches(':disabled')) {
+      previousControl.focus({ preventScroll: true });
+      return;
+    }
+    $('nav-next')?.focus({ preventScroll: true });
+  });
 }
 
 export function announceStep(idx, step) {
@@ -909,8 +963,8 @@ export function showHelp() {
         eyebrow: 'Durante a rota',
         title: 'Navegue no seu ritmo',
         items: [
-          ['lucide:map', 'Mapa real', 'Use o mapa para se orientar e Etapas para conferir o trajeto completo.'],
-          ['lucide:circle-check', 'Confirme seu avanço', 'Próxima etapa registra manualmente onde você chegou.'],
+          ['lucide:map', 'Mapa da rota', 'Use o mapa para se orientar e Etapas para conferir o trajeto completo.'],
+          ['lucide:circle-check', 'Confirme seu avanço', 'Concluir etapa registra manualmente o seu progresso.'],
           ['lucide:rotate-ccw', 'Saia sem perder o ponto', 'Ao voltar, a rota continua na última etapa confirmada.'],
         ],
       }
@@ -935,7 +989,6 @@ export function showHelp() {
         };
 
   dialog.innerHTML = `
-    <div class="sg-help__handle" aria-hidden="true"></div>
     <header class="sg-help__header">
       <div>
         <p class="sg-help__eyebrow">${esc(content.eyebrow)}</p>

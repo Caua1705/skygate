@@ -29,7 +29,7 @@ function relayoutLabelsAfter(duration) {
 }
 
 export function applyMapTransform(duration = 0) {
-  const wrapper = $('map-wrapper');
+  const wrapper = document.querySelector('#navigation-panel.sg-map-wrapper');
   if (!wrapper) return;
   if (duration > 0) relayoutLabelsAfter(duration);
   const { x, y, scale } = getFloorTransform(mapState.selectedFloorId);
@@ -58,7 +58,7 @@ export function zoomAt(delta, cx, cy) {
   const t = getFloorTransform(mapState.selectedFloorId);
   const newScale = clamp(t.scale + delta, MIN_SCALE, MAX_SCALE);
   const factor = newScale / t.scale;
-  const wrapper = $('map-wrapper');
+  const wrapper = document.querySelector('#navigation-panel.sg-map-wrapper');
   if (wrapper && cx !== undefined) {
     const rect = wrapper.getBoundingClientRect();
     const px = cx - rect.left - rect.width / 2;

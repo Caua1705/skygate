@@ -39,6 +39,7 @@ export const navState = {
   route: null,          // normalized route
   semanticSteps: [],    // { text, icon, nodeType, isTransition, floorId, rawFrom, rawTo }
   activeStepIndex: 0,
+  hasStarted: false,    // distinguishes a paused first step from a fresh route
   routeFloorIds: new Set(),
   /**
    * The WAYS of walking `route` offered on the choice screen, and which one

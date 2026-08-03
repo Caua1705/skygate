@@ -40,9 +40,17 @@ export function bindEvents() {
     btn.addEventListener('click', () => setRouteMode(btn.dataset.mode))
   );
   $('calc-btn')?.addEventListener('click', handleCalculate);
+  $('retry-route-btn')?.addEventListener('click', handleCalculate);
+  $('focus-view-tabs')?.addEventListener('click', () => {
+    document.querySelector('.sg-nav-tab[aria-selected="true"]')?.focus({ preventScroll: true });
+  });
   $('help-btn')?.addEventListener('click', showHelp);
   $('retry-btn')?.addEventListener('click', init);
-  $('dismiss-error')?.addEventListener('click', () => { uiState.error = ''; render(); });
+  $('dismiss-error')?.addEventListener('click', () => {
+    uiState.error = '';
+    render();
+    requestAnimationFrame(() => $('calc-btn')?.focus({ preventScroll: true }));
+  });
 
   // Accessible route toggle (compact replacement for two big mode cards)
   $('accessible-toggle')?.addEventListener('click', toggleAccessibleRoute);
@@ -303,10 +311,10 @@ export function closeFloorMenuOnOutside(e) {
  * bindSearchOverlayEvents() on each pass — see the guard there.
  */
 let _vvHandler = null;
-/* Focus is moved into the sheet exactly ONCE per opening. bindEvents() runs on
-   every render, and re-focusing there would pull the caret out of the search
-   field any time anything else re-rendered. Reset when the overlay is gone. */
-let _searchFocused = false;
+/* Focus is moved once per endpoint sheet. Tracking the KIND, not a boolean,
+   lets the origin -> destination handoff focus the replacement dialog while
+   same-dialog renders leave the search caret alone. */
+let _searchFocusedKind = '';
 
 function detachSearchViewport_() {
   const vv = window.visualViewport;
@@ -334,15 +342,15 @@ function attachSearchViewport_(overlay) {
 
 export function bindSearchOverlayEvents() {
   const overlay = $('search-overlay');
-  if (!overlay) { detachSearchViewport_(); _searchFocused = false; return; }
+  if (!overlay) { detachSearchViewport_(); _searchFocusedKind = ''; return; }
   attachSearchViewport_(overlay);
 
   /* Focus the SHEET, not the field. The dialog is aria-modal, so focus has to
      move inside it or a keyboard/screen-reader user is stranded on a trigger
      the modal just hid. A container with tabindex="-1" takes focus without
      summoning the keyboard, and Tab from there reaches the field first. */
-  if (!_searchFocused) {
-    _searchFocused = true;
+  if (_searchFocusedKind !== uiState.searchOpenFor) {
+    _searchFocusedKind = uiState.searchOpenFor;
     requestAnimationFrame(() => $('search-sheet')?.focus({ preventScroll: true }));
   }
 
@@ -392,26 +400,6 @@ export function bindSearchItemEvents() {
   );
 }
 
-// Carousel swipe for instruction card
-export let _instrSwipeStart = null;
-export function bindInstructionSwipe() {
-  const card = $('instruction-card');
-  if (!card) return;
-  card.addEventListener('touchstart', e => {
-    if (e.touches.length !== 1) return;
-    _instrSwipeStart = { x: e.touches[0].clientX, t: Date.now() };
-  }, { passive: true });
-  card.addEventListener('touchend', e => {
-    if (!_instrSwipeStart) return;
-    const dx = e.changedTouches[0].clientX - _instrSwipeStart.x;
-    const dt = Date.now() - _instrSwipeStart.t;
-    _instrSwipeStart = null;
-    if (Math.abs(dx) < 40 || dt > 500) return;
-    if (dx < 0) advanceStep(1);
-    else advanceStep(-1);
-  }, { passive: true });
-}
-
 // Keyboard
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
@@ -421,13 +409,6 @@ document.addEventListener('keydown', e => {
     if (uiState.searchOpenFor) { e.preventDefault(); closeSearch(); return; }
     if (uiState.floorMenuOpen) { e.preventDefault(); setFloorMenuOpen(false, true); return; }
     if (app.mode === 'navigation') { exitNavigation(); return; }
-  }
-  const interactiveTarget = e.target instanceof Element && e.target.closest(
-    'button, a, input, select, textarea, [role="tab"], [contenteditable="true"]'
-  );
-  if (app.mode === 'navigation' && !uiState.searchOpenFor && !uiState.showOverview && !interactiveTarget) {
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); advanceStep(1); }
-    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { e.preventDefault(); advanceStep(-1); }
   }
 });
 

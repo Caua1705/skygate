@@ -2,10 +2,107 @@
    ACCESSIBILITY CONTRAST HELPERS
    ============================================================ */
 
+/* Direct keyboard access to the Map/Steps switch without traversing every
+   interactive landmark first. It enters the visual hierarchy only on focus. */
+.sg-skip-navview {
+  position: fixed;
+  z-index: 120;
+  top: max(8px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 2px solid currentColor;
+  border-radius: var(--radius-pill);
+  background: #FFFFFF;
+  color: #0A192F;
+  font-weight: 700;
+  transform: translate(-50%, -160%);
+  transition: transform 120ms ease;
+}
+.sg-skip-navview:focus-visible { transform: translate(-50%, 0); }
+
+/* Standards-based value used by current browsers. A legacy fallback follows. */
+@media (prefers-contrast: more) {
+  .sg-ds:not(.sg-ds-dark) {
+    --border: #6B7A90;
+    --border-strong: #334155;
+    --text-muted: #334155;
+  }
+  .sg-ds-dark {
+    --border: rgba(255, 255, 255, .55);
+    --text-muted: #D7E2F2;
+  }
+  .sg-form-card { border-color: var(--navy-700); }
+  .sg-route-field__value--ph { color: var(--slate-700); }
+  .sg-instr-head__title { color: #000000; }
+  .sg-metric__label, .sg-next-step__dist { color: #4a5b73; }
+  .sg-map-fab,
+  .sg-navtop__btn,
+  .sg-nav-tabs,
+  .sg-home__field,
+  .sg-home__flight,
+  .sg-rc-opt { border-width: 2px; }
+  .sg-home__field,
+  .sg-home__flight { border: 2px solid var(--border-strong); }
+}
+
 @media (prefers-contrast: high) {
   .sg-form-card { border-color: var(--navy-700); }
   .sg-route-field__value--ph { color: var(--slate-700); }
   .sg-instr-head__title { color: #000000; }
   .sg-metric__label, .sg-next-step__dist { color: #4a5b73; }
-  .sg-map-fab, .sg-nav-help { border: 1px solid rgba(255,255,255,.45); }
+  .sg-map-fab, .sg-navtop__btn { border: 1px solid rgba(255,255,255,.55); }
+}
+
+/* Preserve selection and route meaning in Windows High Contrast and other
+   forced-colour environments instead of flattening every state. */
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px !important;
+    box-shadow: none !important;
+  }
+
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px !important;
+    box-shadow: none !important;
+  }
+
+  .ds-btn,
+  .ds-iconbtn,
+  .sg-home__field,
+  .sg-home__flight,
+  .sg-home__toggle,
+  .sg-rc-opt,
+  .sg-nav-tab,
+  .sg-map-fab,
+  .sg-navtop__btn {
+    border: 1px solid ButtonText;
+  }
+
+  .sg-rc-opt.is-selected,
+  .sg-nav-tab.is-active,
+  .sg-home__toggle.is-on {
+    outline: 3px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  .sg-route__halo,
+  .sg-route__halo2,
+  .sg-route__halo3,
+  .sg-route__flow {
+    display: none;
+  }
+
+  .sg-route__line { stroke: Highlight !important; opacity: 1; }
+  .sg-route__line.is-completed { stroke: GrayText !important; }
+  .sg-route__line.is-upcoming {
+    stroke: CanvasText !important;
+    stroke-dasharray: 10 8;
+  }
+  .sg-route__core { display: none; }
+  .sg-route__spot,
+  .sg-route-mark__core { fill: Highlight !important; }
+  .sg-route-mark__ring { stroke: Highlight !important; fill: Canvas !important; }
 }

@@ -76,14 +76,16 @@ a { text-decoration: none; color: inherit; }
   --header-h:     56px;
   --safe-top:     env(safe-area-inset-top, 0px);
   --safe-bottom:  env(safe-area-inset-bottom, 0px);
+  --tap-min:      48px;
   --sidebar-w:    380px;
   --card-max-w:   480px;
   --instr-card-h: 148px;
 
   /* Navigation screen (map + bottom sheet) */
   --nav-map-bg:       #16263a;
-  --nav-map-h:        55%;
   --nav-sheet-overlap: 8px;   /* sheet lifts slightly over the map */
+  --nav-sheet-h:      clamp(316px, 42%, 364px);
+  --nav-map-h:        calc(100% - var(--nav-sheet-h) + var(--nav-sheet-overlap));
   --nav-sheet-radius: var(--radius-sheet);   /* was 30px — folded into the system */
   --nav-sheet-pad:    22px;
   --nav-navy:         #0f2540;
@@ -132,9 +134,12 @@ a { text-decoration: none; color: inherit; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -199,7 +204,7 @@ a { text-decoration: none; color: inherit; }
   --font-display: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-body:    'Inter', ui-sans-serif, system-ui, sans-serif;
 
-  --text-xs:   0.75rem;   /* 12px */
+  --text-xs:   0.75rem;   /* 12px at the default browser size */
   --text-sm:   0.875rem;  /* 14px */
   --text-base: 1rem;      /* 16px */
   --text-lg:   1.125rem;  /* 18px */
@@ -222,6 +227,10 @@ a { text-decoration: none; color: inherit; }
   --space-1: 4px;   --space-2: 8px;   --space-3: 12px;  --space-4: 16px;
   --space-5: 24px;  --space-6: 32px;  --space-7: 48px;  --space-8: 64px;
 
+  /* ---- Semantic layout ---- */
+  --screen-gutter: var(--space-4);
+  --action-primary-h: 56px;
+
   /* ---- Radius ----
      The four canonical values live in :root (see the block above). These are
      aliases kept so existing rules keep resolving; --radius-sm and
@@ -243,6 +252,9 @@ a { text-decoration: none; color: inherit; }
      column rather than in it. */
   --tap-min: 48px;
   --ds-transition: 160ms cubic-bezier(.4, 0, .2, 1);
+
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
 }
 
 /* Dark island: same token NAMES remap to the dark scale, so any DS

@@ -6,7 +6,9 @@
   position: fixed; inset: 0;
   display: flex; flex-direction: column;
   overflow: hidden;
+  background: #F4F6FA;
 }
+#app[data-mode="navigation"] { background: #0A192F; }
 
 /* Planning mode: allow the inner shell to scroll naturally */
 #app:has(.sg-planning) {
@@ -26,3 +28,32 @@
 .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 :focus-visible { outline: 2px solid var(--teal-500); outline-offset: 2px; }
+
+/* Programmatic screen-heading focus is semantic, not a visible control. */
+.sg-screen-focus:focus,
+.sg-screen-focus:focus-visible { outline: none !important; box-shadow: none !important; }
+
+@media not (prefers-reduced-motion: reduce) {
+  .sg-screen-enter--forward { animation: sgScreenForward 280ms cubic-bezier(.22, .61, .36, 1) both; }
+  .sg-screen-enter--back    { animation: sgScreenBack 240ms cubic-bezier(.22, .61, .36, 1) both; }
+
+  @keyframes sgScreenForward {
+    from { opacity: .45; transform: translateX(14px); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes sgScreenBack {
+    from { opacity: .45; transform: translateX(-10px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* Map/Etapas swaps are deliberately shorter than route-entry motion. */
+  .sg-nav-screen .sg-map-area,
+  .sg-nav-screen .sg-navsheet,
+  .sg-tl-screen .sg-tl__scroll {
+    animation: sgNavViewIn 190ms ease-out both;
+  }
+  @keyframes sgNavViewIn {
+    from { opacity: .68; }
+    to   { opacity: 1; }
+  }
+}

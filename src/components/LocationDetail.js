@@ -15,7 +15,14 @@ export function renderLocationDetail() {
   const category   = getPublicNodeCategory(node);
   const floorLabel = getFloorLabel(node.floorId);
   const accessible = CIRCULATION_TYPES.has(node.type);
-  const canRoute   = node.code !== planState.destinationCode;
+  const isOrigin = node.code === planState.originCode;
+  const isDestination = node.code === planState.destinationCode;
+  const canRoute = !isOrigin && !isDestination;
+  const routeLabel = isOrigin
+    ? 'J\u00e1 \u00e9 sua origem'
+    : isDestination
+      ? 'J\u00e1 \u00e9 seu destino'
+      : 'Tra\u00e7ar rota';
 
   const rows = [
     node.hours && { icon: 'solar:clock-circle-bold', text: esc(node.hours) },
@@ -29,7 +36,6 @@ export function renderLocationDetail() {
   return `<div class="sg-detail-overlay" id="detail-overlay" role="dialog" aria-modal="true" aria-labelledby="detail-title">
     <button type="button" class="sg-detail-backdrop" id="detail-backdrop" tabindex="-1" aria-label="Fechar detalhes"></button>
     <div class="sg-detail-sheet">
-      <div class="sg-detail-handle" aria-hidden="true"></div>
       <button type="button" class="sg-icon-btn sg-detail-close" id="close-detail" aria-label="Fechar detalhes">
         <iconify-icon icon="solar:close-circle-bold" aria-hidden="true"></iconify-icon>
       </button>
@@ -76,10 +82,9 @@ export function renderLocationDetail() {
         <button type="button" class="sg-btn-primary sg-btn-primary--large" id="detail-route-btn"
           data-code="${esc(node.code)}" ${canRoute ? '' : 'disabled'}>
           <iconify-icon icon="solar:routing-2-bold" aria-hidden="true"></iconify-icon>
-          Traçar rota
+          ${esc(routeLabel)}
         </button>
       </div>
     </div>
   </div>`;
 }
-

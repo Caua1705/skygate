@@ -1,16 +1,21 @@
-import { getPublicNodeLabel, SEARCH_CATEGORIES } from '../../services/nodePresentation.js';
+import { getPublicNodeLabel } from '../../services/nodePresentation.js';
 import { appData, mapState, navState, planState, uiState } from '../../state/appState.js';
 import { esc, fmtMin } from '../../utils/format.js';
 import { findNode, getFloorLabel } from '../../state/selectors.js';
 import { buildLabelLayerHtml, buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../../map/floorMapBuilder.js';
 import { getStepIconName, navIcon } from '../../components/Icon.js';
 import { render } from '../../app/router.js';
-import { countFloorChanges, formatMeters } from '../../services/routeSteps.js';
+import { formatMeters } from '../../services/routeSteps.js';
 import { getNodeMeta } from '../../app/constants.js';
-import { Button, Chip, IconButton, Metric, MetricGroup, StepRail, dsIcon } from '../../components/ds/index.js';
+import { Button, IconButton, StepRail, dsIcon } from '../../components/ds/index.js';
 import { renderNavigationTimeline } from './NavigationTimeline.js';
 import { renderNavigationRouteMap } from './NavigationRouteMap.js';
-import { getEstimatedRemainingMinutes, renderViewToggle } from './NavigationShell.js';
+import {
+  getNavigationTiming,
+  navigationPrimaryLabel,
+  renderNavigationHeader,
+  renderViewToggle,
+} from './NavigationShell.js';
 
 /**
  * Navigation dispatch. The real floor map is the default active-navigation
@@ -28,14 +33,14 @@ export function renderNavigation() {
 
 export function renderNavigationMap() {
   const fid = mapState.selectedFloorId;
-  const destNode = findNode(planState.destinationCode);
-  const destName = destNode ? getPublicNodeLabel(destNode) : 'seu destino';
 
   return `
     <div class="sg-nav-screen" id="nav-screen">
-      <!-- Map area (top ~55%) -->
-      <div class="sg-map-area" id="map-area" aria-label="Mapa do aeroporto — ${esc(getFloorLabel(fid))}" role="region">
-        <div class="sg-map-wrapper" id="map-wrapper" role="tabpanel" aria-labelledby="tab-route-btn">
+      <button type="button" class="sg-skip-navview" id="focus-view-tabs">
+        Ir para Etapas e Mapa
+      </button>
+      <div class="sg-map-area" id="map-area" aria-label="Mapa da rota — ${esc(getFloorLabel(fid))}" role="region">
+        <div class="sg-map-wrapper" id="navigation-panel" role="tabpanel" aria-labelledby="tab-route-btn">
           <div class="sg-map-inner" id="map-inner">
             <!-- Base floor SVG (cached, never rebuilt on step change) -->
             <div id="map-base" class="sg-map-layer sg-map-layer--base">
@@ -57,28 +62,7 @@ export function renderNavigationMap() {
           </div>
         </div>
 
-        <!-- Header bar (over the dark map): exit · white lockup · help.
-             A soft scrim behind it guarantees AA on any map content. -->
-        <header class="sg-ds sg-navhdr">
-          <!-- Back goes to the TIMELINE, not out of navigation: the map is
-               now only ever reached from there, and leaving the trip
-               entirely is the timeline header's job. -->
-          <button type="button" class="sg-navhdr__btn" id="exit-nav-btn" aria-label="Sair da navegação">
-            ${dsIcon('solar:arrow-left-linear')}
-          </button>
-          <div class="sg-navhdr__brand">
-            <img class="sg-navhdr__logo" src="assets/logo-skygate-white.png" alt="SkyGate">
-            <span class="sg-navhdr__loc">
-              ${dsIcon('solar:map-point-bold', 'sg-navhdr__pin')}
-              <span>FOR · Até ${esc(destName)}</span>
-            </span>
-          </div>
-          <button type="button" class="sg-navhdr__btn" id="help-btn" aria-label="Ajuda">
-            ${dsIcon('solar:question-circle-linear')}
-          </button>
-        </header>
-
-        ${renderViewToggle('map', 'sg-ds sg-ds-dark sg-nav-tabs--map')}
+        ${renderNavigationHeader({ map: true })}
 
         <!-- Right-side floating controls: floors + recenter -->
         <div class="sg-map-fabs" aria-label="Controles do mapa">
@@ -86,13 +70,22 @@ export function renderNavigationMap() {
           <button type="button" class="sg-map-fab" id="fit-segment-btn" aria-label="Centralizar no passo atual">
             ${navIcon('navigate')}
           </button>
+          <div class="sg-map-zoom" role="group" aria-label="Zoom do mapa">
+            <button type="button" class="sg-map-fab" id="zoom-in-btn" aria-label="Aumentar zoom">
+              <span class="sg-map-zoom-glyph" aria-hidden="true">+</span>
+            </button>
+            <button type="button" class="sg-map-fab" id="zoom-out-btn" aria-label="Diminuir zoom">
+              <span class="sg-map-zoom-glyph" aria-hidden="true">&minus;</span>
+            </button>
+          </div>
         </div>
 
         <!-- Return to current step button -->
-        ${mapState.manualFloor ? `<button type="button" class="sg-return-btn" id="return-btn" aria-label="Voltar ao passo atual">
+        <button type="button" class="sg-return-btn" id="return-btn" aria-label="Voltar ao passo atual"
+          ${mapState.manualFloor ? '' : 'hidden'}>
           ${navIcon('navigate')}
           Voltar ao passo
-        </button>` : ''}
+        </button>
 
         <!-- Floor change announcement (shown briefly on switch) -->
         <div class="sg-floor-announce ${mapState.manualFloor ? 'sg-floor-announce--manual' : ''}" id="floor-announce" aria-hidden="true">
@@ -126,75 +119,67 @@ export function renderInstructionCardInner() {
   const nextStep = steps[stepIdx + 1];
   const isFirst = stepIdx <= 0;
   const isLast  = stepIdx >= total - 1;
-  const accessible = planState.routeMode === 'accessible';
   const fid = mapState.selectedFloorId;
-  const upcoming = steps.slice(stepIdx + 1);
+  const currentDistance = formatMeters(curStep?.distanceMeters ?? 0);
+  const timing = getNavigationTiming();
+  const floor = getFloorLabel(curStep?.floorId ?? fid);
+  const instructionMeta = [
+    currentDistance ? `${currentDistance} nesta etapa` : (isLast ? 'Etapa final' : 'Agora'),
+    floor,
+  ].join(' · ');
 
-  const nextDist = formatMeters(curStep?.distanceMeters ?? 0);
-
-  // Three bands: a pinned head, a scrolling middle and a pinned foot. The
-  // sheet is shorter than its content on a phone, and when it was one flat
-  // scroller the step counter and the instruction scrolled away — the two
-  // things the traveller always needs on screen.
+  // The complete route already lives in the Etapas tab. The fixed map sheet
+  // only answers what matters while walking: where progress stands, what to
+  // do now, what comes immediately after, and how to confirm the step.
   return `
     <div class="sg-navsheet__pinned">
-      <div class="ds-sheet__grip" aria-hidden="true"></div>
+      <div class="sg-navsheet__status">
+        <span aria-hidden="true">Etapa <strong>${stepIdx + 1}</strong> de ${total}</span>
+        <span aria-label="${esc(timing.ariaLabel)}">
+          ${timing.gate
+            ? `${dsIcon('lucide:plane-takeoff')}Portão <strong>~${esc(timing.gate)}</strong> (estimado)`
+            : `${dsIcon('solar:clock-circle-bold')}<strong>${timing.remaining ? `~${timing.remaining} min` : 'Etapa final'}</strong>`}
+        </span>
+      </div>
 
-      <!-- Step rail (DS): done → turquoise, current → bright --sky-500, future → grey -->
-      ${StepRail({ current: stepIdx + 1, total, label: `Etapa ${stepIdx + 1} de ${total}`, className: 'sg-navsheet__rail' })}
+      ${StepRail({
+        current: stepIdx + 1,
+        total,
+        label: `Etapa ${stepIdx + 1} de ${total}`,
+        className: 'sg-navsheet__rail',
+      })}
 
-      <!-- Current instruction -->
       <div class="sg-navsheet__head">
         <span class="sg-navsheet__head-icon" aria-hidden="true">${navIcon(getStepIconName(curStep))}</span>
-        <h2 class="sg-navsheet__head-title" id="instr-text">${esc(curStep?.text ?? '')}</h2>
+        <div class="sg-navsheet__head-copy">
+          <p class="sg-navsheet__head-meta">${esc(instructionMeta)}</p>
+          <h2 class="sg-navsheet__head-title" id="instr-text">${esc(curStep?.text ?? '')}</h2>
+        </div>
       </div>
+
+      ${nextStep ? `
+        <div class="sg-navsheet__preview" aria-label="Próxima instrução">
+          <span class="sg-navsheet__preview-icon" aria-hidden="true">${navIcon(getStepIconName(nextStep))}</span>
+          <span class="sg-navsheet__preview-copy">
+            <span class="sg-navsheet__preview-label">Depois</span>
+            <span class="sg-navsheet__preview-text">${esc(stripPeriod(nextStep.text))}</span>
+          </span>
+        </div>
+      ` : `
+        <div class="sg-navsheet__preview sg-navsheet__preview--arrival">
+          <span class="sg-navsheet__preview-icon" aria-hidden="true">${dsIcon('lucide:flag')}</span>
+          <span class="sg-navsheet__preview-copy">
+            <span class="sg-navsheet__preview-label">Destino</span>
+            <span class="sg-navsheet__preview-text">Conclua a etapa para finalizar a rota.</span>
+          </span>
+        </div>
+      `}
     </div>
 
-    <div class="sg-navsheet__scroll">
-    <!-- Context chips -->
-    <div class="sg-navsheet__chips">
-      ${Chip({ label: getFloorLabel(fid), variant: 'outline', icon: 'solar:layers-bold' })}
-      ${Chip({
-        label: accessible ? 'Rota acessível' : 'Rota mais rápida',
-        variant: 'outline',
-        icon: accessible ? 'solar:accessibility-bold' : 'solar:bolt-bold',
-      })}
-    </div>
+    ${renderViewToggle('map', 'sg-nav-tabs--sheet')}
 
-    <!-- Metrics -->
-    <div class="sg-navsheet__metrics">
-      ${MetricGroup([
-        Metric({ icon: 'solar:clock-circle-bold', value: getEstimatedRemainingMinutes(), unit: 'min', label: 'Restante estimado' }),
-        Metric({ icon: 'solar:layers-bold', value: countFloorChanges(), label: 'Andares' }),
-        Metric({
-          icon: nextStep ? 'solar:arrow-right-linear' : 'solar:flag-2-bold',
-          value: nextStep && nextDist ? `Em ${nextDist}` : 'Chegada',
-          label: nextStep ? stripPeriod(nextStep.text) : 'Conclua a etapa final',
-        }),
-      ])}
-    </div>
-
-    <!-- Upcoming steps — turquoise timeline, numbered from the next step -->
-    ${upcoming.length ? `
-      <h3 class="sg-navsheet__next-title">Próximas etapas</h3>
-      <ol class="sg-navsheet__next">
-        ${upcoming.map((s, i) => {
-          const d = formatMeters(s.distanceMeters ?? 0);
-          return `<li class="sg-navsheet__step">
-            <span class="sg-navsheet__step-num" aria-hidden="true">${stepIdx + 2 + i}</span>
-            <div class="sg-navsheet__step-body">
-              <p class="sg-navsheet__step-text">${esc(stripPeriod(s.text))}</p>
-              ${d ? `<p class="sg-navsheet__step-dist">${esc(d)}</p>` : ''}
-            </div>
-          </li>`;
-        }).join('')}
-      </ol>
-    ` : ''}
-    </div>
-
-    <!-- Actions pinned to the foot: "Próximo" is the primary action of the
-         whole screen and must never require scrolling to reach. -->
     <div class="sg-navsheet__foot">
+      <p class="sg-navsheet__foot-hint">Confirme somente depois de concluir esta instrução.</p>
       <div class="sg-navsheet__actions">
         ${IconButton({
           icon: 'solar:arrow-left-linear',
@@ -204,9 +189,9 @@ export function renderInstructionCardInner() {
           className: 'sg-navsheet__prev',
         })}
         ${Button({
-          label: isLast ? 'Finalizar rota' : 'Próxima etapa',
+          label: navigationPrimaryLabel(),
           variant: 'primary',
-          iconRight: isLast ? 'solar:flag-2-bold' : 'solar:arrow-right-linear',
+          iconRight: isLast ? 'solar:flag-2-bold' : 'lucide:check',
           id: 'nav-next',
           className: 'sg-navsheet__next',
         })}
@@ -254,7 +239,6 @@ export function renderOverlayOverview() {
   return `<div class="sg-overview-overlay" id="route-overview" role="dialog" aria-modal="true" aria-labelledby="overview-title">
     <div class="sg-overview-backdrop" id="overview-backdrop" aria-hidden="true"></div>
     <div class="sg-overview-sheet">
-      <div class="sg-overview-handle" aria-hidden="true"></div>
       <div class="sg-overview-header">
         <h2 class="sg-overview-title" id="overview-title">Visão geral da rota</h2>
         <button type="button" class="sg-icon-btn" id="close-overview" aria-label="Fechar visão geral">

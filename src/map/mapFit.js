@@ -135,7 +135,7 @@ function clampToContent(t, scale, mapSize, wrapper, safeMin, safeMax) {
  */
 export function fitPointsToView(pts, { duration, captionPad = false } = {}) {
   if (!pts.length) return false;
-  const wrapper = $('map-wrapper');
+  const wrapper = document.querySelector('#navigation-panel.sg-map-wrapper');
   if (!wrapper) return false;
   const view = safeViewport(wrapper);
   if (!view.wrapperW || !view.wrapperH) return false;

@@ -34,13 +34,6 @@
   --map-ink:         #06263A;              /* glyph colour ON turquoise, 7.4:1 */
 }
 
-/* On a short screen 55% of the height for the map leaves the sheet with a
-   sliver to scroll in. Give the sheet the difference — the map still frames
-   the route because fitFullRoute scales to whatever box it gets. */
-@media (max-height: 800px) {
-  .sg-nav-screen { --nav-map-h: 48%; }
-}
-
 /* ── Map area: the dark STAGE ───────────────────────────
    A flat fill made the map read as "screen failed to load". The radial
    gradient puts a faint pool of light under the middle of the frame and
@@ -501,6 +494,15 @@
   display: flex; flex-direction: column; gap: 16px;
 }
 
+/* Explicit zoom keeps the map operable for users who cannot pinch, including
+   switch/keyboard users on touch-first devices. */
+.sg-map-zoom { display: flex; flex-direction: column; gap: 8px; }
+.sg-map-zoom-glyph {
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1;
+}
+
 /* Dark glass: the map reads through them, so they float above the stage
    instead of sitting on it as solid navy coins. There are only two, which
    is why the blur is affordable here — see the note on the map FAB blur
@@ -538,6 +540,21 @@
 .sg-map-fab:focus-visible { outline: 2px solid var(--map-accent); outline-offset: 3px; }
 
 .sg-floor-ctrl { position: relative; }
+
+/* Four explicit controls must still clear the instruction sheet on compact
+   airport displays. Zoom becomes one horizontal pair, preserving 48px touch
+   targets while keeping the map itself unobstructed. */
+@media (max-height: 620px) {
+  .sg-map-fabs {
+    top: calc(var(--safe-top) + 72px);
+    right: 12px;
+    transform: none;
+    align-items: flex-end;
+    gap: 6px;
+  }
+  .sg-map-zoom { flex-direction: row; gap: 6px; }
+  .sg-map-fab { width: 48px; height: 48px; }
+}
 
 .sg-floor-trigger__dot {
   position: absolute; top: 4px; right: 4px;
@@ -590,7 +607,6 @@
 .sg-return-btn .sg-ico { font-size: 15px; }
 .sg-return-btn:hover { background: #12587a; }
 .sg-return-btn:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }
-.sg-return-btn.is-hidden { opacity: 0; pointer-events: none; }
 
 .sg-floor-announce {
   position: absolute; z-index: 45;

@@ -9,7 +9,6 @@
 @import url('./screens/navigation.css');
 @import url('./overlays.css');
 @import url('./desktop.css');
-@import url('./a11y.css');
 @import url('./screens/planning-v5.css');
 /* Home rebuilt on the DS — last, so it wins over planning-v5.css for the
    class names shared with the old markup (.sg-access-row, .sg-toggle,
@@ -27,3 +26,5 @@
 /* Compatibility-only schematic route view. Own sg-rt* classes; it reuses the
    timeline shell, so it must come after it in the cascade. */
 @import url('./screens/navigation-route-map.css');
+/* Load assistive overrides last so later screen borders cannot undo them. */
+@import url('./a11y.css');

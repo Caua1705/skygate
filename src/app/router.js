@@ -19,6 +19,42 @@ import { filterNodes, groupByCategory } from '../services/nodeSearch.js';
    ============================================================ */
 
 let summaryRefreshTimer = null;
+let lastRenderedMode = '';
+let screenTransitionTimer = 0;
+
+const MODE_ORDER = { planning: 0, summary: 1, navigation: 2 };
+
+/**
+ * Screen changes get one restrained transition and a predictable focus
+ * destination. Re-renders inside the same screen stay instant, so typing,
+ * selecting a route or advancing a step never replays page choreography.
+ */
+function finishScreenChange(previousMode) {
+  const currentMode = app.mode;
+  root.dataset.mode = currentMode;
+  if (!previousMode || previousMode === currentMode) return;
+
+  const screen = root.firstElementChild;
+  if (!screen) return;
+  const direction = (MODE_ORDER[currentMode] ?? 0) >= (MODE_ORDER[previousMode] ?? 0)
+    ? 'forward'
+    : 'back';
+  const directionClass = 'sg-screen-enter--' + direction;
+  screen.classList.add('sg-screen-enter', directionClass);
+  clearTimeout(screenTransitionTimer);
+  screenTransitionTimer = setTimeout(
+    () => screen.classList.remove('sg-screen-enter', directionClass),
+    360,
+  );
+
+  requestAnimationFrame(() => {
+    const heading = screen.querySelector('h1');
+    if (!heading) return;
+    heading.classList.add('sg-screen-focus');
+    heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+  });
+}
 
 function scheduleSummaryRefresh() {
   clearTimeout(summaryRefreshTimer);
@@ -40,6 +76,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 export function render() {
+  const previousMode = lastRenderedMode;
   const theme = app.mode === 'navigation' ? '#0A192F' : '#F4F6FA';
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme);
   document.documentElement.style.colorScheme = app.mode === 'navigation' ? 'dark' : 'light';
@@ -48,6 +85,8 @@ export function render() {
     case 'summary':    root.innerHTML = renderSummary() + renderSearchOverlay() + renderLocationDetail() + renderPlaceDetailSheet(); break;
     case 'navigation': root.innerHTML = renderNavigation() + renderSearchOverlay() + renderLocationDetail() + renderPlaceDetailSheet(); break;
   }
+  finishScreenChange(previousMode);
+  lastRenderedMode = app.mode;
   bindEvents();
   scheduleSummaryRefresh();
   if (app.mode === 'navigation') {
@@ -99,6 +138,7 @@ export function updateMapForFloor(floorId) {
   requestAnimationFrame(() => {
     baseEl.innerHTML  = getBaseFloorSvg(floorId);
     routeEl.innerHTML = buildRouteOverlaySvg(floorId);
+    $('map-area')?.setAttribute('aria-label', `Mapa da rota \u2014 ${getFloorLabel(floorId)}`);
     updatePoiLayer();
     applyMapTransform(0);
     // Re-frame on the new floor: the stored per-floor transform is usually
@@ -117,7 +157,7 @@ export function updateMapForFloor(floorId) {
     // Update return button
     const rb = $('return-btn');
     const showReturn = navState.route && mapState.manualFloor;
-    if (rb) rb.classList.toggle('is-hidden', !showReturn);
+    if (rb) rb.hidden = !showReturn;
   });
 }
 

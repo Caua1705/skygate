@@ -10,7 +10,13 @@
 import assert from 'node:assert/strict';
 import { appData, navState, planState } from '../src/state/appState.js';
 import { buildDiagram, renderRouteDiagram } from '../src/screens/navigation/NavigationRouteMap.js';
-import { getEstimatedRemainingMinutes, renderSummaryStrip, renderViewToggle } from '../src/screens/navigation/NavigationShell.js';
+import {
+  getEstimatedRemainingMinutes,
+  getNavigationTiming,
+  navigationPrimaryLabel,
+  renderSummaryStrip,
+  renderViewToggle,
+} from '../src/screens/navigation/NavigationShell.js';
 import { buildLabelLayerHtml, buildRouteOverlaySvg, getCurrentRouteNode } from '../src/map/floorMapBuilder.js';
 
 const VB_W = 360;   // must match the module's canvas width
@@ -154,5 +160,23 @@ assert.match(timelineTabs, /Etapas\s*<\/button>/);
 assert.match(mapTabs, /Mapa\s*<\/button>/);
 assert.match(timelineTabs, /id="tab-steps-btn"[\s\S]*tabindex="0"/);
 assert.match(mapTabs, /id="tab-route-btn"[\s\S]*tabindex="0"/);
+assert.equal(
+  (mapTabs.match(/aria-controls="navigation-panel"/g) ?? []).length,
+  2,
+  'both tabs always reference the stable swapped panel',
+);
+
+const originalFlightTime = planState.flightTime;
+planState.flightTime = '12:00';
+const flightTiming = getNavigationTiming();
+assert.match(flightTiming.gate, /^\d{2}:\d{2}$/, 'walking keeps the estimated gate deadline visible');
+assert.match(flightTiming.ariaLabel, /estimado/, 'the gate deadline never reads as an airline fact');
+planState.flightTime = originalFlightTime;
+
+// Manual progress uses explicit, identical language in both navigation views.
+navState.activeStepIndex = 1;
+assert.equal(navigationPrimaryLabel(), 'Concluir etapa');
+navState.activeStepIndex = steps.length - 1;
+assert.equal(navigationPrimaryLabel(), 'Finalizar rota');
 
 console.log('route-diagram.test.mjs passed');

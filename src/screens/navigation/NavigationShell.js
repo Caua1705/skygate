@@ -27,7 +27,41 @@ import { navState, planState } from '../../state/appState.js';
 import { esc } from '../../utils/format.js';
 import { findNode } from '../../state/selectors.js';
 import { getPublicNodeLabel } from '../../services/nodePresentation.js';
+import { gateCloseClock, hasFlight } from '../../services/flightSlack.js';
 import { Button, IconButton, dsIcon } from '../../components/ds/index.js';
+
+/**
+ * One navigation header for both the spatial map and the instruction list.
+ * The destination is the title of the task; the product wordmark is omitted
+ * here so it never competes with the place the passenger is trying to reach.
+ */
+export function renderNavigationHeader({ map = false } = {}) {
+  const destNode = findNode(planState.destinationCode);
+  const destName = destNode ? getPublicNodeLabel(destNode) : 'seu destino';
+  const classes = map ? 'sg-navtop sg-ds sg-ds-dark sg-navhdr sg-navtop--map' : 'sg-navtop';
+  const eyebrow = planState.accessibleRoute || planState.routeMode === 'accessible'
+    ? 'FOR · Sem escadas'
+    : 'FOR · Navegando para';
+
+  return '<header class="' + classes + '">'
+    + '<button type="button" class="sg-navtop__btn" id="exit-nav-btn" aria-label="Sair da navegação">'
+    + dsIcon('solar:arrow-left-linear') + '</button>'
+    + '<div class="sg-navtop__route">'
+    + '<span class="sg-navtop__pin" aria-hidden="true">' + dsIcon('solar:map-point-bold') + '</span>'
+    + '<span class="sg-navtop__copy">'
+    + '<span class="sg-navtop__eyebrow">' + eyebrow + '</span>'
+    + '<h1 class="sg-navtop__title">' + esc(destName) + '</h1>'
+    + '</span></div>'
+    + '<button type="button" class="sg-navtop__btn" id="help-btn" aria-label="Ajuda durante a navegação">'
+    + dsIcon('solar:question-circle-linear') + '</button>'
+    + '</header>';
+}
+
+/** The manual progress action uses identical language in both nav views. */
+export function navigationPrimaryLabel() {
+  const isLast = navState.activeStepIndex >= navState.semanticSteps.length - 1;
+  return isLast ? 'Finalizar rota' : 'Concluir etapa';
+}
 
 /**
  * Estimate what remains without introducing a second timing model.
@@ -52,6 +86,23 @@ export function getEstimatedRemainingMinutes() {
 }
 
 /**
+ * Preserve the flight deadline once walking starts. A gate clock is stable
+ * enough to scan while moving and remains explicitly labelled as estimated;
+ * without flight context the route's remaining time stays the useful signal.
+ */
+export function getNavigationTiming() {
+  const remaining = getEstimatedRemainingMinutes();
+  const gate = hasFlight() ? gateCloseClock() : '';
+  return {
+    remaining,
+    gate,
+    ariaLabel: gate
+      ? `Fechamento estimado do portão por volta de ${gate}`
+      : `Tempo restante estimado: ${remaining} minutos`,
+  };
+}
+
+/**
  * The status band: total time, position in the route, how much is left.
  *
  * Part of the frame, not of either body — it answers "how is the trip
@@ -61,11 +112,13 @@ export function getEstimatedRemainingMinutes() {
 export function renderSummaryStrip() {
   const total   = navState.semanticSteps.length;
   const active  = navState.activeStepIndex;
-  const minutes = getEstimatedRemainingMinutes();
+  const timing = getNavigationTiming();
 
   return `<div class="sg-tl__strip" aria-label="Resumo da navegação">
-    <span class="sg-tl__strip-item" aria-label="Tempo restante estimado: ${minutes} minutos">
-      ${dsIcon('solar:clock-circle-bold')}<b>${esc(String(minutes))}</b> min restantes
+    <span class="sg-tl__strip-item" aria-label="${esc(timing.ariaLabel)}">
+      ${timing.gate
+        ? `${dsIcon('lucide:plane-takeoff')}Portão <b>~${esc(timing.gate)}</b> (estimado)`
+        : `${dsIcon('solar:clock-circle-bold')}<b>${esc(String(timing.remaining))}</b> min restantes`}
     </span>
     <span class="sg-tl__strip-sep" aria-hidden="true"></span>
     <span class="sg-tl__strip-item">
@@ -87,16 +140,16 @@ export function renderSummaryStrip() {
  */
 export function renderViewToggle(view, className = '') {
   const isMap = view === 'map' || view === 'trajeto';
-  const tab = (id, active, icon, label, controls) => `
+  const tab = (id, active, icon, label) => `
     <button type="button" class="sg-nav-tab${active ? ' is-active' : ''}" id="${id}"
-      role="tab" aria-selected="${active}" aria-controls="${controls}"
+      role="tab" aria-selected="${active}" aria-controls="navigation-panel"
       tabindex="${active ? '0' : '-1'}">
       ${dsIcon(icon)}${esc(label)}
     </button>`;
 
   return `<div class="sg-nav-tabs${className ? ` ${esc(className)}` : ''}" role="tablist" aria-label="Visualização da navegação">
-    ${tab('tab-steps-btn', !isMap, 'lucide:list', 'Etapas', 'navigation-view')}
-    ${tab('tab-route-btn', isMap, 'lucide:map', 'Mapa', 'map-wrapper')}
+    ${tab('tab-steps-btn', !isMap, 'lucide:list', 'Etapas')}
+    ${tab('tab-route-btn', isMap, 'lucide:map', 'Mapa')}
   </div>`;
 }
 
@@ -109,49 +162,35 @@ export function renderViewToggle(view, className = '') {
  * @param {string} [opts.bodyClass]  class for the panel wrapper
  */
 export function renderNavigationShell({ view, body, bodyClass = '' }) {
-  const destNode = findNode(planState.destinationCode);
-  const destName = destNode ? getPublicNodeLabel(destNode) : 'seu destino';
   const isFirst  = navState.activeStepIndex <= 0;
   const isLast   = navState.activeStepIndex >= navState.semanticSteps.length - 1;
 
   return `
     <div class="sg-ds sg-ds-dark sg-tl-screen sg-nav-screen--${esc(view)}" id="nav-screen">
 
-      <header class="sg-tl-hdr">
-        <button type="button" class="sg-tl-hdr__btn" id="exit-nav-btn" aria-label="Sair da navegação">
-          ${dsIcon('solar:arrow-left-linear')}
-        </button>
-        <!-- ONE row: back | logo | destination | help. The logo and the
-             destination used to stack, which cost the screen a whole band
-             before any route content. The logo shrinks to make room; the
-             destination is the thing a navigating passenger reads, and it
-             also appears as the last item of the timeline, so ellipsising a
-             very long name here loses nothing. -->
-        <img class="sg-tl-hdr__logo" src="assets/logo-skygate-white.png" alt="SkyGate">
-        <span class="sg-tl-hdr__dest">
-          ${dsIcon('solar:map-point-bold', 'sg-tl-hdr__pin')}
-          <span>FOR · Chegue a ${esc(destName)}</span>
-        </span>
-        <button type="button" class="sg-tl-hdr__btn" id="help-btn" aria-label="Ajuda">
-          ${dsIcon('solar:question-circle-linear')}
-        </button>
-      </header>
-
-      ${renderViewToggle(view)}
+      ${renderNavigationHeader()}
 
       ${renderSummaryStrip()}
 
+      <button type="button" class="sg-skip-navview" id="focus-view-tabs">
+        Ir para Etapas e Mapa
+      </button>
       <div class="sg-tl__scroll" id="nav-scroll">
-        <div id="navigation-view" class="${esc(bodyClass)}" role="tabpanel"
+        <div id="navigation-panel" class="${esc(bodyClass)}" role="tabpanel"
           aria-labelledby="${view === 'trajeto' ? 'tab-route-btn' : 'tab-steps-btn'}">
           ${body}
         </div>
+      </div>
+
+      <div class="sg-tl__view-switch">
+        ${renderViewToggle(view, 'sg-nav-tabs--footer')}
       </div>
 
       <!-- Only the primary action. Switching views is the toggle's job, and
            a second control for it down here is what made one screen look
            like two. -->
       <div class="sg-tl-foot">
+        <p class="sg-tl-foot__hint">Confirme somente depois de concluir a instrução atual.</p>
         <div class="sg-tl-foot__row">
           ${IconButton({
             icon: 'solar:arrow-left-linear',
@@ -161,9 +200,9 @@ export function renderNavigationShell({ view, body, bodyClass = '' }) {
             className: 'sg-tl-foot__prev',
           })}
           ${Button({
-            label: isLast ? 'Finalizar rota' : 'Próxima etapa',
+            label: navigationPrimaryLabel(),
             variant: 'primary',
-            iconRight: isLast ? 'solar:flag-2-bold' : 'solar:arrow-right-linear',
+            iconRight: isLast ? 'solar:flag-2-bold' : 'lucide:check',
             id: 'nav-next',
             className: 'sg-tl-foot__next',
           })}

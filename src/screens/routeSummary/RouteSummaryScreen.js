@@ -30,7 +30,7 @@
 import { getPublicNodeLabel, getPublicNodeSubtitle } from '../../services/nodePresentation.js';
 import { app, navState, planState, uiState } from '../../state/appState.js';
 import { renderPlanning } from '../home/HomeScreen.js';
-import { findNode, getFloorLabel, getModeLabel } from '../../state/selectors.js';
+import { findNode, getFloorLabel } from '../../state/selectors.js';
 import { esc, fmtMin } from '../../utils/format.js';
 import { Button, Chip, dsIcon } from '../../components/ds/index.js';
 import { findOption, scoreOptions, slackHint } from '../../services/routeOptions.js';
@@ -59,8 +59,9 @@ export function renderSummary() {
 
       <div class="sg-rc__scroll">
         ${tripLine()}
-        ${hasFlight() ? renderMarginBanner() : flightInvite()}
+        ${hasFlight() ? renderMarginBanner() : ''}
         ${optionsSection(options, selected, hasAlternatives)}
+        ${hasFlight() ? '' : flightInvite()}
       </div>
 
       ${footer(selected)}
@@ -79,12 +80,17 @@ function tripLine() {
   return `<section class="sg-rc__trip" aria-label="Trajeto selecionado">
     ${tripRow('De', origin, 'Origem')}
     ${tripRow('Para', dest, 'Destino')}
-    <div class="sg-rc__trip-mode">
-      ${Chip({
-        label: getModeLabel(planState.routeMode),
-        variant: 'outline',
-        icon: isAccessible ? 'lucide:accessibility' : 'lucide:zap',
-      })}
+    <div class="sg-rc__trip-actions">
+      <div class="sg-rc__trip-mode">
+        ${Chip({
+          label: isAccessible ? 'Evitar escadas' : 'Priorizar tempo',
+          variant: 'outline',
+          icon: isAccessible ? 'lucide:accessibility' : 'lucide:zap',
+        })}
+      </div>
+      <button type="button" class="sg-rc__edit" id="edit-route-btn">
+        ${dsIcon('lucide:pencil')}<span>Alterar</span>
+      </button>
     </div>
   </section>`;
 }
@@ -173,8 +179,12 @@ function flightInvite() {
 function optionsSection(options, selected, hasAlternatives = options.length > 1) {
   if (!options.length) return '';
 
+  const heading = hasAlternatives
+    ? '<h2 class="sg-rc__section-title" id="sg-rc-options-h">Compare tempo e trajeto</h2>'
+    : '<h2 class="sr-only" id="sg-rc-options-h">Detalhes da rota</h2>';
+
   return `<section class="sg-rc__options" aria-labelledby="sg-rc-options-h">
-    <h2 class="sg-rc__section-title" id="sg-rc-options-h">${hasAlternatives ? 'Compare as opções' : 'Rota disponível'}</h2>
+    ${heading}
     <div class="sg-rc__list" id="route-option-list">${renderChoiceOptions(options, selected)}</div>
   </section>`;
 }
@@ -263,14 +273,20 @@ function warningsRow(warnings = []) {
 function passesByRow(passesBy) {
   if (!passesBy?.length) return '';
 
+  const accessibleNames = passesBy.map(place =>
+    `${place.name}${place.open === null ? '' : ` (${place.open ? 'aberto' : 'fechado'})`}`
+  ).join('; ');
+
   return `<span class="sg-rc-opt__places">
-    ${passesBy.map(p => `<span class="sg-rc-place">
-      <span class="sg-rc-place__icon" aria-hidden="true">${dsIcon(p.icon)}</span>
-      <span class="sg-rc-place__name">${esc(p.name)}</span>
-      ${p.open === null ? '' : `<span class="sg-rc-place__status ${p.open ? 'is-open' : 'is-closed'}">
-        ${esc(p.open ? 'aberto' : 'fechado')}
-      </span>`}
-    </span>`).join('')}
+    <span class="sr-only">Passa por ${esc(accessibleNames)}</span>
+    <span class="sg-rc-place__icon" aria-hidden="true">${dsIcon('lucide:landmark')}</span>
+    <span class="sg-rc-place__copy" aria-hidden="true">
+      <span class="sg-rc-place__lead">Passa por</span>
+      ${passesBy.map(place => `<span class="sg-rc-place__name">
+        ${esc(place.name)}
+        ${place.open === null ? '' : `<span class="sg-rc-place__status ${place.open ? 'is-open' : 'is-closed'}">${esc(place.open ? 'aberto' : 'fechado')}</span>`}
+      </span>`).join('<span class="sg-rc-place__sep" aria-hidden="true">&middot;</span>')}
+    </span>
   </span>`;
 }
 
@@ -291,7 +307,7 @@ export function renderChoiceFooterInner(
 ) {
   const doomed = selected?.slack?.status === 'inviavel';
   const acked  = uiState.riskAcknowledged;
-  const resuming = navState.activeStepIndex > 0;
+  const resuming = navState.hasStarted;
   const remaining = resuming ? getEstimatedRemainingMinutes() : 0;
   const primaryLabel = doomed
     ? (resuming ? 'Retomar mesmo assim' : 'Iniciar mesmo assim')

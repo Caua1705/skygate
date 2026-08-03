@@ -82,7 +82,7 @@
 
 /* Every interactive DS element shares one visible focus treatment. */
 .sg-ds :focus-visible,
-.sg-ds-dark :focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: var(--radius-md); }
+.sg-ds-dark :focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* ---------- Button ---------- */
 .ds-btn {

@@ -266,7 +266,7 @@ export function placeLabels(items, blocked = []) {
  */
 function controlsKeepOut(floorId) {
   if (typeof document === 'undefined') return null;
-  const wrapper = document.getElementById('map-wrapper');
+  const wrapper = document.querySelector('#navigation-panel.sg-map-wrapper');
   const fabs    = document.querySelector('.sg-map-fabs');
   if (!wrapper || !fabs) return null;
 
