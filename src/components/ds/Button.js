@@ -11,7 +11,7 @@
  *
  * Variants: 'primary' (solid navy) | 'gradient' | 'outline' | 'ghost'
  *
- * Accessibility: min-height is --tap-min (44px). A button with only an icon
+ * Accessibility: min-height is --tap-min (48px). A button with only an icon
  * must use IconButton instead, which requires an aria-label.
  */
 import { esc } from '../../utils/format.js';

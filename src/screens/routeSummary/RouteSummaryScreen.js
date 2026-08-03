@@ -6,9 +6,9 @@
  * executes it. It is NOT a summary of one answer — it is the choice between
  * several, scored against the passenger's real margin.
  *
- * WITH a flight time this is a copilot: every card carries its slack, a
- * temperature badge, and one route is marked as the app's recommendation —
- * the scenic one when there is room, the direct one when there is not.
+ * WITH a flight time this is a copilot: every real backend option carries its
+ * live slack and temperature badge. Recommendation respects backend guidance
+ * and viability; the client never manufactures a detour.
  *
  * WITHOUT one it degrades to a very good indoor map: times and deltas only,
  * plus a visible invitation to add the flight. The passenger without a flight
@@ -37,6 +37,7 @@ import { findOption, scoreOptions, slackHint } from '../../services/routeOptions
 import {
   formatDuration, formatSlack, gateCloseClock, hasFlight, minutesUntilGateClose,
 } from '../../services/flightSlack.js';
+import { getEstimatedRemainingMinutes } from '../navigation/NavigationShell.js';
 
 export function renderSummary() {
   const route = navState.route;
@@ -44,25 +45,22 @@ export function renderSummary() {
 
   const options  = scoreOptions(navState.routeOptions ?? []);
   const selected = findOption(options, navState.selectedOptionId);
+  const hasAlternatives = options.length > 1;
 
   return `
     <div class="sg-ds sg-rc" id="route-choice-root">
 
-      <header class="sg-rc__header" role="banner">
-        <button type="button" class="sg-rc__back" id="back-to-planning-btn" aria-label="Voltar ao planejamento">
+      <header class="sg-rc__header">
+        <button type="button" class="sg-rc__back" id="back-to-planning-btn" aria-label="Voltar e alterar o trajeto">
           ${dsIcon('lucide:arrow-left')}
         </button>
-        <h1 class="sg-rc__title">Escolha seu caminho</h1>
-        <button type="button" class="sg-rc__edit" id="edit-route-btn"
-          aria-label="Alterar origem e destino">
-          ${dsIcon('lucide:pencil')}<span>Alterar</span>
-        </button>
+        <h1 class="sg-rc__title">${hasAlternatives ? 'Escolha uma rota' : 'Sua rota'}</h1>
       </header>
 
       <div class="sg-rc__scroll">
         ${tripLine()}
-        ${hasFlight() ? marginBanner() : flightInvite()}
-        ${optionsSection(options, selected)}
+        ${hasFlight() ? renderMarginBanner() : flightInvite()}
+        ${optionsSection(options, selected, hasAlternatives)}
       </div>
 
       ${footer(selected)}
@@ -116,7 +114,7 @@ function tripRow(label, node, fallback) {
    printed like a fact reads as an airline announcement we never got.
    Hence "portão fecha ~19:04 (estimado)", never "19:04".
    ============================================================ */
-function marginBanner() {
+export function renderMarginBanner() {
   const left = minutesUntilGateClose();
   const late = left !== null && left < 0;
   const gate = gateCloseClock();
@@ -138,7 +136,8 @@ function marginBanner() {
       <p class="sg-rc__margin-basis">
         portão fecha <strong>~${esc(gate)}</strong> <span class="sg-rc__margin-est">(estimado)</span>
         <span class="sg-rc__margin-sep" aria-hidden="true">·</span>
-        voo ${esc(planState.flightTime)}
+        ${planState.flightDay === 'tomorrow' ? 'amanhã' : 'hoje'} ·
+        voo ${planState.flightType === 'international' ? 'internacional' : 'doméstico'} · ${esc(planState.flightTime)}
       </p>
     </div>
   </section>`;
@@ -171,11 +170,11 @@ function flightInvite() {
    Real radios in labels: keyboard grouping, arrow keys and the checked state
    come from the platform instead of being reimplemented on divs.
    ============================================================ */
-function optionsSection(options, selected) {
+function optionsSection(options, selected, hasAlternatives = options.length > 1) {
   if (!options.length) return '';
 
   return `<section class="sg-rc__options" aria-labelledby="sg-rc-options-h">
-    <h2 class="sg-rc__section-title" id="sg-rc-options-h">Como você quer atravessar</h2>
+    <h2 class="sg-rc__section-title" id="sg-rc-options-h">${hasAlternatives ? 'Compare as opções' : 'Rota disponível'}</h2>
     <div class="sg-rc__list" id="route-option-list">${renderChoiceOptions(options, selected)}</div>
   </section>`;
 }
@@ -185,20 +184,22 @@ export function renderChoiceOptions(
   options = scoreOptions(navState.routeOptions ?? []),
   selected = findOption(options, navState.selectedOptionId),
 ) {
-  return options.map(o => optionCard(o, o.id === selected?.id)).join('');
+  const selectable = options.length > 1;
+  return options.map(o => optionCard(o, o.id === selected?.id, selectable)).join('');
 }
 
-function optionCard(option, isSelected) {
+function optionCard(option, isSelected, selectable) {
   const slack = option.slack;
   const doomed = slack?.status === 'inviavel';
   const hint = slackHint(option);
+  const tag = selectable ? 'label' : 'article';
 
-  return `<label class="sg-rc-opt${isSelected ? ' is-selected' : ''}${doomed ? ' is-doomed' : ''}">
-    <input type="radio" name="sg-route-option" class="sg-rc-opt__input route-option-input"
-      value="${esc(option.id)}"${isSelected ? ' checked' : ''}>
+  return `<${tag} class="sg-rc-opt${isSelected ? ' is-selected' : ''}${doomed ? ' is-doomed' : ''}${selectable ? '' : ' is-single'}">
+    ${selectable ? `<input type="radio" name="sg-route-option" class="sg-rc-opt__input route-option-input"
+      value="${esc(option.id)}"${isSelected ? ' checked' : ''}>` : ''}
 
     <span class="sg-rc-opt__body">
-      ${option.recommended ? `<span class="sg-rc-opt__rec">
+      ${selectable && option.recommended ? `<span class="sg-rc-opt__rec">
         ${dsIcon('lucide:sparkles')}<span>Recomendada para você</span>
       </span>` : ''}
 
@@ -237,10 +238,20 @@ function optionCard(option, isSelected) {
       </span>` : ''}
 
       ${passesByRow(option.passesBy)}
+      ${warningsRow(option.warnings)}
     </span>
 
-    <span class="sg-rc-opt__mark" aria-hidden="true">${dsIcon('lucide:circle-check')}</span>
-  </label>`;
+    ${selectable ? `<span class="sg-rc-opt__mark" aria-hidden="true">${dsIcon('lucide:circle-check')}</span>` : ''}
+  </${tag}>`;
+}
+
+function warningsRow(warnings = []) {
+  const messages = warnings.map(w => typeof w === 'string' ? w : (w?.message ?? w?.text ?? '')).filter(Boolean);
+  if (!messages.length) return '';
+  return `<span class="sg-rc-opt__warnings">
+    ${dsIcon('lucide:triangle-alert')}
+    <span>${messages.slice(0, 2).map(esc).join(' · ')}</span>
+  </span>`;
 }
 
 /**
@@ -267,7 +278,7 @@ function passesByRow(passesBy) {
    4. FOOTER — one hero action.
    An unviable route can still be walked, but not by accident: the CTA is
    disabled until the passenger explicitly acknowledges they would arrive
-   after boarding.
+   after the estimated gate closing.
    ============================================================ */
 function footer(selected) {
   return `<div class="sg-rc__footer">
@@ -280,11 +291,18 @@ export function renderChoiceFooterInner(
 ) {
   const doomed = selected?.slack?.status === 'inviavel';
   const acked  = uiState.riskAcknowledged;
+  const resuming = navState.activeStepIndex > 0;
+  const remaining = resuming ? getEstimatedRemainingMinutes() : 0;
+  const primaryLabel = doomed
+    ? (resuming ? 'Retomar mesmo assim' : 'Iniciar mesmo assim')
+    : resuming
+      ? (remaining ? `Retomar · ~${remaining} min` : 'Retomar na etapa final')
+      : `Iniciar · ${fmtMin(selected?.minutes ?? 0)} min`;
 
   return `${doomed ? `<div class="sg-rc__risk" role="alert">
       <p class="sg-rc__risk-text">
         ${dsIcon('lucide:circle-alert')}
-        <span>Você chegaria <strong>após o embarque</strong> por este caminho.</span>
+        <span>Você chegaria <strong>após o fechamento estimado do portão</strong>.</span>
       </p>
       <label class="sg-rc__risk-ack">
         <input type="checkbox" id="risk-ack"${acked ? ' checked' : ''}>
@@ -292,12 +310,16 @@ export function renderChoiceFooterInner(
       </label>
     </div>` : renderChoiceFooterNote(selected)}
 
+    ${resuming ? `<button type="button" class="sg-rc__restart" id="restart-nav-btn">
+      ${dsIcon('lucide:rotate-ccw')}<span>Reiniciar do início</span>
+    </button>` : ''}
+
     ${Button({
-      label: doomed ? 'Iniciar mesmo assim' : 'Iniciar navegação',
+      label: primaryLabel,
       variant: 'primary',
       icon: 'lucide:play',
       block: true,
-      disabled: doomed && !acked,
+      disabled: !selected || (doomed && !acked),
       id: 'start-nav-btn',
       className: `sg-rc__cta${doomed ? ' is-risky' : ''}`,
     })}`;

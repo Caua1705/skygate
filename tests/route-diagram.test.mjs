@@ -10,6 +10,8 @@
 import assert from 'node:assert/strict';
 import { appData, navState, planState } from '../src/state/appState.js';
 import { buildDiagram, renderRouteDiagram } from '../src/screens/navigation/NavigationRouteMap.js';
+import { getEstimatedRemainingMinutes, renderSummaryStrip, renderViewToggle } from '../src/screens/navigation/NavigationShell.js';
+import { buildLabelLayerHtml, buildRouteOverlaySvg, getCurrentRouteNode } from '../src/map/floorMapBuilder.js';
 
 const VB_W = 360;   // must match the module's canvas width
 
@@ -75,7 +77,7 @@ assert.notEqual(d.stations[2].x, d.stations[3].x, 'the floor change bends the li
 assert.equal(d.stations[0].label, 'Portão A3');
 assert.equal(d.stations[4].label, 'Chilli Beans');
 assert.equal(d.stations[0].eyebrow, 'PARTIDA');
-assert.equal(d.stations[3].eyebrow, 'VOCÊ ESTÁ AQUI');
+assert.equal(d.stations[3].eyebrow, 'ETAPA ATUAL');
 assert.equal(d.stations[4].eyebrow, 'DESTINO');
 assert.equal(d.stations[2].eyebrow, 'PISO 2', 'a floor change names the floor it reaches');
 
@@ -85,9 +87,10 @@ assert.ok(d.refs.length && d.refs.length <= 2, 'a nearby landmark is offered, ca
 assert.ok(d.refs.every(r => /^Banheiro/.test(r.label)), 'the nearby landmark is the one within reach');
 assert.ok(!JSON.stringify(d.refs).includes('Longe'), 'a distant POI is not a landmark');
 
-// Arrival: the whole line is walked and the last stop says so.
+// Final confirmation: the whole line is walked, but arrival is only claimed
+// after the passenger activates the explicit finish action.
 navState.activeStepIndex = steps.length - 1;
-assert.equal(buildDiagram(steps, steps.length - 1).stations.at(-1).eyebrow, 'VOCÊ CHEGOU');
+assert.equal(buildDiagram(steps, steps.length - 1).stations.at(-1).eyebrow, 'ETAPA FINAL');
 
 // A one-stop route has no line to draw and must not try.
 navState.semanticSteps = [steps[4]];
@@ -115,5 +118,41 @@ assertInsideCanvas(longSvg, 'long route');
 // No route at all: a sentence, not a crash.
 navState.semanticSteps = [];
 assert.match(renderRouteDiagram(), /Nenhum trajeto/);
+
+// Active-navigation presentation stays honest and reversible.
+navState.route = { estimatedMinutes: 7, path: ['a', 'b', 'c', 'd', 'e'] };
+navState.semanticSteps = steps.map((step, index) => ({ ...step, rawFrom: index, rawTo: index }));
+navState.activeStepIndex = 0;
+assert.equal(getEstimatedRemainingMinutes(), 7, 'the opening estimate is the backend total');
+navState.activeStepIndex = 2;
+assert.equal(getEstimatedRemainingMinutes(), 4, 'remaining time falls with confirmed progress');
+assert.match(renderSummaryStrip(), /min restantes/);
+assert.match(renderSummaryStrip(), /Etapa <b>3<\/b> de 5/);
+
+navState.activeStepIndex = 3;
+assert.equal(getCurrentRouteNode()?.code, 'd', 'the real-map marker follows the active route node');
+assert.match(buildLabelLayerHtml('2'), /Etapa atual/);
+assert.doesNotMatch(buildLabelLayerHtml('2'), /Você está aqui/);
+
+// A single-node current step must not cut the line on either side. The
+// completed segment ends at the current node and upcoming starts there.
+navState.activeStepIndex = 1;
+navState.route.segments = [
+  { type: 'floor', floorId: '1', nodeCodes: ['a', 'b', 'c'] },
+  { type: 'floor', floorId: '2', nodeCodes: ['d', 'e'] },
+];
+const floorOverlay = buildRouteOverlaySvg('1');
+const completedLine = floorOverlay.match(/sg-route__line is-completed" points="([^"]+)/)?.[1]?.split(' ') ?? [];
+const upcomingLine = floorOverlay.match(/sg-route__line is-active" points="([^"]+)/)?.[1]?.split(' ') ?? [];
+assert.equal(completedLine.length, 2, 'completed line reaches the current node');
+assert.equal(upcomingLine.length, 2, 'upcoming line starts at the current node');
+assert.equal(completedLine.at(-1), upcomingLine[0], 'status boundaries share a point');
+
+const timelineTabs = renderViewToggle('timeline');
+const mapTabs = renderViewToggle('map');
+assert.match(timelineTabs, /Etapas\s*<\/button>/);
+assert.match(mapTabs, /Mapa\s*<\/button>/);
+assert.match(timelineTabs, /id="tab-steps-btn"[\s\S]*tabindex="0"/);
+assert.match(mapTabs, /id="tab-route-btn"[\s\S]*tabindex="0"/);
 
 console.log('route-diagram.test.mjs passed');

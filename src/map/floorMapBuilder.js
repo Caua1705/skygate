@@ -30,6 +30,21 @@ import { findNode, getFloorLabel, getFloorTransform } from '../state/selectors.j
 export const MAP_W = 900, MAP_H = 600;
 export const MAP_PAD = 48; // internal padding
 
+/**
+ * The node represented by the passenger's manually confirmed active step.
+ * This is route progress, not an indoor-positioning claim.
+ */
+export function getCurrentRouteNode() {
+  const path = navState.route?.path ?? [];
+  const step = navState.semanticSteps[navState.activeStepIndex];
+  const rawIndex = Number(step?.rawFrom);
+  const pathIndex = path.length
+    ? clamp(Number.isFinite(rawIndex) ? rawIndex : 0, 0, path.length - 1)
+    : 0;
+  const code = step?.landmarkCode || path[pathIndex] || planState.originCode;
+  return findNode(code) ?? findNode(planState.originCode);
+}
+
 export function getFloorBounds(floorId) {
   const ns = appData.nodes.filter(n => n.floorId === floorId && (n.x || n.y));
   if (!ns.length) return { minX: 0, maxX: 100, minY: 0, maxY: 100, w: 100, h: 100 };
@@ -166,7 +181,7 @@ function overlaps(a, b, m = LBL.gap) {
  * and recentre FABs float over the right edge of the map on every screen
  * size. This placer works in map units and cannot see them, so a caption
  * that defaults rightwards slides under the controls and gets chopped —
- * which is exactly what "Você está aqui" did on a phone. Going left first
+ * which is exactly what the active-step caption did on a phone. Going left first
  * costs nothing when there is room on both sides, and avoids the only
  * fixed obstacle on screen when there is not.
  */
@@ -237,7 +252,7 @@ export function placeLabels(items, blocked = []) {
  * The floor/recentre FABs as a keep-out rect in MAP units.
  *
  * placeLabels works in map space and has no idea the controls exist, so a
- * caption anchored near the right edge slides under them — "Você está aqui"
+ * caption anchored near the right edge slides under them — the active step
  * did exactly that whenever the fit put the origin over on that side. The
  * FABs are screen-space, so their box has to be projected back through the
  * live pan/zoom, inverting the same equation mapFit.js documents:
@@ -284,16 +299,12 @@ export function buildLabelLayerHtml(floorId) {
   const bounds = getFloorBounds(floorId);
   const toSvg  = n => nodeToSvg(n, bounds);
 
-  const originNode = findNode(planState.originCode);
-  const destNode   = findNode(planState.destinationCode);
-  const originPt = originNode?.floorId === floorId ? toSvg(originNode) : null;
-  const destPt   = destNode?.floorId   === floorId ? toSvg(destNode)   : null;
-
-  const curStep  = navState.semanticSteps[navState.activeStepIndex];
-  const curLandmark = curStep?.landmarkCode ? findNode(curStep.landmarkCode) : null;
-  const showCurLandmark = curLandmark?.floorId === floorId &&
-    curLandmark.code !== planState.destinationCode &&
-    curLandmark.code !== planState.originCode;
+  const currentNode = getCurrentRouteNode();
+  const destNode = findNode(planState.destinationCode);
+  const currentPt = currentNode?.floorId === floorId ? toSvg(currentNode) : null;
+  const destPt = destNode?.floorId === floorId && destNode.code !== currentNode?.code
+    ? toSvg(destNode)
+    : null;
 
   // POI dots share this coordinate space, so they are obstacles too —
   // otherwise a caption lands on top of one and neither is readable.
@@ -307,16 +318,10 @@ export function buildLabelLayerHtml(floorId) {
       cls: 'sg-map-label--dest', lines: [getPublicNodeLabel(destNode), 'Seu destino'] });
     blocked.push({ x: destPt.x - 14, y: destPt.y - 36, w: 28, h: 38 });
   }
-  if (originPt) {
-    items.push({ x: originPt.x, y: originPt.y, radius: 20, priority: 2,
-      cls: 'sg-map-label--here', lines: ['Você está aqui', getPublicNodeLabel(originNode)] });
-    blocked.push({ x: originPt.x - 18, y: originPt.y - 18, w: 36, h: 36 });
-  }
-  if (showCurLandmark && curLandmark) {
-    const p = toSvg(curLandmark);
-    items.push({ x: p.x, y: p.y - 20, radius: 16, priority: 1,
-      cls: 'sg-map-label--step', lines: [getPublicNodeLabel(curLandmark)] });
-    blocked.push({ x: p.x - 13, y: p.y - 33, w: 26, h: 35 });
+  if (currentPt) {
+    items.push({ x: currentPt.x, y: currentPt.y, radius: 20, priority: 3,
+      cls: 'sg-map-label--here', lines: ['Etapa atual', getPublicNodeLabel(currentNode)] });
+    blocked.push({ x: currentPt.x - 18, y: currentPt.y - 18, w: 36, h: 36 });
   }
 
   return placeLabels(items, blocked).map(({ box, lines, cls }) => `
@@ -339,9 +344,12 @@ export function buildRouteOverlaySvg(floorId) {
   const path      = route.path;
 
   // Get floor-specific codes from segments
-  const seg = route.segments?.find(s => s.type === 'floor' && s.floorId === floorId);
-  const floorCodes = seg?.nodeCodes?.length ? seg.nodeCodes
-    : path.filter(c => findNode(c)?.floorId === floorId);
+  const segmentCodes = (route.segments ?? [])
+    .filter(segment => segment.type === 'floor' && segment.floorId === floorId)
+    .flatMap(segment => segment.nodeCodes ?? []);
+  const floorCodes = [...new Set(segmentCodes.length
+    ? segmentCodes
+    : path.filter(code => findNode(code)?.floorId === floorId))];
 
   if (!floorCodes.length) {
     return `<svg viewBox="0 0 ${MAP_W} ${MAP_H}" class="sg-map-svg sg-map-route" aria-hidden="true"></svg>`;
@@ -352,41 +360,42 @@ export function buildRouteOverlaySvg(floorId) {
   const steps   = navState.semanticSteps;
   const curStep = steps[stepIdx];
 
-  // Partition codes by step state (completed/active/upcoming)
-  const floorPathIndices = floorCodes.map(c => path.indexOf(c)).filter(i => i >= 0);
-  const minFloorIdx = Math.min(...floorPathIndices);
-  const maxFloorIdx = Math.max(...floorPathIndices);
-
   const activeFrom = curStep?.rawFrom ?? 0;
   const activeTo   = curStep?.rawTo   ?? path.length - 1;
 
-  const getStatus = (pathIdx) => {
-    if (pathIdx < activeFrom) return 'completed';
-    if (pathIdx <= activeTo)  return 'active';
-    return 'upcoming';
-  };
-
-  const completedPts = [], activePts = [], upcomingPts = [];
-  floorCodes.forEach(code => {
+  // Partition EDGES, not nodes. Each state keeps the boundary node it shares
+  // with its neighbour, so completed → current → upcoming is one continuous
+  // line even when the current step covers a single point.
+  const floorPoints = floorCodes.map(code => {
     const pi = path.indexOf(code);
-    if (pi < 0) return;
+    if (pi < 0) return null;
     const n = findNode(code);
-    if (!n) return;
-    const p = toSvg(n);
-    const st = getStatus(pi);
-    if (st === 'completed') completedPts.push(p);
-    else if (st === 'active') activePts.push(p);
-    else upcomingPts.push(p);
-  });
+    return n ? { pi, p: toSvg(n) } : null;
+  }).filter(Boolean);
+  const edgePoints = { completed: [], active: [], upcoming: [] };
+  for (let i = 1; i < floorPoints.length; i++) {
+    const previous = floorPoints[i - 1];
+    const next = floorPoints[i];
+    const state = next.pi <= activeFrom ? 'completed'
+      : previous.pi >= activeTo ? 'upcoming'
+      : 'active';
+    const points = edgePoints[state];
+    if (!points.length || points.at(-1) !== previous.p) points.push(previous.p);
+    points.push(next.p);
+  }
+  const completedPts = edgePoints.completed;
+  const activePts = edgePoints.active;
+  const upcomingPts = edgePoints.upcoming;
+  const activeSpot = floorPoints.find(point => point.pi >= activeFrom && point.pi <= activeTo)?.p ?? null;
 
   const poly = pts => pts.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 
   // Determine which nodes to show as markers (strict filtering)
   const routeSet = new Set(floorCodes);
-  const originNode = findNode(planState.originCode);
-  const destNode   = findNode(planState.destinationCode);
-  const showOrigin = originNode?.floorId === floorId;
-  const showDest   = destNode?.floorId   === floorId;
+  const currentNode = getCurrentRouteNode();
+  const destNode = findNode(planState.destinationCode);
+  const showCurrent = currentNode?.floorId === floorId;
+  const showDest = destNode?.floorId === floorId && destNode.code !== currentNode?.code;
 
   // Visible landmarks: only vertical connections + doors/entrances ON the route
   const visibleLandmarks = appData.nodes.filter(n =>
@@ -394,17 +403,13 @@ export function buildRouteOverlaySvg(floorId) {
     routeSet.has(n.code) &&
     NAV_VISIBLE_TYPES.has(n.type) &&
     n.code !== planState.originCode &&
-    n.code !== planState.destinationCode
+    n.code !== planState.destinationCode &&
+    n.code !== currentNode?.code
   );
 
   // Current instruction landmark. Skipped when it IS the origin or the
   // destination — those already have a marker and a caption, and printing
   // the same place name twice is just noise competing for space.
-  const curLandmark = curStep?.landmarkCode ? findNode(curStep.landmarkCode) : null;
-  const showCurLandmark = curLandmark?.floorId === floorId &&
-    curLandmark.code !== planState.destinationCode &&
-    curLandmark.code !== planState.originCode;
-
   /**
    * Route stroke stack: three soft halo passes → body → bright core.
    *
@@ -442,9 +447,9 @@ export function buildRouteOverlaySvg(floorId) {
   /** No drawable active leg → the road ahead carries the full treatment. */
   const upcomingIsLead = activePts.length < 2 && upcomingPts.length > 1;
 
-  // Which points anchor the "you are here" / waypoint / destination markers
-  const originPt = showOrigin ? toSvg(originNode) : null;
-  const destPt   = showDest   ? toSvg(destNode)   : null;
+  // Which points anchor the confirmed current step and destination markers.
+  const currentPt = showCurrent ? toSvg(currentNode) : null;
+  const destPt = showDest ? toSvg(destNode) : null;
 
   return `<svg
     viewBox="0 0 ${MAP_W} ${MAP_H}"
@@ -496,8 +501,8 @@ export function buildRouteOverlaySvg(floorId) {
 
     <!-- Active route segment (dominant) -->
     ${activePts.length > 1 ? routeLine(activePts, 'active', { flow: true })
-      : activePts.length === 1 ? `
-      <circle class="sg-route__spot" cx="${activePts[0].x.toFixed(1)}" cy="${activePts[0].y.toFixed(1)}" r="6"/>
+      : activeSpot ? `
+      <circle class="sg-route__spot" cx="${activeSpot.x.toFixed(1)}" cy="${activeSpot.y.toFixed(1)}" r="6"/>
     ` : ''}
 
     <!-- Full route fallback (no step data) -->
@@ -524,15 +529,6 @@ export function buildRouteOverlaySvg(floorId) {
       </g>`;
     }).join('')}
 
-    <!-- Current step landmark -->
-    ${showCurLandmark && curLandmark ? (() => {
-      const p = toSvg(curLandmark);
-      return `<g class="sg-map-step" aria-label="Ponto atual: ${esc(getPublicNodeLabel(curLandmark))}"
-        transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})">
-        <g class="sg-pop">${mapPin(0, 0, 'sg-map-pin--step')}</g>
-      </g>` ;
-    })() : ''}
-
     <!-- Destination: glowing pin, the end of the light -->
     ${destPt ? `<g class="sg-map-dest" aria-label="Destino: ${esc(getPublicNodeLabel(destNode))}"
       transform="translate(${destPt.x.toFixed(1)},${destPt.y.toFixed(1)})">
@@ -543,9 +539,9 @@ export function buildRouteOverlaySvg(floorId) {
       </g>
     </g>` : ''}
 
-    <!-- "Você está aqui": pulsing turquoise dot with two radar waves -->
-    ${originPt ? `<g class="sg-map-here" aria-label="Você está aqui: ${esc(getPublicNodeLabel(originNode))}"
-      transform="translate(${originPt.x.toFixed(1)},${originPt.y.toFixed(1)})">
+    <!-- Passenger-confirmed active step: progress, not live positioning. -->
+    ${currentPt ? `<g class="sg-map-here" aria-label="Etapa atual: ${esc(getPublicNodeLabel(currentNode))}"
+      transform="translate(${currentPt.x.toFixed(1)},${currentPt.y.toFixed(1)})">
       <circle class="sg-map-here__wave" r="13"/>
       <circle class="sg-map-here__wave sg-map-here__wave--2" r="13"/>
       <circle class="sg-map-here__halo" r="26"/>
@@ -608,9 +604,12 @@ export function getRoutePois(floorId) {
   const bounds = getFloorBounds(floorId);
   const toSvg  = n => nodeToSvg(n, bounds);
 
-  const seg = route.segments?.find(s => s.type === 'floor' && s.floorId === floorId);
-  const floorCodes = seg?.nodeCodes?.length ? seg.nodeCodes
-    : route.path.filter(c => findNode(c)?.floorId === floorId);
+  const segmentCodes = (route.segments ?? [])
+    .filter(segment => segment.type === 'floor' && segment.floorId === floorId)
+    .flatMap(segment => segment.nodeCodes ?? []);
+  const floorCodes = [...new Set(segmentCodes.length
+    ? segmentCodes
+    : route.path.filter(code => findNode(code)?.floorId === floorId))];
   const linePts = floorCodes.map(c => findNode(c)).filter(Boolean).map(toSvg);
   if (linePts.length < 2) return [];
 

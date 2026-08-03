@@ -9,7 +9,7 @@ import { renderFloorControl, renderNavigation } from '../screens/navigation/Navi
 import { bindEvents, bindFloorControlEvents, bindMapPoiEvents, bindSearchItemEvents } from './events.js';
 import { applyMapTransform, bindMapPan } from '../map/mapPanZoom.js';
 import { autoFitRoute } from '../map/mapFit.js';
-import { scrollTimelineToCurrent } from './actions.js';
+import { refreshSummaryTiming, scrollTimelineToCurrent } from './actions.js';
 import { buildLabelLayerHtml, buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../map/floorMapBuilder.js';
 import { getFloorLabel } from '../state/selectors.js';
 import { filterNodes, groupByCategory } from '../services/nodeSearch.js';
@@ -18,14 +18,38 @@ import { filterNodes, groupByCategory } from '../services/nodeSearch.js';
    11. MAIN RENDER — dispatch by app.mode
    ============================================================ */
 
+let summaryRefreshTimer = null;
+
+function scheduleSummaryRefresh() {
+  clearTimeout(summaryRefreshTimer);
+  summaryRefreshTimer = null;
+  if (app.mode !== 'summary' || !planState.flightTime) return;
+
+  const now = new Date();
+  const delay = Math.max(1000, (60 - now.getSeconds()) * 1000 - now.getMilliseconds() + 50);
+  summaryRefreshTimer = setTimeout(() => {
+    refreshSummaryTiming();
+    scheduleSummaryRefresh();
+  }, delay);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (app.mode === 'summary' && planState.flightTime) refreshSummaryTiming();
+  scheduleSummaryRefresh();
+});
 
 export function render() {
+  const theme = app.mode === 'navigation' ? '#0A192F' : '#F4F6FA';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme);
+  document.documentElement.style.colorScheme = app.mode === 'navigation' ? 'dark' : 'light';
   switch (app.mode) {
     case 'planning':   root.innerHTML = renderPlanning() + renderSearchOverlay() + renderLocationDetail() + renderPlaceDetailSheet(); break;
     case 'summary':    root.innerHTML = renderSummary() + renderSearchOverlay() + renderLocationDetail() + renderPlaceDetailSheet(); break;
     case 'navigation': root.innerHTML = renderNavigation() + renderSearchOverlay() + renderLocationDetail() + renderPlaceDetailSheet(); break;
   }
   bindEvents();
+  scheduleSummaryRefresh();
   if (app.mode === 'navigation') {
     // Both are no-ops without the map DOM, so the timeline view costs
     // nothing here and the map view keeps its previous behaviour.
@@ -114,4 +138,3 @@ export function updateSearchChips_() {
     btn.setAttribute('aria-pressed', String(active));
   });
 }
-

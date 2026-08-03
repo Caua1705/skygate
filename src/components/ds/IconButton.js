@@ -9,7 +9,7 @@
  *
  * Accessibility: `label` is REQUIRED and becomes aria-label — an icon-only
  * control has no text to announce. It throws in development if omitted.
- * Size is --tap-min (44x44) so it always clears the touch-target minimum.
+ * Size is --tap-min (48x48) so it always clears the touch-target minimum.
  */
 import { esc } from '../../utils/format.js';
 import { dsIcon } from './icon.js';

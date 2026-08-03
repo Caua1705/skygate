@@ -40,7 +40,7 @@ import { appData, planState } from '../state/appState.js';
 import { getAirportSlug } from '../state/selectors.js';
 
 /** A flight further out than this is a typo, not a plan. */
-const MAX_HORIZON_MIN = 24 * 60;
+const MAX_HORIZON_MIN = 48 * 60;
 
 /**
  * The four states a route can be in against the gate closing. `tone` maps to
@@ -64,10 +64,8 @@ export function hasFlight() {
  * Resolved from config by airport and flight type — never a constant, because
  * it varies by airport, airline and whether the flight is international.
  *
- * `flightType` is not collected anywhere yet: there is no UI for it, and
- * inferring "international" from the destination gate would be a guess
- * dressed as a fact. The resolver is wired so that adding it later is a
- * config change plus one field, not a rewrite.
+ * `flightType` is chosen explicitly on Home. We never infer "international"
+ * from a destination gate, which would turn a guess into operational data.
  */
 export function gateCloseMarginMin({
   airportSlug = getAirportSlug(appData.airport),
@@ -96,10 +94,8 @@ function exactMinutesUntilFlight(now, flightTime) {
   if (target === null) return null;
 
   const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-  let diff = target - nowMin;
-  // An airport runs through midnight: "00:20" typed at 23:50 is in 30 minutes,
-  // not 23 hours ago.
-  if (diff < 0) diff += 24 * 60;
+  const dayOffset = planState.flightDay === 'tomorrow' ? 24 * 60 : 0;
+  const diff = target + dayOffset - nowMin;
   return diff > MAX_HORIZON_MIN ? null : diff;
 }
 

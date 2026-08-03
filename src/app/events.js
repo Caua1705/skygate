@@ -1,5 +1,14 @@
 import { $ } from '../utils/dom.js';
-import { addFlightFromChoice, advanceStep, clearFlightTime, clearLocation, closeLocationDetail, closePlaceDetail, closeOverview, closeSearch, editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail, openPlaceFromMap, openPlaceOrLocationDetail, openOverview, openSearch, returnToCurrentStep, selectLocation, selectRouteOption, setFlightTime, setRouteMode, showHelp, showRouteMap, showTimeline, startNavigation, swapLocations, toggleAccessibleRoute, toggleRiskAck, traceRouteToLocation, tracePlaceRoute } from './actions.js';
+import {
+  activateNavigationPrimary, addFlightFromChoice, advanceStep, clearFlightTime,
+  clearLocation, closeLocationDetail, closePlaceDetail, closeOverview, closeSearch,
+  editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail,
+  openPlaceFromMap, openPlaceOrLocationDetail, openOverview, openSearch,
+  restartNavigation, returnToCurrentStep, selectLocation, selectRouteOption,
+  setFlightDay, setFlightTime, setFlightType, setRouteMode, showHelp,
+  showRouteMap, showTimeline, startNavigation, swapLocations,
+  toggleAccessibleRoute, toggleRiskAck, traceRouteToLocation, tracePlaceRoute,
+} from './actions.js';
 import { handleCalculate } from './routeController.js';
 import { init } from './bootstrap.js';
 import { app, navState, uiState } from '../state/appState.js';
@@ -51,11 +60,18 @@ export function bindEvents() {
   // re-rendered from under the caret.
   $('flight-time')?.addEventListener('input', e => setFlightTime(e.target.value));
   $('flight-clear')?.addEventListener('click', clearFlightTime);
+  document.querySelectorAll('input[name="flight-day"]').forEach(input =>
+    input.addEventListener('change', () => { if (input.checked) setFlightDay(input.value); })
+  );
+  document.querySelectorAll('input[name="flight-type"]').forEach(input =>
+    input.addEventListener('change', () => { if (input.checked) setFlightType(input.value); })
+  );
 
   // Route choice ("Escolha seu caminho")
   $('back-to-planning-btn')?.addEventListener('click', () => { app.mode = 'planning'; render(); });
   $('edit-route-btn')?.addEventListener('click', editRoute);
   $('add-flight-btn')?.addEventListener('click', addFlightFromChoice);
+  $('restart-nav-btn')?.addEventListener('click', restartNavigation);
   bindRouteOptionEvents();
   bindChoiceFooterEvents();
 
@@ -64,13 +80,12 @@ export function bindEvents() {
   // Timeline ⇄ trajeto. ONE control, rendered by NavigationShell and present
   // in both views — clicking the tab that is already active re-renders the
   // same view, which is the correct no-op.
-  $('tab-steps-btn')?.addEventListener('click', showTimeline);
-  $('tab-route-btn')?.addEventListener('click', showRouteMap);
+  bindNavigationTabs();
   // The old top-down plan's own back button (see showFloorPlan).
   $('back-to-timeline-btn')?.addEventListener('click', showTimeline);
   bindTimelinePlaceEvents();
   $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
-  $('nav-next')?.addEventListener('click', () => advanceStep(1));
+  $('nav-next')?.addEventListener('click', activateNavigationPrimary);
   $('fit-segment-btn')?.addEventListener('click', () => autoFitRoute());
   $('zoom-in-btn')?.addEventListener('click', () => zoomAt(0.4));
   $('zoom-out-btn')?.addEventListener('click', () => zoomAt(-0.4));
@@ -112,7 +127,39 @@ export function bindEvents() {
     const code = e.currentTarget.dataset.code;
     if (code) tracePlaceRoute(code);
   });
-  bindFocusTrap($('place-detail'));
+  // Only the topmost dialog owns focus. Detail sheets can open over Search,
+  // so trapping every mounted overlay would make the top sheet inert too.
+  bindFocusTrap(
+    $('place-detail')
+    ?? $('detail-overlay')
+    ?? $('route-overview')
+    ?? $('search-overlay')
+  );
+}
+
+/** Keyboard-complete two-view tablist: Etapas | Mapa. */
+export function bindNavigationTabs() {
+  const tabs = [$('tab-steps-btn'), $('tab-route-btn')].filter(Boolean);
+  if (tabs.length !== 2) return;
+
+  const activate = tab => {
+    if (tab.id === 'tab-route-btn') showRouteMap();
+    else showTimeline();
+  };
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => activate(tab));
+    tab.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const current = tabs.indexOf(event.currentTarget);
+      const target = event.key === 'Home' ? tabs[0]
+        : event.key === 'End' ? tabs.at(-1)
+        : tabs[(current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+      activate(target);
+    });
+  });
 }
 
 /**
@@ -122,16 +169,25 @@ export function bindEvents() {
  */
 export function bindFocusTrap(container) {
   if (!container) return;
+  const parent = container.parentElement;
+  [...(parent?.children ?? [])].forEach(sibling => {
+    if (sibling !== container) sibling.inert = true;
+  });
   container.addEventListener('keydown', e => {
     if (e.key !== 'Tab') return;
     const f = [...container.querySelectorAll(
-      'a[href], button:not([disabled]), input, [tabindex]:not([tabindex="-1"])'
+      'a[href]:not([tabindex="-1"]), button:not([disabled]):not([tabindex="-1"]), input:not([disabled]):not([tabindex="-1"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
     )].filter(el => el.offsetParent !== null || el === document.activeElement);
     if (!f.length) return;
     const first = f[0], last = f[f.length - 1];
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
+}
+
+export function releaseModalBackground(container) {
+  const parent = container?.parentElement;
+  [...(parent?.children ?? [])].forEach(sibling => { sibling.inert = false; });
 }
 
 /**
@@ -182,31 +238,54 @@ export function bindMapPoiEvents() {
 export function bindFloorControlEvents() {
   $('floor-trigger-btn')?.addEventListener('click', e => {
     e.stopPropagation();
-    uiState.floorMenuOpen = !uiState.floorMenuOpen;
-    if (app.mode === 'navigation') {
-      const fc = $('floor-ctrl');
-      if (fc) { fc.outerHTML = renderFloorControl(); bindFloorControlEvents(); }
-    } else {
-      render();
-    }
+    setFloorMenuOpen(!uiState.floorMenuOpen, true);
   });
-  document.querySelectorAll('.sg-floor-item').forEach(btn =>
+  const items = [...document.querySelectorAll('.sg-floor-item')];
+  items.forEach((btn, index) => {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       uiState.floorMenuOpen = false;
       switchFloor(btn.dataset.floorId, true);
-    })
-  );
+      requestAnimationFrame(() => $('floor-trigger-btn')?.focus({ preventScroll: true }));
+    });
+    btn.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setFloorMenuOpen(false, true);
+        return;
+      }
+      if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const target = event.key === 'Home' ? items[0]
+        : event.key === 'End' ? items.at(-1)
+        : items[(index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length];
+      target?.focus({ preventScroll: true });
+    });
+  });
   document.addEventListener('click', closeFloorMenuOnOutside);
+}
+
+function setFloorMenuOpen(open, restoreFocus = false) {
+  uiState.floorMenuOpen = !!open;
+  if (app.mode !== 'navigation') { render(); return; }
+  const control = $('floor-ctrl');
+  if (!control) return;
+  control.outerHTML = renderFloorControl();
+  bindFloorControlEvents();
+  if (restoreFocus) {
+    requestAnimationFrame(() => {
+      const target = open
+        ? document.querySelector('.sg-floor-item.is-active') ?? document.querySelector('.sg-floor-item')
+        : $('floor-trigger-btn');
+      target?.focus({ preventScroll: true });
+    });
+  }
 }
 
 export function closeFloorMenuOnOutside(e) {
   if (!uiState.floorMenuOpen) return;
   if (!e.target.closest('#floor-ctrl')) {
-    uiState.floorMenuOpen = false;
-    const fc = $('floor-ctrl');
-    if (fc) { fc.outerHTML = renderFloorControl(); bindFloorControlEvents(); }
-    document.removeEventListener('click', closeFloorMenuOnOutside);
+    setFloorMenuOpen(false, false);
   }
 }
 
@@ -340,14 +419,13 @@ document.addEventListener('keydown', e => {
     if (uiState.modalNodeCode) { closeLocationDetail(); return; }
     if (uiState.showOverview)  { closeOverview(); return; }
     if (uiState.searchOpenFor) { e.preventDefault(); closeSearch(); return; }
-    if (uiState.floorMenuOpen) { uiState.floorMenuOpen = false; document.getElementById('floor-ctrl')?.querySelector('button')?.focus(); return; }
-    // Escape unwinds one layer at a time, matching the back button: from a
-    // second view back to the timeline, and only from the timeline out of
-    // the trip.
-    if (app.mode === 'navigation' && navState.view !== 'timeline') { showTimeline(); return; }
+    if (uiState.floorMenuOpen) { e.preventDefault(); setFloorMenuOpen(false, true); return; }
     if (app.mode === 'navigation') { exitNavigation(); return; }
   }
-  if (app.mode === 'navigation' && !uiState.searchOpenFor && !uiState.showOverview) {
+  const interactiveTarget = e.target instanceof Element && e.target.closest(
+    'button, a, input, select, textarea, [role="tab"], [contenteditable="true"]'
+  );
+  if (app.mode === 'navigation' && !uiState.searchOpenFor && !uiState.showOverview && !interactiveTarget) {
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); advanceStep(1); }
     if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { e.preventDefault(); advanceStep(-1); }
   }

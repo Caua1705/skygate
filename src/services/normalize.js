@@ -28,6 +28,12 @@ export function normalizeMap(raw) {
       website: first(r?.website,    r?.url,      ''),
       hours:   first(r?.opening_hours, r?.hours, ''),
       description: first(r?.description, ''),
+      // Accessibility is an operational fact, not something we infer from
+      // the node type. In particular, stairs and escalators must never gain
+      // an \Acessível\ badge merely because they are circulation nodes.
+      isAccessible: r?.is_accessible === true
+        || r?.isAccessible === true
+        || r?.accessible === true,
     };
     // searchText is built from presentation layer (aliases + public label)
     nodeShell.searchText = buildSearchText(nodeShell);
@@ -104,4 +110,3 @@ export function buildSegments(codes) {
   });
   return groups;
 }
-

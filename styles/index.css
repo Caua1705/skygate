@@ -21,9 +21,9 @@
 @import url('./screens/navigation-sheet.css');
 /* Reusable place-detail card (business info) on the DS — tokens only. */
 @import url('./components/place-detail.css');
-/* Navigation DEFAULT view: the vertical timeline (dark). Own sg-tl* classes.
-   Last, so it wins over the map/sheet rules for anything they share. */
+/* Navigation instruction view: the vertical timeline (dark). Own sg-tl* classes.
+   The real map is the default; this companion view stays one tap away. */
 @import url('./screens/navigation-timeline.css');
-/* Navigation SECOND view: the schematic metro diagram behind "Ver trajeto".
-   Own sg-rt* classes; reuses the timeline's shell, so it must come after it. */
+/* Compatibility-only schematic route view. Own sg-rt* classes; it reuses the
+   timeline shell, so it must come after it in the cascade. */
 @import url('./screens/navigation-route-map.css');

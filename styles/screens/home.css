@@ -421,6 +421,8 @@
 }
 
 .sg-ds.sg-home .sg-home__flight-input {
+  flex: 1 1 auto;
+  min-width: 0;
   min-height: var(--tap-min);
   padding: 0 var(--space-2);
   border: 1px solid var(--border-strong);   /* interactive control: needs 3:1 on its own */
@@ -435,8 +437,8 @@
 .sg-ds.sg-home .sg-home__flight-clear {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: var(--tap-min);
+  height: var(--tap-min);
   border-radius: 50%;
   border: none;
   background: transparent;
@@ -446,6 +448,60 @@
   transition: background var(--ds-transition), color var(--ds-transition);
 }
 .sg-ds.sg-home .sg-home__flight-clear:hover { background: var(--surface); color: var(--text); }
+.sg-ds.sg-home .sg-home__flight-clear.is-hidden { visibility: hidden; pointer-events: none; }
+
+.sg-home__flight-type {
+  min-width: 0;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  border: 0;
+}
+.sg-home__flight-type legend {
+  margin-bottom: var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-muted);
+}
+.sg-home__flight-segment {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface-2);
+}
+.sg-home__flight-segment label { position: relative; min-width: 0; cursor: pointer; }
+.sg-home__flight-segment input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.sg-home__flight-segment span {
+  display: grid;
+  min-height: var(--tap-min);
+  place-items: center;
+  padding: 0 var(--space-2);
+  border-radius: 9px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  transition: background var(--ds-transition), color var(--ds-transition), box-shadow var(--ds-transition);
+}
+.sg-home__flight-segment input:checked + span {
+  background: var(--surface);
+  color: var(--navy-900);
+  box-shadow: var(--elev-1);
+}
+.sg-home__flight-segment input:focus-visible + span { box-shadow: var(--focus-ring); }
+.sg-home__flight-type > p {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--text-muted);
+}
 
 .sg-ds.sg-home :is(.sg-home__flight-input, .sg-home__flight-clear):focus-visible {
   outline: none;
@@ -482,12 +538,22 @@
 
 /* Now a direct flex child — the .sg-home__access-text column wrapper went
    away with the description line. */
-.sg-home__access-title {
+.sg-home__access-copy {
   flex: 1 1 auto;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sg-home__access-title {
   font-size: var(--text-base);
   font-weight: var(--weight-semibold);
   color: var(--text);
+}
+.sg-home__access-hint {
+  font-size: var(--text-xs);
+  line-height: var(--leading-snug);
+  color: var(--text-muted);
 }
 
 /* Toggle switch */
@@ -519,6 +585,13 @@
 }
 
 .sg-ds.sg-home .sg-home__toggle.is-on .sg-toggle__thumb { transform: translateX(20px); }
+.sg-ds.sg-home .sg-home__toggle:disabled,
+.sg-ds.sg-home .sg-home-quick:disabled,
+.sg-ds.sg-home .sg-home__field:disabled,
+.sg-ds.sg-home .sg-home__clear:disabled {
+  cursor: wait;
+  opacity: .55;
+}
 
 /* The switch is 32px tall for visual balance; this pseudo-element
    extends its HIT area to the full 44px minimum without changing
@@ -689,6 +762,11 @@
   .sg-home__field { padding-left: var(--space-2); }
 }
 
+@media (max-width: 350px) {
+  .sg-home-quick__icon { width: 52px; height: 52px; font-size: 24px; }
+  .sg-home-quick__label { font-size: var(--text-xs); }
+}
+
 /* One quick action: a soft turquoise icon tile with a short label beneath.
    Its own class (.sg-home-quick), NOT .sg-quick-card — the latter carries a
    width:122px!important from planning-v5.css that would break this row. The
@@ -754,6 +832,41 @@
 
 .sg-home__state p { max-width: 280px; line-height: var(--leading-normal); margin: 0; }
 .sg-home__state-icon { font-size: 42px; color: var(--danger); }
+
+.sg-ds.sg-home .sg-home__offline {
+  padding: var(--space-6) var(--space-5);
+  text-align: center;
+}
+.sg-home__offline > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+}
+.sg-home__offline-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 30px;
+}
+.sg-home__offline h2 {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  color: var(--text);
+}
+.sg-home__offline p {
+  max-width: 320px;
+  margin: 0 0 var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: var(--leading-relaxed);
+}
+.sg-home__offline .ds-btn { margin-top: var(--space-2); }
 
 /* ============================================================
    FOCUS — every interactive element in the screen

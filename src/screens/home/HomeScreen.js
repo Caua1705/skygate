@@ -31,10 +31,10 @@ import { gateCloseClock, hasFlight } from '../../services/flightSlack.js';
    ONE word; the fuller description lives in `hint`, which goes to the
    aria-label where it costs no layout. */
 const QUICK_CATS = [
-  { key: 'gates',    label: 'Portões',  icon: 'solar:plain-bold',   hint: 'encontre seu portão'      },
-  { key: 'services', label: 'Check-in', icon: 'solar:bag-2-bold',   hint: 'balcões e áreas de check-in' },
-  { key: 'food',     label: 'Comida',   icon: 'solar:cup-hot-bold', hint: 'restaurantes e lojas'     },
-  { key: 'services', label: 'Serviços', icon: 'solar:bell-bold',    hint: 'facilidades do aeroporto' },
+  { key: 'gates',     label: 'Portões',   icon: 'solar:plain-bold', hint: 'encontre seu portão' },
+  { key: 'checkin',   label: 'Check-in',  icon: 'solar:bag-2-bold', hint: 'balcões e áreas de check-in' },
+  { key: 'restrooms', label: 'Banheiros', icon: 'solar:bath-bold',  hint: 'encontre o banheiro mais próximo' },
+  { key: 'food',      label: 'Comida',    icon: 'solar:cup-hot-bold', hint: 'restaurantes e cafés' },
 ];
 
 /**
@@ -46,7 +46,7 @@ const QUICK_CATS = [
  * unpredictably, so the two controls are now siblings in a positioned
  * wrapper and clear is a real <button> (Enter/Space for free).
  */
-function endpointField({ kind, node, label, placeholder, clearLabel }) {
+function endpointField({ kind, node, label, placeholder, clearLabel, busy = false }) {
   const chip = node
     ? Chip({
         label: `${getFloorLabel(node.floorId)} · ${getPublicNodeCategory(node)}`,
@@ -65,7 +65,8 @@ function endpointField({ kind, node, label, placeholder, clearLabel }) {
       data-kind="${kind}"
       id="${kind}-btn"
       aria-label="${esc(a11yLabel)}"
-      aria-haspopup="dialog">
+      aria-haspopup="dialog"
+      ${busy ? 'disabled' : ''}>
       <span class="sg-home__field-label">${esc(label)}</span>
       <span class="sg-home__field-value${node ? '' : ' is-placeholder'}">${esc(node ? name : placeholder)}</span>
       ${chip ? `<span class="sg-home__field-chip">${chip}</span>` : ''}
@@ -73,7 +74,8 @@ function endpointField({ kind, node, label, placeholder, clearLabel }) {
     ${node ? `<button type="button"
       class="sg-home__clear clear-loc"
       data-kind="${kind}"
-      aria-label="${esc(clearLabel)}">
+      aria-label="${esc(clearLabel)}"
+      ${busy ? 'disabled' : ''}>
       ${dsIcon('solar:close-circle-bold')}
     </button>` : ''}
   </div>`;
@@ -96,9 +98,9 @@ function endpointField({ kind, node, label, placeholder, clearLabel }) {
  * indoor map and no slack.
  *
  * Departure time, NOT boarding time: departure is what a passenger knows by
- * heart. The boarding margin is applied for them (APP_CONFIG.flight).
+ * heart. The estimated gate-close margin is applied for them (APP_CONFIG.flight).
  */
-function flightField() {
+function flightField(busy = false) {
   const value = planState.flightTime;
   const filled = hasFlight();
   const gateClose = filled ? gateCloseClock() : '';
@@ -116,7 +118,9 @@ function flightField() {
      setFlightTime() (actions.js) patches that class on this very element without
      a re-render, so the collapsed line follows the value for free; rendering the
      text in JS instead would leave it stale until the next render(). */
-  return `<details class="sg-home__flight${filled ? ' is-filled' : ''}"${filled ? ' open' : ''}>
+  const flightType = planState.flightType === 'international' ? 'international' : 'domestic';
+  const flightDay = planState.flightDay === 'tomorrow' ? 'tomorrow' : 'today';
+  return `<details class="sg-home__flight${filled ? ' is-filled' : ''}"${filled ? ' open' : ''}${busy ? ' inert aria-disabled="true"' : ''}>
     <summary class="sg-home__flight-summary">
       <span class="sg-home__flight-icon" aria-hidden="true">${dsIcon('lucide:plane-takeoff')}</span>
       <span class="sg-home__flight-summary-text">
@@ -129,7 +133,7 @@ function flightField() {
     <div class="sg-home__flight-body">
       <p class="sg-home__flight-copy" id="flight-help">
         ${filled
-          ? `Portão fecha <strong>~${esc(gateClose)}</strong> (estimado).`
+          ? `${flightDay === 'tomorrow' ? 'Amanhã' : 'Hoje'} · portão fecha <strong>~${esc(gateClose)}</strong> (estimado).`
           : 'Adicione seu voo e veja quanto tempo sobra.'}
       </p>
       <div class="sg-home__flight-control">
@@ -137,10 +141,43 @@ function flightField() {
              would fight the disclosure for the same click. -->
         <input type="time" id="flight-time" class="sg-home__flight-input"
           value="${esc(value)}" step="300"
-          aria-label="Horário do voo" aria-describedby="flight-help">
-        ${filled ? `<button type="button" class="sg-home__flight-clear" id="flight-clear"
-          aria-label="Remover horário do voo">${dsIcon('lucide:x')}</button>` : ''}
+          aria-label="Horário do voo" aria-describedby="flight-help"${busy ? ' disabled' : ''}>
+        <button type="button" class="sg-home__flight-clear${filled ? '' : ' is-hidden'}" id="flight-clear"
+          aria-label="Remover horário do voo"${filled && !busy ? '' : ' disabled'}>${dsIcon('lucide:x')}</button>
       </div>
+
+      <fieldset class="sg-home__flight-type">
+        <legend>Dia do voo</legend>
+        <div class="sg-home__flight-segment">
+          <label>
+            <input type="radio" name="flight-day" value="today"
+              ${flightDay === 'today' ? 'checked' : ''}${busy ? ' disabled' : ''}>
+            <span>Hoje</span>
+          </label>
+          <label>
+            <input type="radio" name="flight-day" value="tomorrow"
+              ${flightDay === 'tomorrow' ? 'checked' : ''}${busy ? ' disabled' : ''}>
+            <span>Amanhã</span>
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset class="sg-home__flight-type">
+        <legend>Tipo de voo</legend>
+        <div class="sg-home__flight-segment">
+          <label>
+            <input type="radio" name="flight-type" value="domestic"
+              ${flightType === 'domestic' ? 'checked' : ''}${busy ? ' disabled' : ''}>
+            <span>Doméstico</span>
+          </label>
+          <label>
+            <input type="radio" name="flight-type" value="international"
+              ${flightType === 'international' ? 'checked' : ''}${busy ? ' disabled' : ''}>
+            <span>Internacional</span>
+          </label>
+        </div>
+        <p>Usamos o tipo do voo para estimar o fechamento do portão.</p>
+      </fieldset>
     </div>
   </details>`;
 }
@@ -161,11 +198,11 @@ function routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, o
     <div class="sg-home__journey" role="group" aria-label="Selecionar origem e destino">
       <div class="sg-home__fields${oNode && dNode ? ' is-filled' : ''}">
         ${endpointField({
-          kind: 'origin', node: oNode, label: 'Ponto de partida',
+          kind: 'origin', node: oNode, label: 'Ponto de partida', busy: isCalc,
           placeholder: 'Onde você está?', clearLabel: 'Limpar ponto de partida',
         })}
         ${endpointField({
-          kind: 'destination', node: dNode, label: 'Destino',
+          kind: 'destination', node: dNode, label: 'Destino', busy: isCalc,
           placeholder: 'Para onde deseja ir?', clearLabel: 'Limpar destino',
         })}
       </div>
@@ -174,14 +211,14 @@ function routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, o
           icon: 'solar:round-sort-vertical-bold',
           label: 'Inverter ponto de partida e destino',
           id: 'swap-btn',
-          disabled: !planState.originCode && !planState.destinationCode,
+          disabled: isCalc || (!planState.originCode && !planState.destinationCode),
         })}
       </div>
     </div>
 
     <div class="sg-home__divider" role="presentation"></div>
 
-    ${flightField()}
+    ${flightField(isCalc)}
 
     <div class="sg-home__divider" role="presentation"></div>
 
@@ -195,13 +232,18 @@ function routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, o
          went with it rather than being left pointing at a removed node. -->
     <div class="sg-access-row sg-home__access">
       ${dsIcon('solar:accessibility-bold', `sg-access-row__icon${isAccessible ? ' is-on' : ''}`)}
-      <span class="sg-home__access-title" id="access-title">Rota acessível</span>
+      <span class="sg-home__access-copy">
+        <span class="sg-home__access-title" id="access-title">Evitar escadas</span>
+        <span class="sg-home__access-hint" id="access-hint">Prioriza elevadores sempre que possível.</span>
+      </span>
       <button type="button"
         class="sg-toggle sg-home__toggle${isAccessible ? ' is-on' : ''}"
         id="accessible-toggle"
         role="switch"
         aria-checked="${isAccessible}"
-        aria-labelledby="access-title">
+        aria-labelledby="access-title"
+        aria-describedby="access-hint"
+        ${isCalc ? 'disabled' : ''}>
         <span class="sg-toggle__thumb" aria-hidden="true"></span>
       </button>
     </div>
@@ -212,7 +254,7 @@ function routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, o
              <span class="sg-home__spinner" aria-hidden="true"></span><span>Calculando…</span>
            </button>`
         : Button({
-            label: 'Calcular rota',
+            label: 'Ver rotas',
             variant: 'primary',
             iconRight: 'solar:arrow-right-bold',
             block: true,
@@ -224,6 +266,25 @@ function routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, o
   `;
 
   return Card({ variant: 'raised', html: body, className: 'sg-home__card' });
+}
+
+function offlineCard() {
+  return Card({
+    variant: 'raised',
+    className: 'sg-home__offline',
+    html: `<div role="alert">
+      <span class="sg-home__offline-icon" aria-hidden="true">${dsIcon('solar:danger-circle-bold')}</span>
+      <h2>Não foi possível conectar</h2>
+      <p>Precisamos dos dados do aeroporto para buscar locais e calcular sua rota.</p>
+      ${Button({
+        label: 'Tentar novamente',
+        variant: 'primary',
+        icon: 'solar:restart-bold',
+        block: true,
+        id: 'retry-btn',
+      })}
+    </div>`,
+  });
 }
 
 export function renderPlanning() {
@@ -249,7 +310,7 @@ export function renderPlanning() {
   const offline = !!uiState.error && !appData.floors.length;
 
   return `
-    <div class="sg-ds sg-home" id="planning-root">
+    <div class="sg-ds sg-home" id="planning-root" aria-busy="${isCalc}">
 
       ${Header({
         title: 'SkyGate',
@@ -268,7 +329,7 @@ export function renderPlanning() {
         <h1 class="sg-home__title">Encontre seu caminho</h1>
       </div>
 
-      <main class="sg-home__main">
+      <div class="sg-home__main">
         <div class="sg-home__scroll">
           ${blocked ? `
             <div class="sg-home__state" role="status" aria-live="polite">
@@ -276,7 +337,8 @@ export function renderPlanning() {
               <p>${uiState.loading === 'airports' ? 'Conectando ao aeroporto…' : 'Carregando dados…'}</p>
             </div>
           ` : `
-            ${routeCard({ oNode, dNode, disabled: disabled || offline, isCalc, hint, same, isAccessible, offline })}
+            ${offline ? offlineCard() : `
+            ${routeCard({ oNode, dNode, disabled, isCalc, hint, same, isAccessible, offline: false })}
 
             <section class="sg-home__quick" aria-labelledby="quick-title">
               <h2 class="sg-home__section-title" id="quick-title">Encontre rapidamente</h2>
@@ -285,16 +347,17 @@ export function renderPlanning() {
                   <button type="button"
                     class="sg-home-quick"
                     data-cat-key="${esc(cat.key)}"
-                    aria-label="${esc(cat.label)} — ${esc(cat.hint)}">
+                    aria-label="${esc(cat.label)} — ${esc(cat.hint)}"
+                    ${isCalc ? 'disabled' : ''}>
                     <span class="sg-home-quick__icon" aria-hidden="true">${dsIcon(cat.icon)}</span>
                     <span class="sg-home-quick__label">${esc(cat.label)}</span>
                   </button>
                 `).join('')}
               </div>
-            </section>
+            </section>`}
           `}
         </div>
-      </main>
+      </div>
 
       <div id="plan-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
     </div>

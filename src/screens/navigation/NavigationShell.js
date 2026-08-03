@@ -24,10 +24,32 @@
  *   #nav-next         advance the active step
  */
 import { navState, planState } from '../../state/appState.js';
-import { esc, fmtMin } from '../../utils/format.js';
+import { esc } from '../../utils/format.js';
 import { findNode } from '../../state/selectors.js';
 import { getPublicNodeLabel } from '../../services/nodePresentation.js';
-import { Button, dsIcon } from '../../components/ds/index.js';
+import { Button, IconButton, dsIcon } from '../../components/ds/index.js';
+
+/**
+ * Estimate what remains without introducing a second timing model.
+ *
+ * The backend owns the total estimate. We only apportion that total across
+ * the semantic steps using distances already attached to them. A route with
+ * no measured distances falls back to step progress, never a made-up speed.
+ */
+export function getEstimatedRemainingMinutes() {
+  const steps = navState.semanticSteps;
+  const totalMinutes = Math.max(0, Number(navState.route?.estimatedMinutes) || 0);
+  const active = Math.min(Math.max(navState.activeStepIndex, 0), Math.max(0, steps.length - 1));
+  if (!steps.length || !totalMinutes || active >= steps.length - 1) return 0;
+
+  const distances = steps.map(step => Math.max(0, Number(step.distanceMeters) || 0));
+  const totalDistance = distances.reduce((sum, value) => sum + value, 0);
+  const ratio = totalDistance > 0
+    ? distances.slice(active).reduce((sum, value) => sum + value, 0) / totalDistance
+    : (steps.length - active - 1) / Math.max(1, steps.length - 1);
+
+  return Math.max(1, Math.ceil(totalMinutes * Math.min(1, Math.max(0, ratio))));
+}
 
 /**
  * The status band: total time, position in the route, how much is left.
@@ -39,20 +61,15 @@ import { Button, dsIcon } from '../../components/ds/index.js';
 export function renderSummaryStrip() {
   const total   = navState.semanticSteps.length;
   const active  = navState.activeStepIndex;
-  const minutes = fmtMin(navState.route?.estimatedMinutes ?? 0);
-  const left    = Math.max(0, total - active - 1);
+  const minutes = getEstimatedRemainingMinutes();
 
-  return `<div class="sg-tl__strip">
-    <span class="sg-tl__strip-item">
-      ${dsIcon('solar:clock-circle-bold')}<b>${esc(String(minutes))}</b> min
+  return `<div class="sg-tl__strip" aria-label="Resumo da navegação">
+    <span class="sg-tl__strip-item" aria-label="Tempo restante estimado: ${minutes} minutos">
+      ${dsIcon('solar:clock-circle-bold')}<b>${esc(String(minutes))}</b> min restantes
     </span>
     <span class="sg-tl__strip-sep" aria-hidden="true"></span>
     <span class="sg-tl__strip-item">
-      ${dsIcon('solar:routing-2-bold')}Passo <b>${active + 1}</b> de ${total}
-    </span>
-    <span class="sg-tl__strip-sep" aria-hidden="true"></span>
-    <span class="sg-tl__strip-item">
-      ${left ? `faltam <b>${left}</b>` : 'último passo'}
+      ${dsIcon('solar:routing-2-bold')}Etapa <b>${Math.min(active + 1, total)}</b> de ${total}
     </span>
   </div>`;
 }
@@ -68,16 +85,18 @@ export function renderSummaryStrip() {
  * The icons are Lucide (the policy for anything new); the chrome around
  * them keeps the `solar:` set the rest of the app draws.
  */
-function renderViewToggle(view) {
-  const tab = (id, active, icon, label) => `
+export function renderViewToggle(view, className = '') {
+  const isMap = view === 'map' || view === 'trajeto';
+  const tab = (id, active, icon, label, controls) => `
     <button type="button" class="sg-nav-tab${active ? ' is-active' : ''}" id="${id}"
-      role="tab" aria-selected="${active}" aria-controls="nav-panel">
+      role="tab" aria-selected="${active}" aria-controls="${controls}"
+      tabindex="${active ? '0' : '-1'}">
       ${dsIcon(icon)}${esc(label)}
     </button>`;
 
-  return `<div class="sg-nav-tabs" role="tablist" aria-label="Modo de visualização">
-    ${tab('tab-steps-btn', view === 'timeline', 'lucide:list', 'Passo a passo')}
-    ${tab('tab-route-btn', view === 'trajeto',  'lucide:route', 'Ver trajeto')}
+  return `<div class="sg-nav-tabs${className ? ` ${esc(className)}` : ''}" role="tablist" aria-label="Visualização da navegação">
+    ${tab('tab-steps-btn', !isMap, 'lucide:list', 'Etapas', 'navigation-view')}
+    ${tab('tab-route-btn', isMap, 'lucide:map', 'Mapa', 'map-wrapper')}
   </div>`;
 }
 
@@ -92,12 +111,13 @@ function renderViewToggle(view) {
 export function renderNavigationShell({ view, body, bodyClass = '' }) {
   const destNode = findNode(planState.destinationCode);
   const destName = destNode ? getPublicNodeLabel(destNode) : 'seu destino';
+  const isFirst  = navState.activeStepIndex <= 0;
   const isLast   = navState.activeStepIndex >= navState.semanticSteps.length - 1;
 
   return `
     <div class="sg-ds sg-ds-dark sg-tl-screen sg-nav-screen--${esc(view)}" id="nav-screen">
 
-      <header class="sg-tl-hdr" role="banner">
+      <header class="sg-tl-hdr">
         <button type="button" class="sg-tl-hdr__btn" id="exit-nav-btn" aria-label="Sair da navegação">
           ${dsIcon('solar:arrow-left-linear')}
         </button>
@@ -122,7 +142,7 @@ export function renderNavigationShell({ view, body, bodyClass = '' }) {
       ${renderSummaryStrip()}
 
       <div class="sg-tl__scroll" id="nav-scroll">
-        <div id="nav-panel" class="${esc(bodyClass)}" role="tabpanel"
+        <div id="navigation-view" class="${esc(bodyClass)}" role="tabpanel"
           aria-labelledby="${view === 'trajeto' ? 'tab-route-btn' : 'tab-steps-btn'}">
           ${body}
         </div>
@@ -133,20 +153,22 @@ export function renderNavigationShell({ view, body, bodyClass = '' }) {
            like two. -->
       <div class="sg-tl-foot">
         <div class="sg-tl-foot__row">
+          ${IconButton({
+            icon: 'solar:arrow-left-linear',
+            label: 'Voltar à etapa anterior',
+            id: 'nav-prev',
+            disabled: isFirst,
+            className: 'sg-tl-foot__prev',
+          })}
           ${Button({
-            label: isLast ? 'Chegou!' : 'Próximo',
+            label: isLast ? 'Finalizar rota' : 'Próxima etapa',
             variant: 'primary',
-            iconRight: 'solar:arrow-right-linear',
+            iconRight: isLast ? 'solar:flag-2-bold' : 'solar:arrow-right-linear',
             id: 'nav-next',
-            disabled: isLast,
             className: 'sg-tl-foot__next',
           })}
         </div>
       </div>
-
-      <!-- announceStep() has always written here, but no view ever rendered
-           the element, so step changes were silent for screen readers. -->
-      <p class="sr-only" id="nav-live" role="status" aria-live="polite"></p>
     </div>
   `;
 }

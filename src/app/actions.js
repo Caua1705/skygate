@@ -1,5 +1,13 @@
 import { SEARCH_CATEGORIES } from '../services/nodePresentation.js';
-import { _searchDebounce, bindChoiceFooterEvents, bindInstructionSwipe, bindTimelinePlaceEvents } from './events.js';
+import {
+  _searchDebounce,
+  bindChoiceFooterEvents,
+  bindFocusTrap,
+  bindInstructionSwipe,
+  bindRouteOptionEvents,
+  bindTimelinePlaceEvents,
+  releaseModalBackground,
+} from './events.js';
 import { app, appData, mapState, navState, planState, uiState } from '../state/appState.js';
 import { render, updateRouteOverlay } from './router.js';
 import { findNode } from '../state/selectors.js';
@@ -7,7 +15,11 @@ import { renderInstructionCardInner, renderOverlayOverview } from '../screens/na
 import { renderTimelineList } from '../screens/navigation/NavigationTimeline.js';
 import { renderRouteDiagram } from '../screens/navigation/NavigationRouteMap.js';
 import { renderSummaryStrip } from '../screens/navigation/NavigationShell.js';
-import { renderChoiceFooterInner } from '../screens/routeSummary/RouteSummaryScreen.js';
+import {
+  renderChoiceFooterInner,
+  renderChoiceOptions,
+  renderMarginBanner,
+} from '../screens/routeSummary/RouteSummaryScreen.js';
 import { gateCloseClock, hasFlight } from '../services/flightSlack.js';
 import { esc } from '../utils/format.js';
 import { switchFloor } from '../map/floorSwitch.js';
@@ -16,6 +28,7 @@ import { prefersReducedMotion , $ } from '../utils/dom.js';
 import { hasPlaceDetails } from '../components/PlaceDetailSheet.js';
 import { attachStepDistances, buildSemanticSteps, formatMeters, pathMeters, segmentMeters } from '../services/routeSteps.js';
 import { findOption, scoreOptions } from '../services/routeOptions.js';
+import { buildSegments, normalizeStep } from '../services/normalize.js';
 
 /* ============================================================
    14. ACTIONS
@@ -215,12 +228,19 @@ export function tracePlaceRoute(code) {
 }
 
 export function selectLocation(kind, code) {
+  if (uiState.loading === 'route') return;
   const other = kind === 'origin' ? planState.destinationCode : planState.originCode;
   if (!code || code === other) return;
   if (kind === 'origin')      planState.originCode = code;
   if (kind === 'destination') planState.destinationCode = code;
   navState.route = null;
-  uiState.searchOpenFor = '';
+  // Selecting the first endpoint immediately opens the missing counterpart.
+  // This removes a return trip to Home without guessing either location.
+  uiState.searchOpenFor = kind === 'origin' && !planState.destinationCode
+    ? 'destination'
+    : kind === 'destination' && !planState.originCode
+      ? 'origin'
+      : '';
   uiState.searchQuery = '';
   uiState.searchCategory = '';
   uiState.error = '';
@@ -230,6 +250,7 @@ export function selectLocation(kind, code) {
 }
 
 export function clearLocation(kind) {
+  if (uiState.loading === 'route') return;
   if (kind === 'origin')      planState.originCode = '';
   if (kind === 'destination') planState.destinationCode = '';
   navState.route = null;
@@ -241,6 +262,7 @@ export function clearLocation(kind) {
 }
 
 export function swapLocations() {
+  if (uiState.loading === 'route') return;
   [planState.originCode, planState.destinationCode] = [planState.destinationCode, planState.originCode];
   navState.route = null;
   render();
@@ -256,13 +278,14 @@ export function setRouteMode(mode) {
 }
 
 export function toggleAccessibleRoute() {
+  if (uiState.loading === 'route') return;
   planState.accessibleRoute = !planState.accessibleRoute;
   planState.routeMode = planState.accessibleRoute ? 'accessible' : 'fastest';
   navState.route = null;
   // Announce state change for screen readers
   const liveEl = $('plan-status');
   if (liveEl) liveEl.textContent = planState.accessibleRoute
-    ? 'Rota acessível ativada. Usará elevadores e evitará escadas.'
+    ? 'Evitar escadas ativado. Vamos priorizar elevadores sempre que possível.'
     : 'Rota acessível desativada. Rota mais rápida será usada.';
   // Update only the toggle without full re-render for performance
   const toggleEl = $('accessible-toggle');
@@ -316,24 +339,52 @@ export function editRoute() {
  * only thing rewritten.
  */
 export function setFlightTime(value) {
+  if (uiState.loading === 'route') return;
   planState.flightTime = String(value ?? '');
+  refreshFlightField();
+}
+
+export function setFlightDay(value) {
+  if (uiState.loading === 'route' || !['today', 'tomorrow'].includes(value)) return;
+  planState.flightDay = value;
+  refreshFlightField();
+}
+
+export function setFlightType(value) {
+  if (uiState.loading === 'route' || !['domestic', 'international'].includes(value)) return;
+  planState.flightType = value;
+  refreshFlightField();
+}
+
+function refreshFlightField() {
   const block = document.querySelector('.sg-home__flight');
   const help  = $('flight-help');
   if (!block || !help) return;
 
   const filled = hasFlight();
   block.classList.toggle('is-filled', filled);
+  const clear = $('flight-clear');
+  if (clear) {
+    clear.classList.toggle('is-hidden', !filled);
+    clear.disabled = !filled;
+  }
   // Must match flightField() in HomeScreen.js — the estimated gate closing is
   // never shown as a bare time.
   help.innerHTML = filled
-    ? `Portão fecha <strong>~${esc(gateCloseClock())}</strong> (estimado).`
+    ? `${planState.flightDay === 'tomorrow' ? 'Amanhã' : 'Hoje'} · portão fecha <strong>~${esc(gateCloseClock())}</strong> (estimado).`
     : 'Adicione seu voo e veja quanto tempo sobra.';
 }
 
 export function clearFlightTime() {
+  if (uiState.loading === 'route') return;
   planState.flightTime = '';
   render();
-  requestAnimationFrame(() => $('flight-time')?.focus({ preventScroll: true }));
+  requestAnimationFrame(() => {
+    const input = $('flight-time');
+    const disclosure = input?.closest('details');
+    if (disclosure) disclosure.open = true;
+    input?.focus({ preventScroll: true });
+  });
 }
 
 /**
@@ -346,6 +397,8 @@ export function addFlightFromChoice() {
   render();
   requestAnimationFrame(() => {
     const input = $('flight-time');
+    const disclosure = input?.closest('details');
+    if (disclosure) disclosure.open = true;
     input?.focus({ preventScroll: true });
     input?.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
   });
@@ -368,6 +421,9 @@ export function addFlightFromChoice() {
 export function selectRouteOption(id) {
   if (!id || navState.selectedOptionId === id) return;
   navState.selectedOptionId = id;
+  // Progress belongs to the path it was confirmed on. A different route
+  // starts at its own first step instead of inheriting an unrelated index.
+  navState.activeStepIndex = 0;
   uiState.riskAcknowledged = false;
   document.querySelectorAll('.sg-rc-opt').forEach(el => {
     el.classList.toggle('is-selected', el.querySelector('.route-option-input')?.value === id);
@@ -375,7 +431,7 @@ export function selectRouteOption(id) {
   refreshChoiceFooter();
 }
 
-/** The passenger accepted that this route arrives after boarding. */
+/** The passenger accepted that this route arrives after estimated gate close. */
 export function toggleRiskAck(on) {
   uiState.riskAcknowledged = !!on;
   const cta = $('start-nav-btn');
@@ -389,6 +445,33 @@ function refreshChoiceFooter() {
   bindChoiceFooterEvents();
 }
 
+/** Recompute every time-sensitive part without tearing down the whole screen. */
+export function refreshSummaryTiming() {
+  if (app.mode !== 'summary' || !navState.route) return;
+
+  const active = document.activeElement;
+  const focusedOption = active?.classList?.contains('route-option-input') ? active.value : '';
+  const focusedId = active?.id ?? '';
+
+  const margin = document.querySelector('.sg-rc__margin');
+  if (margin && hasFlight()) margin.outerHTML = renderMarginBanner();
+
+  const list = $('route-option-list');
+  if (list) {
+    const options = scoreOptions(navState.routeOptions ?? []);
+    list.innerHTML = renderChoiceOptions(options, findOption(options, navState.selectedOptionId));
+    bindRouteOptionEvents();
+  }
+  refreshChoiceFooter();
+
+  requestAnimationFrame(() => {
+    const target = focusedOption
+      ? document.querySelector(`.route-option-input[value="${CSS.escape(focusedOption)}"]`)
+      : focusedId ? $(focusedId) : null;
+    target?.focus?.({ preventScroll: true });
+  });
+}
+
 function isSelectedRouteUnviable() {
   const scored = scoreOptions(navState.routeOptions ?? []);
   return findOption(scored, navState.selectedOptionId)?.slack?.status === 'inviavel';
@@ -397,11 +480,9 @@ function isSelectedRouteUnviable() {
 /**
  * Carry the chosen way into navigation.
  *
- * Today the locally-derived detours are annotations on ONE path from the
- * backend, so their `path` is the base path and this is a no-op. Once Dijkstra
- * returns genuinely different node sequences per alternative, each one arrives
- * with its own `path`/`steps` and navigation picks them up here — the screens
- * downstream read navState.route and never learn there was a choice.
+ * Alternatives are accepted only when the backend supplies a complete,
+ * navigable path. All derived route state is rebuilt atomically here so the
+ * floor map, instructions and progress always describe the same option.
  */
 function applySelectedRouteOption() {
   const option = findOption(navState.routeOptions ?? [], navState.selectedOptionId);
@@ -409,13 +490,23 @@ function applySelectedRouteOption() {
   if (!option || !path.length) return;
 
   const base = navState.route;
-  const sameAsBase = path.length === (base?.path?.length ?? 0)
-    && path.every((code, i) => code === base.path[i]);
-  if (sameAsBase) return;
+  if (base?.optionId === option.id) return;
 
-  navState.route = { ...base, path, steps: option.steps ?? base.steps, estimatedMinutes: option.minutes };
+  const steps = option.steps?.length
+    ? option.steps.map((step, index) => normalizeStep(step, index))
+    : [];
+  const segments = buildSegments(path);
+  navState.route = {
+    ...base,
+    optionId: option.id,
+    path,
+    steps,
+    segments,
+    warnings: option.warnings ?? [],
+    estimatedMinutes: option.minutes,
+  };
   navState.routeFloorIds = new Set(
-    path.map(code => findNode(code)?.floorId).filter(Boolean)
+    segments.filter(segment => segment.type === 'floor').map(segment => segment.floorId).filter(Boolean)
   );
   navState.semanticSteps = attachStepDistances(buildSemanticSteps(navState.route), path);
 }
@@ -428,6 +519,7 @@ export function openOverview() {
   const navScreen = $('nav-screen');
   if (navScreen) {
     navScreen.insertAdjacentHTML('beforeend', renderOverlayOverview());
+    bindFocusTrap($('route-overview'));
     document.querySelector('.sg-overview-item__btn')?.focus({ preventScroll: true });
     // Bind events for new overlay
     $('close-overview')?.addEventListener('click', closeOverview);
@@ -443,7 +535,9 @@ export function openOverview() {
 
 export function closeOverview() {
   uiState.showOverview = false;
-  $('route-overview')?.remove();
+  const overlay = $('route-overview');
+  releaseModalBackground(overlay);
+  overlay?.remove();
 }
 
 export function returnToCurrentStep() {
@@ -461,22 +555,41 @@ export function returnToCurrentStep() {
 export function startNavigation() {
   if (!navState.semanticSteps.length) return;
   // Belt and braces: the CTA is already disabled in this state, but the guard
-  // means no other caller can start a route that arrives after boarding
+  // means no other caller can start a route that arrives after gate closing
   // without the passenger having said so.
-  if (isSelectedRouteUnviable() && !uiState.riskAcknowledged) return;
+  if (isSelectedRouteUnviable() && !uiState.riskAcknowledged) {
+    // The deadline may have crossed while Summary stayed open. Refresh the
+    // visible risk gate instead of making the primary action fail silently.
+    refreshSummaryTiming();
+    requestAnimationFrame(() => $('risk-ack')?.focus({ preventScroll: true }));
+    return;
+  }
   applySelectedRouteOption();
   app.mode = 'navigation';
-  navState.activeStepIndex = 0;
-  // Always open on the timeline, whichever view was left behind last time.
-  navState.view = 'timeline';
+  // A route that was temporarily exited resumes at the passenger's last
+  // confirmed step. A newly calculated route already starts at zero.
+  navState.activeStepIndex = Math.min(
+    Math.max(0, navState.activeStepIndex),
+    Math.max(0, navState.semanticSteps.length - 1),
+  );
+  // The real floor plan is the spatial source of truth. Instructions remain
+  // one tap away in the companion Etapas view.
+  navState.view = 'map';
 
-  const firstStep = navState.semanticSteps[0];
-  const targetFloor = firstStep?.floorId || findNode(planState.originCode)?.floorId || mapState.selectedFloorId;
+  const activeStep = navState.semanticSteps[navState.activeStepIndex];
+  const targetFloor = activeStep?.floorId || findNode(planState.originCode)?.floorId || mapState.selectedFloorId;
   mapState.selectedFloorId = targetFloor;
   mapState.manualFloor = false;
 
   render();
-  playTimelineEntrance();
+  playMapEntrance();
+  bindInstructionSwipe();
+}
+
+export function restartNavigation() {
+  if (!navState.route) return;
+  navState.activeStepIndex = 0;
+  startNavigation();
 }
 
 /**
@@ -492,33 +605,24 @@ function playTimelineEntrance() {
   setTimeout(() => screen.classList.remove('is-entering'), TIMELINE_ENTRANCE_MS);
 }
 
-/**
- * "Ver trajeto": the schematic metro diagram.
- *
- * The floor still follows the active step even though this view never draws
- * one — leaving it behind would strand the plan (and the floor control) on
- * whatever floor the traveller happened to open navigation from.
- */
+/** Open the real floor map on the passenger's confirmed active step. */
 export function showRouteMap() {
   if (!navState.route) return;
   // The toggle shows both tabs in both views, so the active one gets clicked.
   // Re-rendering the view you are already on would replay its entrance for
   // no reason; switching views is idempotent instead.
-  if (navState.view === 'trajeto') return;
-  navState.view = 'trajeto';
+  if (navState.view === 'map') return;
+  navState.view = 'map';
   const step = navState.semanticSteps[navState.activeStepIndex];
   if (step?.floorId) mapState.selectedFloorId = step.floorId;
   mapState.manualFloor = false;
   render();
-  playRouteMapEntrance();
-  scrollRouteMapToCurrent('auto');
+  playMapEntrance();
+  bindInstructionSwipe();
+  requestAnimationFrame(() => $('tab-route-btn')?.focus({ preventScroll: true }));
 }
 
-/**
- * The old top-down floor plan. No control opens it since the metro diagram
- * took over "Ver trajeto"; it is kept exported, and kept working, so the
- * plan can be put back behind a control without rebuilding anything.
- */
+/** Backward-compatible name for callers that explicitly request the plan. */
 export function showFloorPlan() {
   if (!navState.route) return;
   navState.view = 'map';
@@ -537,6 +641,7 @@ export function showTimeline() {
   render();
   playTimelineEntrance();
   scrollTimelineToCurrent('auto');
+  requestAnimationFrame(() => $('tab-steps-btn')?.focus({ preventScroll: true }));
 }
 
 /**
@@ -584,6 +689,55 @@ export function exitNavigation() {
   app.mode = 'summary';
   mapState.manualFloor = false;
   render();
+}
+
+/**
+ * Finish is intentionally different from temporarily leaving navigation.
+ * The destination becomes the next journey's origin, while all route-derived
+ * state is cleared so stale steps can never leak into a new calculation.
+ */
+export function finishNavigation() {
+  if (app.mode !== 'navigation' || !navState.semanticSteps.length) return;
+
+  const completedDestination = planState.destinationCode;
+  planState.originCode = completedDestination;
+  planState.destinationCode = '';
+
+  navState.route = null;
+  navState.semanticSteps = [];
+  navState.activeStepIndex = 0;
+  navState.routeFloorIds = new Set();
+  navState.routeOptions = [];
+  navState.selectedOptionId = '';
+  navState.view = 'map';
+
+  mapState.manualFloor = false;
+  uiState.showOverview = false;
+  uiState.floorMenuOpen = false;
+  uiState.routeAnimating = false;
+  uiState.riskAcknowledged = false;
+  uiState.modalNodeCode = '';
+  uiState.placeDetailId = '';
+  uiState.placeRouteContext = null;
+  uiState.error = '';
+
+  app.mode = 'planning';
+  render();
+  requestAnimationFrame(() => {
+    $('nav-live')?.replaceChildren(document.createTextNode('Rota finalizada.'));
+    $('destination-btn')?.focus({ preventScroll: true });
+  });
+}
+
+/** The stable footer action: advance until the final step, then finish. */
+export function activateNavigationPrimary() {
+  const last = navState.semanticSteps.length - 1;
+  if (last < 0) return;
+  if (navState.activeStepIndex >= last) {
+    finishNavigation();
+    return;
+  }
+  advanceStep(1);
 }
 
 export function goToStep(idx) {
@@ -642,7 +796,7 @@ function applyStepChange(idx) {
 export function updateRouteMap() {
   // The panel id is shared with the timeline, so check it is actually the
   // diagram before overwriting it.
-  const el = $('nav-panel');
+  const el = $('navigation-view');
   if (!el?.classList.contains('sg-rt__map')) return;
   el.innerHTML = renderRouteDiagram();
   updateTimelineFooter();
@@ -681,16 +835,21 @@ export function updateTimeline() {
   scrollTimelineToCurrent();
 }
 
-/** Keep "Próximo"/"Chegou!" and the summary strip honest after a step.
+/** Keep Previous/Next/Finish and the summary strip honest after a step.
     Both views render the same footer button and the same strip, so both
     refresh through here. */
 function updateTimelineFooter() {
+  const isFirst = navState.activeStepIndex <= 0;
   const isLast = navState.activeStepIndex >= navState.semanticSteps.length - 1;
+  const previous = $('nav-prev');
+  if (previous) previous.disabled = isFirst;
   const next = $('nav-next');
   if (next) {
-    next.disabled = isLast;
+    next.disabled = false;
     const label = next.querySelector('span');
-    if (label) label.textContent = isLast ? 'Chegou!' : 'Próximo';
+    if (label) label.textContent = isLast ? 'Finalizar rota' : 'Próxima etapa';
+    const icon = next.querySelector('iconify-icon:last-of-type');
+    if (icon) icon.setAttribute('icon', isLast ? 'solar:flag-2-bold' : 'solar:arrow-right-linear');
   }
   const strip = document.querySelector('.sg-tl__strip');
   if (strip) strip.outerHTML = renderSummaryStrip();
@@ -724,25 +883,88 @@ export function updateInstructionCard() {
   card.querySelector('.sg-navsheet__scroll')?.scrollTo(0, 0);
 
   // Re-bind the controls the sheet owns
-  $('nav-next')?.addEventListener('click', () => advanceStep(1));
+  $('nav-next')?.addEventListener('click', activateNavigationPrimary);
+  $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
   $('instr-steps-btn')?.addEventListener('click', openOverview);
   bindInstructionSwipe();
 }
 
 export function announceStep(idx, step) {
   const liveEl = $('nav-live');
-  if (liveEl) liveEl.textContent = `Passo ${idx + 1} de ${navState.semanticSteps.length}: ${step?.text ?? ''}`;
+  if (liveEl) liveEl.textContent = `Etapa ${idx + 1} de ${navState.semanticSteps.length}: ${step?.text ?? ''}`;
 }
 
 export function showHelp() {
-  const existing = $('help-toast');
-  if (existing) { existing.remove(); return; }
-  const el = document.createElement('div');
-  el.id = 'help-toast';
-  el.setAttribute('role', 'status');
-  el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0f172a;color:#fff;padding:14px 20px;border-radius:14px;font-size:13px;font-weight:600;box-shadow:0 8px 28px rgba(0,0,0,.4);z-index:300;max-width:320px;text-align:center;line-height:1.6';
-  el.innerHTML = '<strong>Como usar o SkyGate</strong><br>1. Escolha origem e destino<br>2. Selecione o tipo de rota<br>3. Calcule e toque em "Iniciar navegação"<br>4. Use ← Anterior / Próximo → para navegar';
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 6000);
-}
+  const existing = $('help-dialog');
+  if (existing) { existing.close?.(); existing.remove(); return; }
 
+  const trigger = document.activeElement;
+  const dialog = document.createElement('dialog');
+  dialog.id = 'help-dialog';
+  dialog.className = 'sg-ds sg-help';
+  dialog.setAttribute('aria-labelledby', 'help-title');
+
+  const content = app.mode === 'navigation'
+    ? {
+        eyebrow: 'Durante a rota',
+        title: 'Navegue no seu ritmo',
+        items: [
+          ['lucide:map', 'Mapa real', 'Use o mapa para se orientar e Etapas para conferir o trajeto completo.'],
+          ['lucide:circle-check', 'Confirme seu avanço', 'Próxima etapa registra manualmente onde você chegou.'],
+          ['lucide:rotate-ccw', 'Saia sem perder o ponto', 'Ao voltar, a rota continua na última etapa confirmada.'],
+        ],
+      }
+    : app.mode === 'summary'
+      ? {
+          eyebrow: 'Antes de começar',
+          title: 'Escolha com confiança',
+          items: [
+            ['lucide:route', 'Compare rotas reais', 'Opções só aparecem quando o aeroporto oferece caminhos diferentes.'],
+            ['lucide:clock-3', 'Confira a margem', 'O horário do voo ajuda a estimar quanto tempo ainda sobra.'],
+            ['lucide:play', 'Inicie ou retome', 'Seu progresso é preservado quando você sai temporariamente da navegação.'],
+          ],
+        }
+      : {
+          eyebrow: 'Planeje sua rota',
+          title: 'Chegue sem complicação',
+          items: [
+            ['lucide:map-pin', 'Escolha dois pontos', 'Selecione onde você está e para onde quer ir.'],
+            ['lucide:plane-takeoff', 'Adicione seu voo', 'Dia, horário e tipo do voo melhoram a estimativa de margem.'],
+            ['lucide:accessibility', 'Evite escadas', 'Ative a preferência para priorizar caminhos com elevadores.'],
+          ],
+        };
+
+  dialog.innerHTML = `
+    <div class="sg-help__handle" aria-hidden="true"></div>
+    <header class="sg-help__header">
+      <div>
+        <p class="sg-help__eyebrow">${esc(content.eyebrow)}</p>
+        <h2 class="sg-help__title" id="help-title">${esc(content.title)}</h2>
+      </div>
+      <button type="button" class="sg-help__close" aria-label="Fechar ajuda">
+        <iconify-icon icon="lucide:x" aria-hidden="true"></iconify-icon>
+      </button>
+    </header>
+    <ul class="sg-help__list">
+      ${content.items.map(([icon, title, copy]) => `<li>
+        <span class="sg-help__icon" aria-hidden="true"><iconify-icon icon="${esc(icon)}"></iconify-icon></span>
+        <span><strong>${esc(title)}</strong><small>${esc(copy)}</small></span>
+      </li>`).join('')}
+    </ul>
+    <button type="button" class="ds-btn ds-btn--primary ds-btn--block sg-help__done">Entendi</button>
+  `;
+
+  const close = () => {
+    dialog.close?.();
+    dialog.remove();
+    trigger?.focus?.({ preventScroll: true });
+  };
+  dialog.querySelector('.sg-help__close')?.addEventListener('click', close);
+  dialog.querySelector('.sg-help__done')?.addEventListener('click', close);
+  dialog.addEventListener('cancel', event => { event.preventDefault(); close(); });
+  dialog.addEventListener('click', event => { if (event.target === dialog) close(); });
+  document.body.appendChild(dialog);
+  if (typeof dialog.showModal === 'function') dialog.showModal();
+  else dialog.setAttribute('open', '');
+  requestAnimationFrame(() => dialog.querySelector('.sg-help__close')?.focus({ preventScroll: true }));
+}

@@ -184,7 +184,7 @@ function stationLabel(step) {
 
 /** The small caps line above the name, when the stop has something to say. */
 function stationEyebrow(step, index, active, last) {
-  if (index === active) return index === last ? 'VOCÊ CHEGOU' : 'VOCÊ ESTÁ AQUI';
+  if (index === active) return index === last ? 'ETAPA FINAL' : 'ETAPA ATUAL';
   if (index === last)   return 'DESTINO';
   if (index === 0)      return 'PARTIDA';
   if (step?.isTransition && step.toFloor && step.toFloor !== step.floorId) {
@@ -484,7 +484,7 @@ export function renderRouteDiagram() {
 
   return `
     <svg class="sg-rt__svg" viewBox="0 0 ${VB_W} ${f(d.height)}" width="100%" height="${f(d.height)}"
-      role="img" aria-label="Diagrama do trajeto: ${d.stations.length} paradas até ${esc(destName)}. Você está na parada ${navState.activeStepIndex + 1}.">
+      role="img" aria-label="Diagrama do trajeto: ${d.stations.length} paradas até ${esc(destName)}. Etapa ativa: ${navState.activeStepIndex + 1}.">
       <defs>
         <linearGradient id="rt-line-grad" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" class="sg-rt__grad-from"/>
@@ -506,7 +506,7 @@ export function renderRouteDiagram() {
 
     <ul class="sg-rt__legend">
       <li><i class="sg-rt__key sg-rt__key--done" aria-hidden="true"></i>percorrido</li>
-      <li><i class="sg-rt__key sg-rt__key--here" aria-hidden="true"></i>você está aqui</li>
+      <li><i class="sg-rt__key sg-rt__key--here" aria-hidden="true"></i>etapa atual</li>
       <li><i class="sg-rt__key sg-rt__key--ahead" aria-hidden="true"></i>a percorrer</li>
     </ul>`;
 }

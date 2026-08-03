@@ -7,15 +7,16 @@ import { getStepIconName, navIcon } from '../../components/Icon.js';
 import { render } from '../../app/router.js';
 import { countFloorChanges, formatMeters } from '../../services/routeSteps.js';
 import { getNodeMeta } from '../../app/constants.js';
-import { Button, Chip, Metric, MetricGroup, StepRail, dsIcon } from '../../components/ds/index.js';
+import { Button, Chip, IconButton, Metric, MetricGroup, StepRail, dsIcon } from '../../components/ds/index.js';
 import { renderNavigationTimeline } from './NavigationTimeline.js';
 import { renderNavigationRouteMap } from './NavigationRouteMap.js';
+import { getEstimatedRemainingMinutes, renderViewToggle } from './NavigationShell.js';
 
 /**
- * Navigation dispatch. The DEFAULT view is the vertical timeline; "Ver
- * trajeto" opens the schematic metro diagram beside it. The top-down floor
- * plan below is no longer wired to a control, but it still answers to
- * navState.view === 'map' and is otherwise untouched.
+ * Navigation dispatch. The real floor map is the default active-navigation
+ * view; the timeline is its instruction-first companion. The synthetic
+ * trajeto renderer remains available for compatibility and its pure tests,
+ * but is intentionally no longer offered as spatial guidance.
  */
 export function renderNavigation() {
   switch (navState.view) {
@@ -27,12 +28,14 @@ export function renderNavigation() {
 
 export function renderNavigationMap() {
   const fid = mapState.selectedFloorId;
+  const destNode = findNode(planState.destinationCode);
+  const destName = destNode ? getPublicNodeLabel(destNode) : 'seu destino';
 
   return `
     <div class="sg-nav-screen" id="nav-screen">
       <!-- Map area (top ~55%) -->
-      <div class="sg-map-area" id="map-area" aria-label="Mapa do aeroporto — ${esc(getFloorLabel(fid))}" role="img">
-        <div class="sg-map-wrapper" id="map-wrapper">
+      <div class="sg-map-area" id="map-area" aria-label="Mapa do aeroporto — ${esc(getFloorLabel(fid))}" role="region">
+        <div class="sg-map-wrapper" id="map-wrapper" role="tabpanel" aria-labelledby="tab-route-btn">
           <div class="sg-map-inner" id="map-inner">
             <!-- Base floor SVG (cached, never rebuilt on step change) -->
             <div id="map-base" class="sg-map-layer sg-map-layer--base">
@@ -56,24 +59,26 @@ export function renderNavigationMap() {
 
         <!-- Header bar (over the dark map): exit · white lockup · help.
              A soft scrim behind it guarantees AA on any map content. -->
-        <header class="sg-ds sg-navhdr" role="banner">
+        <header class="sg-ds sg-navhdr">
           <!-- Back goes to the TIMELINE, not out of navigation: the map is
                now only ever reached from there, and leaving the trip
                entirely is the timeline header's job. -->
-          <button type="button" class="sg-navhdr__btn" id="back-to-timeline-btn" aria-label="Voltar às etapas">
+          <button type="button" class="sg-navhdr__btn" id="exit-nav-btn" aria-label="Sair da navegação">
             ${dsIcon('solar:arrow-left-linear')}
           </button>
           <div class="sg-navhdr__brand">
             <img class="sg-navhdr__logo" src="assets/logo-skygate-white.png" alt="SkyGate">
             <span class="sg-navhdr__loc">
               ${dsIcon('solar:map-point-bold', 'sg-navhdr__pin')}
-              <span>FOR · Aeroporto de Fortaleza</span>
+              <span>FOR · Até ${esc(destName)}</span>
             </span>
           </div>
           <button type="button" class="sg-navhdr__btn" id="help-btn" aria-label="Ajuda">
             ${dsIcon('solar:question-circle-linear')}
           </button>
         </header>
+
+        ${renderViewToggle('map', 'sg-ds sg-ds-dark sg-nav-tabs--map')}
 
         <!-- Right-side floating controls: floors + recenter -->
         <div class="sg-map-fabs" aria-label="Controles do mapa">
@@ -101,8 +106,6 @@ export function renderNavigationMap() {
         id="instruction-card"
         role="region"
         aria-label="Instrução de navegação"
-        aria-live="polite"
-        aria-atomic="true"
       >${renderInstructionCardInner()}</div>
 
       <!-- Route overview overlay (semantic only — no graph nodes) -->
@@ -121,6 +124,7 @@ export function renderInstructionCardInner() {
   const stepIdx = navState.activeStepIndex;
   const curStep = steps[stepIdx];
   const nextStep = steps[stepIdx + 1];
+  const isFirst = stepIdx <= 0;
   const isLast  = stepIdx >= total - 1;
   const accessible = planState.routeMode === 'accessible';
   const fid = mapState.selectedFloorId;
@@ -137,7 +141,7 @@ export function renderInstructionCardInner() {
       <div class="ds-sheet__grip" aria-hidden="true"></div>
 
       <!-- Step rail (DS): done → turquoise, current → bright --sky-500, future → grey -->
-      ${StepRail({ current: stepIdx + 1, total, className: 'sg-navsheet__rail' })}
+      ${StepRail({ current: stepIdx + 1, total, label: `Etapa ${stepIdx + 1} de ${total}`, className: 'sg-navsheet__rail' })}
 
       <!-- Current instruction -->
       <div class="sg-navsheet__head">
@@ -160,12 +164,12 @@ export function renderInstructionCardInner() {
     <!-- Metrics -->
     <div class="sg-navsheet__metrics">
       ${MetricGroup([
-        Metric({ icon: 'solar:clock-circle-bold', value: fmtMin(navState.route?.estimatedMinutes ?? 0), unit: 'min', label: 'Tempo estimado' }),
+        Metric({ icon: 'solar:clock-circle-bold', value: getEstimatedRemainingMinutes(), unit: 'min', label: 'Restante estimado' }),
         Metric({ icon: 'solar:layers-bold', value: countFloorChanges(), label: 'Andares' }),
         Metric({
           icon: nextStep ? 'solar:arrow-right-linear' : 'solar:flag-2-bold',
           value: nextStep && nextDist ? `Em ${nextDist}` : 'Chegada',
-          label: nextStep ? stripPeriod(nextStep.text) : 'Você chegou',
+          label: nextStep ? stripPeriod(nextStep.text) : 'Conclua a etapa final',
         }),
       ])}
     </div>
@@ -192,20 +196,19 @@ export function renderInstructionCardInner() {
          whole screen and must never require scrolling to reach. -->
     <div class="sg-navsheet__foot">
       <div class="sg-navsheet__actions">
-        ${Button({
-          label: isLast ? 'Chegou!' : 'Próximo',
-          variant: 'primary',
-          iconRight: 'solar:arrow-right-linear',
-          id: 'nav-next',
-          disabled: isLast,
-          className: 'sg-navsheet__next',
+        ${IconButton({
+          icon: 'solar:arrow-left-linear',
+          label: 'Voltar à etapa anterior',
+          id: 'nav-prev',
+          disabled: isFirst,
+          className: 'sg-navsheet__prev',
         })}
         ${Button({
-          label: 'Ver etapas',
-          variant: 'outline',
-          icon: 'solar:list-bold',
-          id: 'instr-steps-btn',
-          className: 'sg-navsheet__steps',
+          label: isLast ? 'Finalizar rota' : 'Próxima etapa',
+          variant: 'primary',
+          iconRight: isLast ? 'solar:flag-2-bold' : 'solar:arrow-right-linear',
+          id: 'nav-next',
+          className: 'sg-navsheet__next',
         })}
       </div>
     </div>
@@ -222,7 +225,7 @@ export function renderFloorControl() {
 
   return `<div class="sg-floor-ctrl ${isOpen ? 'is-open' : ''}" id="floor-ctrl">
     <button type="button" class="sg-map-fab" id="floor-trigger-btn"
-      aria-haspopup="true" aria-expanded="${isOpen}"
+      aria-haspopup="menu" aria-expanded="${isOpen}"
       aria-label="Piso atual: ${esc(cur?.name ?? getFloorLabel(mapState.selectedFloorId))}. Toque para mudar.">
       ${navIcon('layers')}
       ${navState.routeFloorIds.has(cur?.id) ? `<span class="sg-floor-trigger__dot" aria-hidden="true"></span>` : ''}

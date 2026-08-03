@@ -1,10 +1,9 @@
 /**
- * NavigationTimeline — the DEFAULT navigation view.
+ * NavigationTimeline — the instruction-first companion view.
  *
  * A vertical, scrollable timeline of the journey ("acompanhar pedido"), dark
- * themed, replacing the top-down map as the thing the traveller sees first.
- * The map is not gone: it is one tap away behind "Ver trajeto", and will be
- * replaced there by the schematic metro view in a later step.
+ * themed and one tap away through the persistent Etapas | Mapa control. The
+ * real floor map remains the default spatial surface.
  *
  * WHY A LIST AND NOT A MAP. A top-down plan asks the traveller to locate
  * themselves on it before it can help — orient, find the dot, trace the line.
@@ -73,29 +72,23 @@ function statusOf(index, active) {
   return 'upcoming';
 }
 
-/**
- * Photo card for a step that passes a real business.
- *
- * The name sits ON the photo under a gradient scrim rather than beside it:
- * a thumbnail plus a separate caption reads as two things, and the row
- * already carries the instruction text. Open/closed uses the SEMANTIC
- * success/danger scale (never the brand turquoise) so "open" is legible as
- * a state and not as decoration.
- */
+/** Compact landmark disclosure; rich media stays in the detail sheet. */
 function placeCard(place) {
   const status = getOpenStatus(place.opening_hours);
+  const statusText = status.open === null
+    ? ''
+    : `${status.open ? 'Aberto agora' : 'Fechado'}${status.open && status.today ? ` · até ${esc(status.today.close)}` : ''}`;
   return `<span class="sg-tl__place">
-    <span class="sg-tl__place-photo">
-      ${place.photo_url
-        ? `<img src="${esc(place.photo_url)}" alt="" loading="lazy" decoding="async">`
-        : dsIcon('solar:buildings-2-bold', 'sg-tl__place-glyph')}
+    <span class="sg-tl__place-glyph" aria-hidden="true">
+      ${dsIcon('solar:buildings-2-bold')}
     </span>
-    <span class="sg-tl__place-scrim" aria-hidden="true"></span>
     <span class="sg-tl__place-info">
       <span class="sg-tl__place-name">${esc(place.name)}</span>
-      <span class="sg-tl__place-status ${status.open ? 'is-open' : 'is-closed'}">
-        <span class="sg-tl__place-dot" aria-hidden="true"></span>
-        ${status.open ? 'Aberto agora' : 'Fechado'}${status.open && status.today ? ` · até ${esc(status.today.close)}` : ''}
+      <span class="sg-tl__place-meta">
+        ${place.category ? `<span class="sg-tl__place-category">${esc(place.category)}</span>` : ''}
+        ${statusText ? `<span class="sg-tl__place-status ${status.open ? 'is-open' : 'is-closed'}">
+          <span class="sg-tl__place-dot" aria-hidden="true"></span>${statusText}
+        </span>` : ''}
       </span>
     </span>
     <span class="sg-tl__place-cue" aria-hidden="true">${dsIcon('solar:alt-arrow-right-linear')}</span>
@@ -129,7 +122,7 @@ function timelineItem(step, index, active) {
     </span>
 
     <span class="sg-tl__body">
-      ${status === 'current' ? `<span class="sg-tl__now">Você está aqui</span>` : ''}
+      ${status === 'current' ? `<span class="sg-tl__now">Etapa atual</span>` : ''}
       <span class="sg-tl__title">${esc(title)}</span>
       ${meta || step.toFloor ? `<span class="sg-tl__meta">
         ${meta ? `<span class="sg-tl__dist">${esc(meta)}</span>` : ''}

@@ -22,6 +22,7 @@
 .sg-ds.sg-ds-dark.sg-tl-screen {
   position: fixed;
   top: 0; left: 0; right: 0;
+  height: 100vh;
   height: 100dvh;            /* not inset:0 — see the note in navigation.css */
   display: flex;
   flex-direction: column;
@@ -59,7 +60,11 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  padding: calc(var(--safe-top) + var(--space-2)) var(--space-3) var(--space-2);
+  padding:
+    calc(var(--safe-top) + var(--space-2))
+    calc(var(--space-3) + env(safe-area-inset-right, 0px))
+    var(--space-2)
+    calc(var(--space-3) + env(safe-area-inset-left, 0px));
   background: linear-gradient(180deg, rgba(8, 21, 40, .72) 0%, rgba(8, 21, 40, .28) 70%, rgba(8, 21, 40, 0) 100%);
 }
 
@@ -114,7 +119,11 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--space-1);
-  margin: 0 var(--space-3) var(--space-2);
+  margin:
+    0
+    calc(var(--space-3) + env(safe-area-inset-right, 0px))
+    var(--space-2)
+    calc(var(--space-3) + env(safe-area-inset-left, 0px));
   padding: 3px;
   border-radius: var(--radius-lg);
   background: rgba(4, 14, 28, .55);
@@ -126,7 +135,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  min-height: 36px;
+  min-height: var(--tap-min);
   padding: var(--space-1) var(--space-2);
   border: none;
   border-radius: var(--radius-md);
@@ -154,6 +163,20 @@
   outline-offset: 2px;
 }
 
+.sg-nav-tabs--map {
+  position: absolute;
+  z-index: 34;
+  top: calc(var(--safe-top) + 76px);
+  left: calc(var(--space-4) + env(safe-area-inset-left, 0px));
+  right: calc(var(--space-4) + env(safe-area-inset-right, 0px));
+  width: auto;
+  margin: 0;
+  background: rgba(4, 14, 28, .72);
+  backdrop-filter: blur(12px) saturate(130%);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  box-shadow: 0 8px 24px rgba(3, 10, 20, .26);
+}
+
 /* ── Scroller ───────────────────────────────────────── */
 .sg-tl__scroll {
   flex: 1 1 auto;
@@ -168,7 +191,11 @@
      opened with its marker sliced off against the status band. 20px = the
      16px overhang + a little breathing room; keep it >= the overhang if the
      wave's size or scale changes. */
-  padding: 20px var(--space-4) var(--space-5);
+  padding:
+    20px
+    calc(var(--space-4) + env(safe-area-inset-right, 0px))
+    var(--space-5)
+    calc(var(--space-4) + env(safe-area-inset-left, 0px));
   scrollbar-width: none;
 }
 .sg-tl__scroll::-webkit-scrollbar { width: 0; height: 0; }
@@ -188,7 +215,11 @@
   align-items: center;
   gap: var(--space-2);
   flex-wrap: nowrap;
-  margin: 0 var(--space-3) var(--space-2);
+  margin:
+    0
+    calc(var(--space-3) + env(safe-area-inset-right, 0px))
+    var(--space-2)
+    calc(var(--space-3) + env(safe-area-inset-left, 0px));
   padding: 3px var(--space-3);
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, .05);
@@ -383,52 +414,54 @@
 
 /* ── Place card ─────────────────────────────────────── */
 .sg-tl__place {
-  position: relative;
-  display: block;
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 26px;
+  align-items: center;
+  gap: var(--space-3);
   margin-top: var(--space-3);
-  height: 132px;
+  min-height: 64px;
+  padding: 10px;
   border-radius: var(--radius-md);
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, .10);
-  box-shadow: 0 8px 22px rgba(3, 10, 20, .38);
-}
-.sg-tl__place-photo { position: absolute; inset: 0; display: block; background: #12263F; }
-.sg-tl__place-photo img {
-  width: 100%; height: 100%;
-  object-fit: cover;
-  display: block;
+  background: rgba(255, 255, 255, .055);
+  border: 1px solid rgba(120, 205, 245, .18);
 }
 .sg-tl__place-glyph {
-  position: absolute; inset: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
   display: grid; place-items: center;
-  font-size: 34px;
-  color: rgba(255, 255, 255, .28);
-}
-
-/* The scrim is load-bearing, not decoration: it is the only reason white
-   text and a semantic status colour can sit on an arbitrary photograph and
-   still clear AA. */
-.sg-tl__place-scrim {
-  position: absolute; inset: 0;
-  background: linear-gradient(180deg,
-    rgba(4, 12, 24, .05) 0%,
-    rgba(4, 12, 24, .45) 52%,
-    rgba(4, 12, 24, .88) 100%);
+  background: rgba(41, 171, 226, .14);
+  color: var(--tl-accent-soft);
+  font-size: 20px;
 }
 
 .sg-tl__place-info {
-  position: absolute;
-  left: var(--space-3); right: var(--space-6); bottom: var(--space-3);
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .sg-tl__place-name {
-  font-size: var(--text-base);
-  font-weight: var(--weight-bold);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
   color: #FFFFFF;
   line-height: var(--leading-tight);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sg-tl__place-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px var(--space-2);
+  font-size: var(--text-xs);
+}
+.sg-tl__place-category {
+  max-width: 100%;
+  color: rgba(255, 255, 255, .68);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .sg-tl__place-status {
   display: inline-flex;
@@ -447,8 +480,6 @@
 }
 
 .sg-tl__place-cue {
-  position: absolute;
-  right: var(--space-2); bottom: var(--space-3);
   display: grid; place-items: center;
   width: 26px; height: 26px;
   border-radius: 50%;
@@ -460,7 +491,7 @@
 .sg-tl__item.has-place .sg-tl__hit:hover .sg-tl__place,
 .sg-tl__item.has-place .sg-tl__hit:focus-visible .sg-tl__place {
   border-color: rgba(120, 205, 245, .45);
-  box-shadow: 0 10px 26px rgba(3, 10, 20, .5), 0 0 20px rgba(41, 171, 226, .2);
+  background: rgba(41, 171, 226, .10);
 }
 .sg-tl__hit:focus-visible {
   outline: 2px solid var(--sky-400);
@@ -473,20 +504,31 @@
   flex: 0 0 auto;
   /* Matches .sg-rc__footer on the choice screen — same pad, same function —
      so the primary action does not jump when you cross from one to the other. */
-  padding: var(--space-3) var(--space-4)
-           max(var(--space-5), env(safe-area-inset-bottom, 0px));
+  padding:
+    var(--space-3)
+    calc(var(--space-4) + env(safe-area-inset-right, 0px))
+    max(var(--space-5), env(safe-area-inset-bottom, 0px))
+    calc(var(--space-4) + env(safe-area-inset-left, 0px));
   background: linear-gradient(180deg, rgba(6, 15, 30, 0) 0%, rgba(6, 15, 30, .92) 24%, #060F1E 100%);
   border-top: 1px solid rgba(120, 205, 245, .14);
 }
 /* One button, full width. The footer used to carry "Ver trajeto" beside it;
    that job belongs to the toggle at the top, and having it in two places is
    what made one screen look like two. */
-.sg-tl-foot__row { display: flex; gap: var(--space-3); }
+.sg-tl-foot__row { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.sg-ds-dark .sg-tl-foot__prev {
+  width: 56px;
+  height: 56px;
+  border: 1px solid rgba(120, 205, 245, .24);
+  background: rgba(255, 255, 255, .08);
+  box-shadow: none;
+}
 /* Same 56px as .sg-rc__cta: both are THE primary action of their screen, and
    at 44px vs 56px the footer visibly changed shape on the way into
    navigation. */
 .sg-ds-dark .sg-tl-foot__next {
   flex: 1 1 auto;
+  min-width: 0;
   min-height: 56px;
   font-size: var(--text-lg);
   font-weight: var(--weight-bold);
@@ -535,10 +577,6 @@
     animation: tlNodeIn 420ms cubic-bezier(.22, .61, .36, 1) both;
   }
 
-  /* --- Photos fade in rather than snapping --- */
-  .sg-tl__place-photo img { animation: tlPhotoIn 420ms ease both; }
-  @keyframes tlPhotoIn { from { opacity: 0; } to { opacity: 1; } }
-
   /* --- Step change: the new current node settles in rather than snapping.
      Only the body animates; the dot has its own scale and would fight it. */
   .sg-tl__item.is-current .sg-tl__body {
@@ -555,6 +593,15 @@
 @media (prefers-reduced-motion: reduce) {
   .sg-tl__wave { opacity: .28; }
   .sg-tl__wave--2 { display: none; }
+}
+
+@media (max-width: 360px) {
+  .sg-tl-hdr { gap: var(--space-1); }
+  .sg-tl-hdr__logo { display: none; }
+  .sg-tl-hdr__dest { font-size: var(--text-xs); }
+  .sg-tl__strip { justify-content: space-between; gap: var(--space-1); padding-inline: var(--space-2); }
+  .sg-nav-tab { gap: var(--space-1); padding-inline: var(--space-1); }
+  .sg-ds-dark .sg-tl-foot__next { font-size: var(--text-base); }
 }
 
 /* ── Desktop: the timeline is a column, not a canvas ──

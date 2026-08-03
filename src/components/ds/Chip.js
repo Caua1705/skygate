@@ -9,7 +9,7 @@
  * Variants: 'solid' (default, soft navy) | 'outline' (teal) | 'active'
  *           | 'success' | 'warning' | 'danger'
  *
- * `interactive: true` renders a <button> and raises the height to 44px so
+ * `interactive: true` renders a <button> and raises the height to 48px so
  * it clears the touch-target minimum; otherwise it renders a <span>.
  * The outline variant uses --sky-ink, not --sky-500: the raw brand teal
  * only reaches 2.62:1 on white and would fail as small text.

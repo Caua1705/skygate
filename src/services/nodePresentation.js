@@ -42,6 +42,7 @@ export const POI_TYPES = new Set([..._DEFAULT_SEARCH_TYPES, 'elevator','stairs',
 /* ── SEARCH CATEGORIES ────────────────────────────────────── */
 export const SEARCH_CATEGORIES = [
   { key:'gates',       label:'Portões',                      icon:'solar:routing-2-bold',      types:['gate'] },
+  { key:'checkin',     label:'Check-in',                     icon:'solar:case-round-bold',     types:['checkin'] },
   { key:'food',        label:'Alimentação',                  icon:'solar:cup-hot-bold',         types:['restaurant'] },
   { key:'shops',       label:'Lojas',                        icon:'solar:bag-4-bold',           types:['shop','pharmacy'] },
   { key:'restrooms',   label:'Banheiros',                    icon:'solar:bath-bold',            types:['restroom'] },

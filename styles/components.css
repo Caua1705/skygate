@@ -46,7 +46,7 @@
 
 .sg-icon-btn {
   display: grid; place-items: center;
-  width: 40px; height: 40px; border-radius: var(--radius-md);
+  width: var(--tap-min); height: var(--tap-min); border-radius: var(--radius-md);
   color: var(--sg-text-secondary); font-size: 20px; flex-shrink: 0;
   transition: background var(--t-fast), color var(--t-fast);
 }
@@ -87,13 +87,14 @@
 /* ---------- Button ---------- */
 .ds-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
-  min-height: var(--tap-min); padding: 0 var(--space-5);
+  min-width: 0; max-width: 100%; min-height: var(--tap-min); padding: 0 var(--space-5);
   font-family: var(--font-body); font-size: var(--text-base); font-weight: var(--weight-semibold);
   line-height: var(--leading-snug); border-radius: var(--radius-pill);
   border: 1.5px solid transparent; cursor: pointer;
   transition: background var(--ds-transition), color var(--ds-transition),
               border-color var(--ds-transition), transform var(--ds-transition);
 }
+.ds-btn > span { min-width: 0; overflow-wrap: anywhere; }
 .ds-btn:active:not(:disabled) { transform: translateY(1px); }
 .ds-btn:disabled { opacity: .45; cursor: not-allowed; }
 .ds-btn iconify-icon { font-size: 1.25em; flex: none; }
@@ -116,7 +117,7 @@
 .sg-ds-dark .ds-btn--ghost:hover:not(:disabled) { background: rgba(255, 255, 255, .1); }
 
 .ds-btn--block { width: 100%; }
-.ds-btn--sm { min-height: 36px; font-size: var(--text-sm); padding: 0 var(--space-4); }
+.ds-btn--sm { min-height: var(--tap-min); font-size: var(--text-sm); padding: 0 var(--space-4); }
 
 /* ---------- IconButton ---------- */
 .ds-iconbtn {
@@ -150,10 +151,11 @@
 /* ---------- Chip ---------- */
 .ds-chip {
   display: inline-flex; align-items: center; gap: var(--space-2);
-  min-height: 32px; padding: 0 var(--space-3);
+  min-width: 0; max-width: 100%; min-height: 32px; padding: 0 var(--space-3);
   font-size: var(--text-sm); font-weight: var(--weight-medium);
   border-radius: var(--radius-pill); border: 1.5px solid transparent; white-space: nowrap;
 }
+.ds-chip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .ds-chip iconify-icon { font-size: 1.1em; }
 .ds-chip--solid   { background: #EAF0FA; color: var(--navy-900); }
 .ds-chip--outline { background: transparent; color: var(--sky-ink); border-color: var(--sky-ink); }

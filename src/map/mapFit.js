@@ -71,6 +71,11 @@ function safeViewport(wrapper) {
     // The scrim fades out; only the solid upper part really occludes.
     top = clamp(h.bottom - w.top, 0, w.height * 0.4) * 0.8;
   }
+  const viewTabs = document.querySelector('.sg-nav-tabs--map');
+  if (viewTabs) {
+    const t = viewTabs.getBoundingClientRect();
+    top = Math.max(top, clamp(t.bottom - w.top + 8, 0, w.height * 0.45));
+  }
 
   const sheet = $('instruction-card');
   if (sheet) {
@@ -216,8 +221,12 @@ export function fitStepToView(stepIndex, duration) {
 export function fitFullRoute(duration) {
   if (!navState.route) return false;
   const fid = mapState.selectedFloorId;
-  const seg = navState.route.segments?.find(s => s.type === 'floor' && s.floorId === fid);
-  const codes = seg?.nodeCodes ?? navState.route.path.filter(c => findNode(c)?.floorId === fid);
+  const segmentCodes = (navState.route.segments ?? [])
+    .filter(segment => segment.type === 'floor' && segment.floorId === fid)
+    .flatMap(segment => segment.nodeCodes ?? []);
+  const codes = [...new Set(segmentCodes.length
+    ? segmentCodes
+    : navState.route.path.filter(code => findNode(code)?.floorId === fid))];
   const pts = pointsFor(codes, fid);
   if (!pts.length) return false;
   return fitPointsToView(pts, { duration, captionPad: true });

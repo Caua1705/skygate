@@ -79,7 +79,7 @@
 .sg-rt__stop--done  { fill: var(--rt-accent); }
 .sg-rt__stop--ahead { fill: #16304E; stroke: rgba(120, 205, 245, .45); stroke-width: 2.5; }
 
-/* "Você está aqui" — the loudest thing on the canvas, and the only marker
+/* "Etapa atual" — the loudest thing on the canvas, and the only marker
    with a moving part. */
 .sg-rt__here-halo { fill: rgba(41, 171, 226, .18); }
 .sg-rt__here-ring { fill: #0A1B31; stroke: var(--rt-accent); stroke-width: 3.5; }
@@ -217,4 +217,3 @@
   .sg-rt__pulse { opacity: .3; transform: none; }
   .sg-rt__dest .sg-rt__pulse { display: none; }
 }
-

@@ -21,10 +21,16 @@ export const planState = {
   flightTime: '',
 
   /**
+   * A clock without a date is ambiguous around midnight. Defaulting to today
+   * is deliberately conservative: a past time must never silently become
+   * tomorrow and create almost 24 hours of fictitious margin.
+   */
+  flightDay: 'today',          // 'today' | 'tomorrow'
+
+  /**
    * 'domestic' | 'international' — drives the gate-close margin (APP_CONFIG
-   * .flight.gateCloseMargin). Nothing collects it yet: there is no UI for it,
-   * and inferring it from the destination gate would be a guess dressed as a
-   * fact. Wired so adding it later is a field, not a rewrite.
+   * .flight.gateCloseMargin). The passenger chooses it alongside the flight
+   * day; it is never inferred from a gate or destination.
    */
   flightType: 'domestic',
 };
@@ -42,18 +48,11 @@ export const navState = {
   routeOptions: [],
   selectedOptionId: '',
   /**
-   * Which navigation view is on screen: 'timeline' (default) or 'trajeto',
-   * the schematic metro diagram. All of them read the SAME steps and
-   * activeStepIndex above — this only chooses how they are drawn, so
-   * switching views never loses the traveller's place.
-   *
-   * 'map', the old top-down floor plan, is no longer reachable from the UI:
-   * "Ver trajeto" now opens the metro diagram instead. The plan's renderer
-   * and its whole map layer are left intact and still honour this value, so
-   * setting it by hand (or wiring a control to showFloorPlan()) brings it
-   * back without any of it having to be rebuilt.
+   * 'map' is the default spatial view and 'timeline' is its instruction-first
+   * companion. Both read the same steps/index, so switching views preserves
+   * confirmed progress. 'trajeto' remains a compatibility-only schematic.
    */
-  view: 'timeline',
+  view: 'map',
 };
 
 export const mapState = {
@@ -90,4 +89,3 @@ export const appData = {
   floors: [],
   nodes: [],
 };
-

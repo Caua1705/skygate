@@ -1,11 +1,11 @@
-import { SEARCH_CATEGORIES, getPublicNodeLabel, getPublicNodeSubtitle, CIRCULATION_TYPES } from '../services/nodePresentation.js';
+import { SEARCH_CATEGORIES, getPublicNodeLabel, getPublicNodeSubtitle } from '../services/nodePresentation.js';
 import { planState, uiState } from '../state/appState.js';
 import { filterNodes, groupByCategory } from '../services/nodeSearch.js';
 import { esc } from '../utils/format.js';
 import { getNodeMeta } from '../app/constants.js';
 
-export const ORIGIN_CHIP_KEYS = ['access', 'gates', 'restrooms', 'services', 'circulation'];
-export const DEST_CHIP_KEYS   = ['gates', 'food', 'shops', 'restrooms', 'services'];
+export const ORIGIN_CHIP_KEYS = ['access', 'gates', 'checkin', 'restrooms', 'services', 'circulation'];
+export const DEST_CHIP_KEYS   = ['gates', 'checkin', 'food', 'shops', 'restrooms', 'services'];
 
 export function renderSearchOverlay() {
   const kind = uiState.searchOpenFor;
@@ -20,9 +20,6 @@ export function renderSearchOverlay() {
   const grouped = groupByCategory(results);
   const chipKeys = isOrigin ? ORIGIN_CHIP_KEYS : DEST_CHIP_KEYS;
   const chips = chipKeys.map(key => SEARCH_CATEGORIES.find(c => c.key === key)).filter(Boolean);
-  // Announce result count for screen readers
-  const totalResults = Array.from(grouped.values()).reduce((a, b) => a + b.length, 0);
-
   return `<div class="sg-ds sg-search-overlay" id="search-overlay" role="dialog" aria-modal="true" aria-labelledby="search-title">
     <button type="button" class="sg-search-backdrop" id="search-backdrop" tabindex="-1" aria-label="Fechar busca"></button>
     <!-- tabindex="-1" so opening the sheet can land focus HERE rather than on
@@ -51,43 +48,41 @@ export function renderSearchOverlay() {
           <span>${esc(c.label)}</span>
         </button>`).join('')}
       </div>
-      <div id="search-results" class="sg-search-results"
-        role="listbox"
-        aria-live="polite"
-        aria-label="Resultados de busca"
-        aria-relevant="additions text">
-        <span class="sr-only" aria-live="assertive" aria-atomic="true">
-          ${totalResults > 0 ? `${totalResults} resultado${totalResults > 1 ? 's' : ''}` : (uiState.searchQuery || uiState.searchCategory) ? 'Nenhum resultado' : ''}
-        </span>
+      <section id="search-results" class="sg-search-results" aria-label="Resultados de busca">
         ${renderSearchResults(grouped, kind)}
-      </div>
+      </section>
     </div>
   </div>`;
 }
 
 export function renderSearchResults(grouped, kind) {
+  const total = Array.from(grouped.values()).reduce((sum, nodes) => sum + nodes.length, 0);
+  const announcement = total
+    ? `${total} resultado${total === 1 ? '' : 's'}`
+    : (uiState.searchQuery || uiState.searchCategory) ? 'Nenhum resultado' : '';
+  const status = `<span class="sr-only" role="status" aria-live="polite" aria-atomic="true">${announcement}</span>`;
+
   if (!grouped.size) {
     const isEmpty = !uiState.searchQuery && !uiState.searchCategory;
-    return `<div class="sg-search-empty" role="status">
+    return `${status}<div class="sg-search-empty">
       <iconify-icon icon="${isEmpty ? 'solar:magnifer-linear' : 'solar:map-point-wave-linear'}" aria-hidden="true"></iconify-icon>
       <p>${isEmpty ? 'Escolha uma categoria ou busque acima' : 'Nenhum resultado encontrado'}</p>
       <p class="sg-search-empty__sub">${isEmpty ? 'Ex: "Portão 18", "banheiro", "café"' : 'Tente outro termo ou outra categoria.'}</p>
     </div>`;
   }
 
-  return Array.from(grouped).map(([g, nodes]) => `
-    <div class="sg-search-group">
-      <p class="sg-search-group__label">${esc(g)}</p>
+  return `${status}${Array.from(grouped).map(([g, nodes], groupIndex) => `
+    <section class="sg-search-group" aria-labelledby="search-group-${esc(kind)}-${groupIndex}">
+      <h3 class="sg-search-group__label" id="search-group-${esc(kind)}-${groupIndex}">${esc(g)}</h3>
+      <ul class="sg-search-list">
       ${nodes.map(n => {
         const meta       = getNodeMeta(n.type);
         const pubLabel   = getPublicNodeLabel(n);         // passenger-facing name
         const pubSub     = getPublicNodeSubtitle(n);      // floor + category
-        const accessible = CIRCULATION_TYPES.has(n.type);
-        return `<div class="sg-search-row">
+        const accessible = n.isAccessible === true || n.is_accessible === true;
+        return `<li class="sg-search-row">
           <button type="button" class="sg-search-item" data-kind="${kind}" data-code="${esc(n.code)}"
-            role="option"
-            aria-label="${esc(pubLabel)} — ${esc(pubSub)}${accessible ? ' — Acessível' : ''}"
-            aria-selected="false">
+            aria-label="${esc(pubLabel)} — ${esc(pubSub)}${accessible ? ' — Acessível' : ''}">
             <span class="sg-search-item__icon" aria-hidden="true">
               <iconify-icon icon="${meta.icon}"></iconify-icon>
             </span>
@@ -105,10 +100,11 @@ export function renderSearchResults(grouped, kind) {
             aria-label="Ver detalhes de ${esc(pubLabel)}">
             <iconify-icon icon="solar:info-circle-linear" aria-hidden="true"></iconify-icon>
           </button>
-        </div>`;
+        </li>`;
       }).join('')}
-    </div>
-  `).join('');
+      </ul>
+    </section>
+  `).join('')}`;
 }
 
 /* Location / business details sheet — shows only fields the API actually

@@ -11,6 +11,7 @@
 .sg-nav-screen {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: auto;
+  height: 100vh;
   height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
@@ -207,7 +208,7 @@
 .sg-map-dest__halo { fill: url(#sgHaloDest); }
 .sg-map-dest__glow { fill: url(#sgHaloDest); opacity: .45; }
 
-/* "Você está aqui" — turquoise dot with two radar waves */
+/* "Etapa atual" — turquoise dot with two radar waves */
 .sg-map-here__halo   { fill: url(#sgHalo); }
 .sg-map-here__dot    { fill: var(--map-accent); stroke: #FFFFFF; stroke-width: 3; }
 .sg-map-here__center { fill: #FFFFFF; }
@@ -366,7 +367,7 @@
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 0; background: none; border: none;
   /* Comfortable tap target without inflating the visible dot. */
-  min-width: 34px; min-height: 34px;
+  min-width: var(--tap-min); min-height: var(--tap-min);
   justify-content: center;
 }
 
@@ -562,7 +563,7 @@
 
 .sg-floor-item {
   display: flex; align-items: center; gap: 10px;
-  width: 100%; min-height: 46px; padding: 0 15px;
+  width: 100%; min-height: var(--tap-min); padding: 0 15px;
   font-size: 13.5px; font-weight: 650; color: rgba(255,255,255,.8);
   border-bottom: 1px solid rgba(255,255,255,.07);
   transition: background var(--t-fast); cursor: pointer;
@@ -579,7 +580,7 @@
   position: absolute; z-index: 40;
   bottom: 18px; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 7px;
-  height: 40px; padding: 0 18px;
+  min-height: var(--tap-min); padding: 0 18px;
   background: var(--map-accent-deep); color: #ffffff;
   border-radius: var(--radius-pill); font-size: 13px; font-weight: 700;
   box-shadow: var(--nav-fab-shadow);
