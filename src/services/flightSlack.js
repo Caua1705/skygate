@@ -42,6 +42,36 @@ import { getAirportSlug } from '../state/selectors.js';
 /** A flight further out than this is a typo, not a plan. */
 const MAX_HORIZON_MIN = 48 * 60;
 
+function localDateKey(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, '0'),
+    String(date.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function parseLocalDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? ''));
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return localDateKey(date) === value ? date : null;
+}
+
+/** Resolve the compact Hoje/Amanhã choice to an absolute local date. */
+export function flightDateForDay(day, now = new Date()) {
+  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (day === 'tomorrow') date.setDate(date.getDate() + 1);
+  return localDateKey(date);
+}
+
+/** Presentation value after midnight; the absolute date remains the truth. */
+export function effectiveFlightDay(now = new Date()) {
+  const flightDate = parseLocalDate(planState.flightDate);
+  if (!flightDate) return planState.flightDay === 'tomorrow' ? 'tomorrow' : 'today';
+  if (localDateKey(flightDate) === flightDateForDay('tomorrow', now)) return 'tomorrow';
+  return 'today';
+}
+
 /**
  * The four states a route can be in against the gate closing. `tone` maps to
  * the palette: turquoise for good, amber for tight, soft red for impossible.
@@ -93,9 +123,19 @@ function exactMinutesUntilFlight(now, flightTime) {
   const target = parseClock(flightTime);
   if (target === null) return null;
 
-  const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
-  const dayOffset = planState.flightDay === 'tomorrow' ? 24 * 60 : 0;
-  const diff = target + dayOffset - nowMin;
+  const date = parseLocalDate(planState.flightDate);
+  let diff;
+  if (date) {
+    const hour = Math.floor(target / 60);
+    const minute = target % 60;
+    const departure = new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, minute);
+    diff = (departure.getTime() - now.getTime()) / 60_000;
+  } else {
+    // Legacy/in-memory fallback for callers that set state directly.
+    const nowMin = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+    const dayOffset = planState.flightDay === 'tomorrow' ? 24 * 60 : 0;
+    diff = target + dayOffset - nowMin;
+  }
   return diff > MAX_HORIZON_MIN ? null : diff;
 }
 

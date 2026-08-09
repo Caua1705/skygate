@@ -8,10 +8,13 @@ export const APP_CONFIG = Object.freeze({
   /**
    * Node x/y arrive from the API as abstract map units, not metres.
    * Walking distances are measured along the route path and converted here.
-   * Tune `metersPerUnit` once the real-world scale of the floor plan is known.
+   * This is an empirical calibration, not surveyed floor-plan geometry: the
+   * p0_porta_1 -> p2_portao_7 reference route spans 2111.68 units and the API
+   * estimates 9.97 minutes. At 80 m/min that is 0.378 m/unit, rounded to 0.38.
+   * Passenger-facing distances are therefore explicitly approximate.
    */
   distance: {
-    metersPerUnit: 1,
+    metersPerUnit: 0.38,
     roundToMeters: 10,   // displayed distances snap to this grid
   },
   /**

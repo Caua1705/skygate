@@ -14,10 +14,19 @@ import {
   getEstimatedRemainingMinutes,
   getNavigationTiming,
   navigationPrimaryLabel,
+  renderNavigationTiming,
   renderSummaryStrip,
   renderViewToggle,
 } from '../src/screens/navigation/NavigationShell.js';
-import { buildLabelLayerHtml, buildRouteOverlaySvg, getCurrentRouteNode } from '../src/map/floorMapBuilder.js';
+import {
+  buildBaseFloorSvg,
+  buildLabelLayerHtml,
+  buildRouteOverlaySvg,
+  getCurrentRouteNode,
+  getFloorBounds,
+  nodeToSvg,
+  placeLabels,
+} from '../src/map/floorMapBuilder.js';
 
 const VB_W = 360;   // must match the module's canvas width
 
@@ -44,6 +53,58 @@ appData.nodes = [
 ];
 planState.originCode = 'a';
 planState.destinationCode = 'e';
+
+// Zero is a real coordinate, not a missing value. Excluding the origin at
+// (0,0) from the bounds used to project it far outside the 900x600 map.
+const floorOneBounds = getFloorBounds('1');
+assert.equal(floorOneBounds.minX, 0);
+assert.equal(floorOneBounds.minY, 0);
+const projectedOrigin = nodeToSvg(appData.nodes[0], floorOneBounds);
+assert.ok(projectedOrigin.x >= 0 && projectedOrigin.x <= 900);
+assert.ok(projectedOrigin.y >= 0 && projectedOrigin.y <= 600);
+const projectedSecond = nodeToSvg(appData.nodes[1], floorOneBounds);
+const scaleX = (projectedSecond.x - projectedOrigin.x) / 40;
+const scaleY = (projectedSecond.y - projectedOrigin.y) / 10;
+assert.ok(Math.abs(scaleX - scaleY) < 1e-10, 'map projection uses one scale for both axes');
+
+const routeFixtureNodes = appData.nodes;
+appData.nodes = [
+  ...routeFixtureNodes,
+  { code: 'tall-a', type: 'waypoint', floorId: 'tall', x: 0, y: 0 },
+  { code: 'tall-b', type: 'waypoint', floorId: 'tall', x: 10, y: 100 },
+];
+const tallFloorSvg = buildBaseFloorSvg('tall');
+const tallDividers = [...tallFloorSvg.matchAll(/class="sg-map__divider" x1="([\d.]+)"/g)]
+  .map(match => Number(match[1]));
+assert.equal(tallDividers.length, 3);
+assert.ok(
+  Math.max(...tallDividers) - Math.min(...tallDividers) < 60,
+  'zone dividers follow the uniformly projected body on a tall, narrow floor',
+);
+appData.nodes = routeFixtureNodes;
+
+// Auto-fit exposes only a slice of the 900x600 canvas. The current-step
+// capsule must clamp to that live slice, including when the marker hugs
+// either horizontal edge; its compact title remains readable if the place
+// name is wider than the frame.
+const visibleFrame = { x: 300, y: 150, w: 126, h: 160 };
+for (const markerX of [304, 422]) {
+  const marker = { x: markerX - 18, y: 212, w: 36, h: 36 };
+  const [callout] = placeLabels([{
+    x: markerX,
+    y: 230,
+    radius: 20,
+    priority: 4,
+    cls: 'sg-map-label--here',
+    lines: ['Etapa atual', 'Nome de local deliberadamente muito comprido'],
+  }], [marker], visibleFrame);
+  assert.ok(callout, `current-step callout is retained at x=${markerX}`);
+  assert.ok(callout.box.x >= visibleFrame.x);
+  assert.ok(callout.box.x + callout.box.w <= visibleFrame.x + visibleFrame.w);
+  assert.ok(callout.box.y >= visibleFrame.y);
+  assert.ok(callout.box.y + callout.box.h <= visibleFrame.y + visibleFrame.h);
+  assert.deepEqual(callout.lines, ['Etapa atual']);
+}
 
 const steps = [
   { text: 'Comece no Portão A3.',   landmarkCode: 'a', floorId: '1', toFloor: '1' },
@@ -132,7 +193,8 @@ navState.activeStepIndex = 0;
 assert.equal(getEstimatedRemainingMinutes(), 7, 'the opening estimate is the backend total');
 navState.activeStepIndex = 2;
 assert.equal(getEstimatedRemainingMinutes(), 4, 'remaining time falls with confirmed progress');
-assert.match(renderSummaryStrip(), /min restantes/);
+const noFlightStripText = renderSummaryStrip().replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+assert.match(noFlightStripText, /min restantes/);
 assert.match(renderSummaryStrip(), /Etapa <b>3<\/b> de 5/);
 
 navState.activeStepIndex = 3;
@@ -170,7 +232,12 @@ const originalFlightTime = planState.flightTime;
 planState.flightTime = '12:00';
 const flightTiming = getNavigationTiming();
 assert.match(flightTiming.gate, /^\d{2}:\d{2}$/, 'walking keeps the estimated gate deadline visible');
-assert.match(flightTiming.ariaLabel, /estimado/, 'the gate deadline never reads as an airline fact');
+assert.match(flightTiming.ariaLabel, /Tempo restante estimado/, 'flight context keeps the remaining walk estimate');
+assert.match(flightTiming.ariaLabel, /Fechamento estimado/, 'the gate deadline never reads as an airline fact');
+const combinedTiming = renderNavigationTiming();
+assert.match(combinedTiming, /~\d+ min/, 'the compact timing keeps the remaining walk visible');
+assert.match(combinedTiming, new RegExp(`Portão <strong>~${flightTiming.gate}<\\/strong>`));
+assert.match(renderSummaryStrip(), /~\d+ min[\s\S]*Portão/, 'the timeline presents walk and gate timing together');
 planState.flightTime = originalFlightTime;
 
 // Manual progress uses explicit, identical language in both navigation views.

@@ -27,6 +27,10 @@
 }
 .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* Author-level display rules can otherwise override the browser's native
+   `[hidden]` stylesheet (the navigation return control did exactly that). */
+[hidden] { display: none !important; }
+
 :focus-visible { outline: 2px solid var(--teal-500); outline-offset: 2px; }
 
 /* Programmatic screen-heading focus is semantic, not a visible control. */

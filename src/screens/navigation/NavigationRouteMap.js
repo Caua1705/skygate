@@ -78,12 +78,11 @@ const MIN_RUN = 2;
  * How close a POI must be to a stop to be offered as an off-route landmark,
  * in the abstract node units the API returns for x/y.
  *
- * NOT read off APP_CONFIG.distance.metersPerUnit, which is still the
- * placeholder 1. Measured instead: a real Fortaleza route (p0_porta_1 →
- * p2_a_casa_do_bife) is 1902 units long and the API estimates it at 9.0 min,
- * so at an ordinary 80 m/min the unit is worth roughly 0.38 m. 100 units is
- * therefore about 40 m — close enough that the traveller walks past the
- * thing, far enough that a route usually has one to point at.
+ * Kept in map units because it is a spatial catchment, but checked against
+ * APP_CONFIG.distance.metersPerUnit (0.38, empirically calibrated from a real
+ * Fortaleza route). 100 units is therefore about 38 m — close enough that
+ * the traveller walks past the thing, far enough that a route usually has
+ * one to point at.
  */
 const NEAR_UNITS = 100;
 

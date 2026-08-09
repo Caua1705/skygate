@@ -4,7 +4,12 @@ import { app, appData, mapState, navState, planState, uiState } from '../state/a
 import { render } from './router.js';
 import { findNode, getAirportSlug } from '../state/selectors.js';
 import { normalizeRoute } from '../services/normalize.js';
-import { attachStepDistances, buildSemanticSteps } from '../services/routeSteps.js';
+import {
+  attachStepDistances,
+  buildSemanticSteps,
+  isRouteCompatibleWithAccessibleMode,
+  routePathMatchesPlan,
+} from '../services/routeSteps.js';
 import { buildRouteOptions, scoreOptions } from '../services/routeOptions.js';
 
 let calculationGeneration = 0;
@@ -15,6 +20,7 @@ function planSignature() {
     planState.destinationCode,
     planState.routeMode,
     planState.flightTime,
+    planState.flightDate,
     planState.flightDay,
     planState.flightType,
   ].join('|');
@@ -71,9 +77,15 @@ export async function handleCalculate() {
     if (!route.path.length && !route.steps.length) {
       throw Object.assign(new Error('No path.'), { kind: 'no_path' });
     }
+    if (!routePathMatchesPlan(route, requestedPlan.originCode, requestedPlan.destinationCode)) {
+      throw Object.assign(new Error('Route geometry does not match the requested journey.'), { kind: 'no_path' });
+    }
     if (requestedPlan.routeMode === 'accessible') {
-      const blocked = route.path.some(code => ['stairs', 'escalator'].includes(findNode(code)?.type));
-      if (blocked) throw Object.assign(new Error('Accessible route contains stairs.'), { kind: 'accessible_path' });
+      if (!isRouteCompatibleWithAccessibleMode(route)) {
+        throw Object.assign(new Error('Accessible route contains an unsafe or unknown floor transition.'), {
+          kind: 'accessible_path',
+        });
+      }
     }
 
     navState.route = route;

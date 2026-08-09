@@ -25,7 +25,7 @@ import { findNode, getFloorLabel } from '../../state/selectors.js';
 import { appData, planState, uiState } from '../../state/appState.js';
 import { esc } from '../../utils/format.js';
 import { Button, Card, Chip, Header, IconButton, dsIcon } from '../../components/ds/index.js';
-import { gateCloseClock, hasFlight } from '../../services/flightSlack.js';
+import { effectiveFlightDay, gateCloseClock, hasFlight } from '../../services/flightSlack.js';
 
 /* Four quick actions on a single row (Uber/Maps style). The visible label is
    ONE word; the fuller description lives in `hint`, which goes to the
@@ -119,7 +119,7 @@ function flightField(busy = false) {
      a re-render, so the collapsed line follows the value for free; rendering the
      text in JS instead would leave it stale until the next render(). */
   const flightType = planState.flightType === 'international' ? 'international' : 'domestic';
-  const flightDay = planState.flightDay === 'tomorrow' ? 'tomorrow' : 'today';
+  const flightDay = effectiveFlightDay();
   return `<details class="sg-home__flight${filled ? ' is-filled' : ''}"${filled ? ' open' : ''}${busy ? ' inert aria-disabled="true"' : ''}>
     <summary class="sg-home__flight-summary">
       <span class="sg-home__flight-icon" aria-hidden="true">${dsIcon('lucide:plane-takeoff')}</span>

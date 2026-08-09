@@ -13,6 +13,8 @@
 import { asArray, first } from '../utils/format.js';
 import { findNode } from '../state/selectors.js';
 import { slackFor } from './flightSlack.js';
+import { buildSegments, normalizeStep } from './normalize.js';
+import { isRouteCompatibleWithAccessibleMode } from './routeSteps.js';
 
 export const FASTEST_ID = 'fastest';
 
@@ -26,6 +28,36 @@ export function buildRouteOptions(route, { accessible = false } = {}) {
 
 export function findOption(options, id) {
   return options.find(option => option.id === id) ?? options[0] ?? null;
+}
+
+/**
+ * Carry a selected option into the active route without discarding information
+ * the option format does not repeat. In particular, a steps-only direct route
+ * has no path but still owns valid backend steps and floor segments.
+ */
+export function routeForSelectedOption(baseRoute, option) {
+  if (!baseRoute || !option) return null;
+  const path = option.path ?? [];
+  if (!path.length) {
+    return {
+      ...baseRoute,
+      optionId: option.id,
+      warnings: option.warnings ?? baseRoute.warnings ?? [],
+      estimatedMinutes: option.minutes,
+    };
+  }
+
+  return {
+    ...baseRoute,
+    optionId: option.id,
+    path,
+    steps: option.steps?.length
+      ? option.steps.map((step, index) => normalizeStep(step, index))
+      : [],
+    segments: buildSegments(path),
+    warnings: option.warnings ?? [],
+    estimatedMinutes: option.minutes,
+  };
 }
 
 /**
@@ -115,7 +147,10 @@ function normalizeApiOptions(raw, baseRoute, { accessible = false } = {}) {
   const expectedEnd = baseRoute?.path?.at?.(-1) ?? '';
   const valid = parsed.filter(option => {
     if (option.path.length < 2 || option.path.some(code => !findNode(code))) return false;
-    if (accessible && option.path.some(code => ['stairs', 'escalator'].includes(findNode(code)?.type))) return false;
+    if (accessible && !isRouteCompatibleWithAccessibleMode({
+      path: option.path,
+      steps: option.steps.map((step, stepIndex) => normalizeStep(step, stepIndex)),
+    })) return false;
     if (expectedStart && option.path[0] !== expectedStart) return false;
     if (expectedEnd && option.path.at(-1) !== expectedEnd) return false;
     return true;

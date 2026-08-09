@@ -10,9 +10,145 @@ import { clamp } from '../utils/format.js';
    ============================================================ */
 
 export function buildSemanticSteps(route) {
-  const { path, segments } = route;
-  const accessible = planState.routeMode === 'accessible';
-  return path.length ? buildFromPath(path, accessible) : buildFromSteps(route.steps, accessible);
+  const { path } = route;
+  return path.length ? buildFromPath(path) : buildFromSteps(route.steps);
+}
+
+const BLOCKED_ACCESSIBLE_TRANSITIONS = new Set(['stairs', 'escalator']);
+
+/**
+ * A non-empty geometry is authoritative: it must start and finish at the
+ * requested places and every referenced node must exist in the loaded map.
+ * Steps-only responses remain supported because some API variants do not
+ * expose geometry.
+ */
+export function routePathMatchesPlan(route, originCode, destinationCode) {
+  const path = route?.path ?? [];
+  if (!path.length) return Boolean(route?.steps?.length);
+  return path.length >= 2
+    && path[0] === originCode
+    && path.at(-1) === destinationCode
+    && path.every(code => Boolean(findNode(code)));
+}
+
+/**
+ * Recover the real vertical-transport type from normalized API metadata first,
+ * then from passenger-facing text. The order matters: "escada rolante" must
+ * never be reduced to the broader "escada" match.
+ */
+export function getStepTransitionType(step) {
+  if (!step?.isTransition) return '';
+  const explicit = String(
+    step.transitionType
+      ?? step.transition_type
+      ?? step.transition?.type
+      ?? '',
+  ).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const text = String(step.text ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const signal = `${explicit} ${text}`;
+
+  if (/\b(?:escalator|escada\s+rolante|rolante)\b/.test(signal)) return 'escalator';
+  if (/\b(?:stairs?|escadas?)\b/.test(signal)) return 'stairs';
+  if (/\b(?:elevators?|elevadores?|elevador|lift)\b/.test(signal)) return 'elevator';
+  return 'transition';
+}
+
+/**
+ * Client-side safety gate for the "evitar escadas" mode.
+ *
+ * A path containing stairs/escalators is incompatible. For a steps-only API
+ * response, an unidentified floor transition is incompatible too: without a
+ * path or explicit elevator signal, the client cannot honestly claim that the
+ * route avoids stairs. Explicitly unsafe step text always wins over a
+ * contradictory path.
+ */
+export function isRouteCompatibleWithAccessibleMode(route) {
+  const path = route?.path ?? [];
+  const pathNodes = path.map(findNode);
+  if (pathNodes.some(node => !node)) return false;
+  if (pathNodes.some(node => BLOCKED_ACCESSIBLE_TRANSITIONS.has(node?.type))) return false;
+
+  const transitions = (route?.steps ?? []).filter(step => step?.isTransition);
+  const types = transitions.map(getStepTransitionType);
+  if (types.some(type => BLOCKED_ACCESSIBLE_TRANSITIONS.has(type))) return false;
+  if (types.some(type => type !== 'elevator')) return false;
+
+  const transitionSegments = (route?.segments ?? [])
+    .filter(segment => segment?.type === 'transition');
+  const segmentTypes = transitionSegments
+    .map(segment => getStepTransitionType({
+      isTransition: true,
+      transitionType: segment.transitionType,
+      text: '',
+    }));
+  if (segmentTypes.some(type => type !== 'elevator')) return false;
+
+  const stepPairs = new Map();
+  const segmentPairs = new Map();
+  const addPair = (target, fromFloor, toFloor) => {
+    const key = `${fromFloor}->${toFloor}`;
+    target.set(key, (target.get(key) ?? 0) + 1);
+  };
+  transitions.forEach((step, index) => {
+    if (types[index] === 'elevator' && step.floorId && step.toFloor && step.floorId !== step.toFloor) {
+      addPair(stepPairs, step.floorId, step.toFloor);
+    }
+  });
+  transitionSegments.forEach((segment, index) => {
+    if (segmentTypes[index] === 'elevator'
+      && segment.fromFloor
+      && segment.toFloor
+      && segment.fromFloor !== segment.toFloor) {
+      addPair(segmentPairs, segment.fromFloor, segment.toFloor);
+    }
+  });
+  const elevatorPairs = new Map(
+    [...new Set([...stepPairs.keys(), ...segmentPairs.keys()])]
+      .map(key => [key, Math.max(stepPairs.get(key) ?? 0, segmentPairs.get(key) ?? 0)]),
+  );
+  const consumeElevatorPair = (fromFloor, toFloor) => {
+    if (!fromFloor || !toFloor || fromFloor === toFloor) return true;
+    const pair = `${fromFloor}->${toFloor}`;
+    const pairCount = elevatorPairs.get(pair) ?? 0;
+    if (pairCount <= 0) return false;
+    elevatorPairs.set(pair, pairCount - 1);
+    return true;
+  };
+  const floorCrossings = [];
+  for (let index = 0; index < pathNodes.length - 1; index++) {
+    const from = pathNodes[index];
+    const to = pathNodes[index + 1];
+    if (!from.floorId || !to.floorId) return false;
+    if (from.floorId === to.floorId) continue;
+    floorCrossings.push({
+      fromFloor: from.floorId,
+      toFloor: to.floorId,
+      hasElevatorNode: from.type === 'elevator' || to.type === 'elevator',
+    });
+  }
+  // Reserve matching API metadata for crossings already proven by an elevator
+  // node before evaluating generic crossings. Otherwise the result depends on
+  // path order and one metadata entry can accidentally validate the wrong edge.
+  for (const crossing of floorCrossings.filter(item => item.hasElevatorNode)) {
+    consumeElevatorPair(crossing.fromFloor, crossing.toFloor);
+  }
+  for (const crossing of floorCrossings.filter(item => !item.hasElevatorNode)) {
+    if (!consumeElevatorPair(crossing.fromFloor, crossing.toFloor)) return false;
+  }
+
+  if (!path.length) {
+    let currentFloor = findNode(planState.originCode)?.floorId ?? '';
+    for (const step of route?.steps ?? []) {
+      const stepFloor = step.floorId || currentFloor;
+      if (!consumeElevatorPair(currentFloor, stepFloor)) return false;
+      const nextFloor = step.toFloor || stepFloor;
+      if (!consumeElevatorPair(stepFloor, nextFloor)) return false;
+      currentFloor = nextFloor;
+    }
+    const destinationFloor = findNode(planState.destinationCode)?.floorId ?? '';
+    if (!consumeElevatorPair(currentFloor, destinationFloor)) return false;
+  }
+  return true;
 }
 
 export function classifyNode(node) {
@@ -23,7 +159,150 @@ export function classifyNode(node) {
   return 'internal';
 }
 
-export function buildFromPath(path, accessible) {
+// A bend must be both visually meaningful and far enough from its neighbours
+// to be useful while walking. Distances are physical metres after the airport
+// map calibration, so these limits stay stable if the SVG coordinate range
+// changes. A 50-degree threshold deliberately ignores gentle corridor drift.
+const TURN_MIN_ANGLE_DEGREES = 50;
+const U_TURN_MIN_ANGLE_DEGREES = 150;
+const TURN_SAMPLE_METERS = 5;
+const TURN_MIN_LEG_METERS = 3;
+const TURN_MIN_SPACING_METERS = 7;
+
+function routeNodeAt(path, index, floorId) {
+  const node = findNode(path[index]);
+  return node
+    && node.floorId === floorId
+    && Number.isFinite(node.x)
+    && Number.isFinite(node.y)
+    ? node
+    : null;
+}
+
+/** Find a stable point on one side of a bend instead of trusting tiny edges. */
+function sampleTurnLeg(path, pivotIndex, direction, minIndex, maxIndex, floorId) {
+  let index = pivotIndex;
+  let node = routeNodeAt(path, index, floorId);
+  if (!node) return null;
+
+  let walked = 0;
+  while (index + direction >= minIndex && index + direction <= maxIndex) {
+    const nextIndex = index + direction;
+    const next = routeNodeAt(path, nextIndex, floorId);
+    if (!next) return null;
+    walked += segmentMeters(node, next);
+    index = nextIndex;
+    node = next;
+    if (walked >= TURN_SAMPLE_METERS) return { node, walked };
+  }
+
+  return walked >= TURN_MIN_LEG_METERS ? { node, walked } : null;
+}
+
+function turnAt(path, pivotIndex, runStart, runEnd, floorId) {
+  const pivot = routeNodeAt(path, pivotIndex, floorId);
+  if (!pivot) return null;
+
+  // The node immediately outside an internal run may be an origin, POI or
+  // destination. It is valid geometric context, but never becomes a turn step.
+  const minIndex = Math.max(0, runStart - 1);
+  const maxIndex = Math.min(path.length - 1, runEnd + 1);
+  const before = sampleTurnLeg(path, pivotIndex, -1, minIndex, maxIndex, floorId);
+  const after = sampleTurnLeg(path, pivotIndex, 1, minIndex, maxIndex, floorId);
+  if (!before || !after) return null;
+
+  const incoming = { x: pivot.x - before.node.x, y: pivot.y - before.node.y };
+  const outgoing = { x: after.node.x - pivot.x, y: after.node.y - pivot.y };
+  const incomingLength = Math.hypot(incoming.x, incoming.y);
+  const outgoingLength = Math.hypot(outgoing.x, outgoing.y);
+  if (!incomingLength || !outgoingLength) return null;
+
+  const cosine = clamp(
+    (incoming.x * outgoing.x + incoming.y * outgoing.y) / (incomingLength * outgoingLength),
+    -1,
+    1,
+  );
+  const angle = Math.acos(cosine) * 180 / Math.PI;
+  if (angle < TURN_MIN_ANGLE_DEGREES) return null;
+
+  if (angle >= U_TURN_MIN_ANGLE_DEGREES) {
+    return { index: pivotIndex, angle, direction: 'around' };
+  }
+
+  // SVG coordinates grow downwards on Y: east -> south has a positive cross
+  // product and is therefore a passenger's right turn.
+  const cross = incoming.x * outgoing.y - incoming.y * outgoing.x;
+  if (Math.abs(cross) < Number.EPSILON) return null;
+  return { index: pivotIndex, angle, direction: cross > 0 ? 'right' : 'left' };
+}
+
+function findTurns(path, runStart, runEnd, floorId) {
+  const candidates = [];
+  for (let index = runStart; index <= runEnd; index++) {
+    const turn = turnAt(path, index, runStart, runEnd, floorId);
+    if (turn) candidates.push(turn);
+  }
+
+  // Dense graphs can describe one physical corner with several close nodes.
+  // Keep only the clearest angle in that short cluster so the timeline does
+  // not turn a single manoeuvre into repeated commands.
+  const turns = [];
+  candidates.forEach(candidate => {
+    const previous = turns.at(-1);
+    if (previous && pathMeters(path, previous.index, candidate.index) < TURN_MIN_SPACING_METERS) {
+      if (candidate.angle > previous.angle) turns[turns.length - 1] = candidate;
+      return;
+    }
+    turns.push(candidate);
+  });
+  return turns;
+}
+
+function walkingInstruction(direction) {
+  if (direction === 'right') {
+    return { text: 'Vire à direita e siga pelo corredor.', icon: 'lucide:corner-up-right' };
+  }
+  if (direction === 'left') {
+    return { text: 'Vire à esquerda e siga pelo corredor.', icon: 'lucide:corner-up-left' };
+  }
+  if (direction === 'around') {
+    return { text: 'Faça o retorno e siga pelo corredor.', icon: 'lucide:undo-2' };
+  }
+  return { text: 'Siga pelo corredor.', icon: 'solar:arrow-right-bold' };
+}
+
+function buildWalkingSteps(path, runStart, runEnd, floorId) {
+  const turns = findTurns(path, runStart, runEnd, floorId);
+  const starts = [];
+  if (!turns.length || turns[0].index !== runStart) {
+    starts.push({ index: runStart, direction: 'straight' });
+  }
+  starts.push(...turns);
+
+  // Share the exit node with the following POI/transition step. The semantic
+  // step still starts at that node, while the current overlay owns the edge
+  // walked to reach it instead of collapsing to a zero-length highlight.
+  const exitIndex = runEnd + 1;
+  const runExit = routeNodeAt(path, exitIndex, floorId) ? exitIndex : runEnd;
+
+  return starts.map((entry, index) => {
+    const instruction = walkingInstruction(entry.direction);
+    const nextStart = starts[index + 1]?.index ?? runExit;
+    return {
+      text: instruction.text,
+      isTransition: false,
+      floorId,
+      toFloor: floorId,
+      icon: instruction.icon,
+      nodeType: 'corridor',
+      rawFrom: entry.index,
+      rawTo: Math.max(entry.index, nextStart),
+      landmarkCode: null,
+    };
+  });
+}
+
+export function buildFromPath(path) {
   const semantic = [];
   let i = 0;
 
@@ -38,7 +317,6 @@ export function buildFromPath(path, accessible) {
     const cls  = classifyNode(node);
 
     if (cls === 'vertical') {
-      if (accessible && (node.type === 'stairs' || node.type === 'escalator')) { i++; continue; }
       const fromFloor = floorAt(i - 1);
       const toFloor   = floorAt(i + 1);
       // Use presentation layer for human-readable instruction text
@@ -56,9 +334,12 @@ export function buildFromPath(path, accessible) {
 
     if (cls === 'named_poi') {
       const isDest = node.code === planState.destinationCode;
+      const isOrigin = i === 0 && node.code === planState.originCode;
       const poiLabel = getPublicNodeLabel(node);
       semantic.push({
-        text: isDest ? `Chegue a ${poiLabel}.` : `Passe por ${poiLabel}.`,
+        text: isDest
+          ? `Chegue a ${poiLabel}.`
+          : isOrigin ? `Comece em ${poiLabel}.` : `Passe por ${poiLabel}.`,
         isTransition: false, floorId: node.floorId, toFloor: node.floorId,
         icon: getNodeMeta(node.type).icon, nodeType: node.type,
         rawFrom: i, rawTo: i,
@@ -78,19 +359,7 @@ export function buildFromPath(path, accessible) {
     }
     if (!bufNodes.length) { i++; continue; }
 
-    // Generate one walking step for segment
-    const prev = semantic[semantic.length - 1];
-    const text = 'Siga pelo corredor.';
-    if (!prev || prev.text !== text || prev.floorId !== bufFloor) {
-      semantic.push({
-        text, isTransition: false, floorId: bufFloor, toFloor: bufFloor,
-        icon: 'solar:arrow-right-bold', nodeType: 'corridor',
-        rawFrom: bufStart, rawTo: i - 1,
-        landmarkCode: null,
-      });
-    } else {
-      prev.rawTo = i - 1;
-    }
+    semantic.push(...buildWalkingSteps(path, bufStart, i - 1, bufFloor));
   }
 
   // Ensure destination is always the last step
@@ -112,17 +381,37 @@ export function buildFromPath(path, accessible) {
   return semantic.filter(s => s.text);
 }
 
-export function buildFromSteps(steps, accessible) {
+export function buildFromSteps(steps) {
   if (!steps.length) return [];
   const semantic = [];
   let buf = [];
+
+  const transitionStep = step => {
+    const text = cleanStepText(step.text);
+    if (!text) return null;
+    const transitionType = getStepTransitionType(step);
+    const nodeType = VERTICAL_TYPES.has(transitionType) ? transitionType : 'transition';
+    return {
+      text,
+      isTransition: true,
+      floorId: step.floorId,
+      toFloor: step.toFloor || step.floorId,
+      icon: nodeType === 'transition'
+        ? 'solar:round-transfer-vertical-bold'
+        : getNodeMeta(nodeType).icon,
+      nodeType,
+      rawFrom: 0,
+      rawTo: 0,
+      landmarkCode: null,
+    };
+  };
 
   const flush = () => {
     if (!buf.length) return;
     const trans = buf.find(s => s.isTransition);
     if (trans) {
-      const t = cleanStepText(trans.text);
-      if (t) semantic.push({ text: t, isTransition: true, floorId: trans.floorId, toFloor: trans.floorId, icon: 'solar:round-transfer-vertical-bold', nodeType: 'elevator', rawFrom: 0, rawTo: 0, landmarkCode: null });
+      const normalized = transitionStep(trans);
+      if (normalized) semantic.push(normalized);
     } else {
       const goodTexts = buf.map(s => s.text).filter(t => t && !isInternalText(t));
       const text = goodTexts.length ? cleanStepText(goodTexts[goodTexts.length - 1]) : 'Siga pelo corredor.';
@@ -134,8 +423,12 @@ export function buildFromSteps(steps, accessible) {
   };
 
   steps.forEach(step => {
-    if (accessible && /escada|escalator/i.test(step.text) && !/elev/i.test(step.text)) return;
-    if (step.isTransition) { flush(); const t = cleanStepText(step.text); if (t) semantic.push({ text: t, isTransition: true, floorId: step.floorId, toFloor: step.floorId, icon: 'solar:round-transfer-vertical-bold', nodeType: 'elevator', rawFrom: 0, rawTo: 0, landmarkCode: null }); return; }
+    if (step.isTransition) {
+      flush();
+      const normalized = transitionStep(step);
+      if (normalized) semantic.push(normalized);
+      return;
+    }
     if (isInternalText(step.text)) { buf.push(step); } else { flush(); const t = cleanStepText(step.text); if (t) semantic.push({ text: t, isTransition: false, floorId: step.floorId, toFloor: step.floorId, icon: 'solar:arrow-right-bold', nodeType: 'corridor', rawFrom: 0, rawTo: 0, landmarkCode: null }); }
   });
   flush();
@@ -171,7 +464,8 @@ export function cleanStepText(raw) {
    5b. WALKING DISTANCE — measured along the route path
 
    Node coordinates are abstract map units; APP_CONFIG.distance.metersPerUnit
-   converts them to metres. Nothing here is hardcoded per route.
+   applies the empirical airport calibration. The result is useful wayfinding
+   guidance, not surveyed geometry, so formatted values are marked approximate.
    ============================================================ */
 
 export function segmentMeters(a, b) {
@@ -199,7 +493,7 @@ export function roundMeters(m) {
 export function formatMeters(m) {
   const r = roundMeters(m);
   if (!r) return '';
-  return r >= 1000 ? `${(r / 1000).toFixed(1).replace('.', ',')} km` : `${r} m`;
+  return r >= 1000 ? `~${(r / 1000).toFixed(1).replace('.', ',')} km` : `~${r} m`;
 }
 
 /**
@@ -225,4 +519,3 @@ export function countFloorChanges() {
     s => s.isTransition && s.toFloor && s.toFloor !== s.floorId
   ).length;
 }
-

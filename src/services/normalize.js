@@ -40,13 +40,11 @@ export function normalizeMap(raw) {
     return nodeShell;
   });
 
-  const floorIds = [...new Set(
-    rawNodes.map(n => String(n?.floor ?? '')).filter(Boolean)
-  )].sort();
-
-  const floors = (floorIds.length ? floorIds
-    : [...new Set(nodes.map(n => n.floorId))].sort()
-  ).map(id => ({ id, name: FLOOR_LABELS[id] ?? `Piso ${id}` }));
+  // Derive floors from the normalized nodes so mixed API aliases (`floor`,
+  // `floor_id`, `level`) cannot silently drop a level when any `floor` key
+  // happens to be present in the same payload.
+  const floorIds = [...new Set(nodes.map(node => node.floorId).filter(Boolean))].sort();
+  const floors = floorIds.map(id => ({ id, name: FLOOR_LABELS[id] ?? `Piso ${id}` }));
 
   return { floors, nodes };
 }
@@ -82,12 +80,46 @@ export function normalizeSeg(s) {
   return { type: 'floor', floorId, nodeCodes: extractCodes(s) };
 }
 
+function hasTransitionLanguage(value) {
+  const text = String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  return /\b(?:elevador(?:es)?|elevator|lift|escada(?:s)?(?:\s+rolante)?|escalator|suba|subir|desca|descer)\b/.test(text);
+}
+
 export function normalizeStep(step, index) {
-  if (typeof step === 'string') return { index, text: step, floorId: '', isTransition: false };
+  if (typeof step === 'string') return {
+    index,
+    text: step,
+    floorId: '',
+    toFloor: '',
+    isTransition: hasTransitionLanguage(step),
+    transitionType: '',
+  };
   const text = String(first(step?.instruction, step?.text, step?.title, step?.description, 'Siga.'));
   const floorId = String(first(step?.floor, step?.floor_id, step?.level, ''));
-  const isTransition = !!(step?.transition || step?.transition_type || /elev|escad|suba|desc/i.test(text));
-  return { index, text, floorId, isTransition };
+  const transitionType = String(first(
+    step?.transition?.type,
+    step?.transition_type,
+    step?.transitionType,
+    step?.vertical_type,
+    '',
+  )).toLowerCase();
+  const toFloor = String(first(
+    step?.transition?.to_floor,
+    step?.transition?.toFloor,
+    step?.to_floor,
+    step?.toFloor,
+    '',
+  ));
+  const isTransition = !!(
+    step?.transition
+    || transitionType
+    || (toFloor && toFloor !== floorId)
+    || hasTransitionLanguage(text)
+  );
+  return { index, text, floorId, toFloor, isTransition, transitionType };
 }
 
 export function extractCodes(src) {

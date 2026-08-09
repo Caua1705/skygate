@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { appData, planState } from '../src/state/appState.js';
 import {
+  effectiveFlightDay,
+  flightDateForDay,
   gateCloseMarginMin,
   minutesUntilFlight,
   slackFor,
@@ -9,6 +11,7 @@ import {
 const previousAirport = appData.airport;
 const previous = {
   flightTime: planState.flightTime,
+  flightDate: planState.flightDate,
   flightDay: planState.flightDay,
   flightType: planState.flightType,
 };
@@ -16,6 +19,7 @@ const previous = {
 try {
   appData.airport = { slug: 'fortaleza' };
   planState.flightTime = '09:00';
+  planState.flightDate = '';
   planState.flightType = 'domestic';
   const now = new Date(2026, 7, 2, 10, 0, 0);
 
@@ -34,6 +38,15 @@ try {
   planState.flightType = 'international';
   assert.equal(gateCloseMarginMin(), 40);
   assert.equal(slackFor(10, now).slackMin, domesticSlack - 20);
+
+  const beforeMidnight = new Date(2026, 7, 8, 23, 50, 0);
+  const afterMidnight = new Date(2026, 7, 9, 0, 10, 0);
+  planState.flightTime = '00:30';
+  planState.flightDay = 'tomorrow';
+  planState.flightDate = flightDateForDay('tomorrow', beforeMidnight);
+  assert.equal(minutesUntilFlight(beforeMidnight), 40);
+  assert.equal(minutesUntilFlight(afterMidnight), 20, 'the flight keeps its real date across midnight');
+  assert.equal(effectiveFlightDay(afterMidnight), 'today');
 } finally {
   appData.airport = previousAirport;
   Object.assign(planState, previous);

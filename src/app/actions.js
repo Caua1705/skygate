@@ -9,7 +9,7 @@ import {
   releaseModalBackground,
 } from './events.js';
 import { app, appData, mapState, navState, planState, uiState } from '../state/appState.js';
-import { render, updateRouteOverlay } from './router.js';
+import { persistJourney, render, updateRouteOverlay } from './router.js';
 import { findNode } from '../state/selectors.js';
 import { renderInstructionCardInner, renderOverlayOverview } from '../screens/navigation/NavigationScreen.js';
 import { renderTimelineList } from '../screens/navigation/NavigationTimeline.js';
@@ -20,15 +20,20 @@ import {
   renderChoiceOptions,
   renderMarginBanner,
 } from '../screens/routeSummary/RouteSummaryScreen.js';
-import { gateCloseClock, hasFlight } from '../services/flightSlack.js';
+import {
+  effectiveFlightDay,
+  flightDateForDay,
+  gateCloseClock,
+  hasFlight,
+} from '../services/flightSlack.js';
 import { esc } from '../utils/format.js';
 import { switchFloor } from '../map/floorSwitch.js';
 import { autoFitRoute, fitStepToView } from '../map/mapFit.js';
 import { prefersReducedMotion , $ } from '../utils/dom.js';
 import { hasPlaceDetails } from '../components/PlaceDetailSheet.js';
 import { attachStepDistances, buildSemanticSteps, formatMeters, pathMeters, segmentMeters } from '../services/routeSteps.js';
-import { findOption, scoreOptions } from '../services/routeOptions.js';
-import { buildSegments, normalizeStep } from '../services/normalize.js';
+import { findOption, routeForSelectedOption, scoreOptions } from '../services/routeOptions.js';
+import { getCurrentRouteNode } from '../map/floorMapBuilder.js';
 
 /* ============================================================
    14. ACTIONS
@@ -238,6 +243,16 @@ function unmountPlaceDetail() {
 export function tracePlaceRoute(code) {
   uiState.placeDetailId = '';
   uiState.placeRouteContext = null;
+
+  // When this action comes from active navigation, replan from the last
+  // position the passenger explicitly confirmed instead of the trip's old
+  // origin. selectLocation retains the existing validation, cleanup, render
+  // and focus flow after this origin correction.
+  if (app.mode === 'navigation' && navState.route) {
+    const currentCode = getCurrentRouteNode()?.code;
+    if (currentCode === code) { render(); return; }
+    if (currentCode && currentCode !== code) planState.originCode = currentCode;
+  }
   selectLocation('destination', code);
 }
 
@@ -329,6 +344,7 @@ export function toggleAccessibleRoute() {
   } else {
     render();
   }
+  persistJourney();
 }
 
 export function openCategorySearch(catKey) {
@@ -368,19 +384,29 @@ export function editRoute() {
 export function setFlightTime(value) {
   if (uiState.loading === 'route') return;
   planState.flightTime = String(value ?? '');
+  if (hasFlight()) {
+    planState.flightDay = effectiveFlightDay();
+    planState.flightDate = flightDateForDay(planState.flightDay);
+  } else {
+    planState.flightDate = '';
+  }
   refreshFlightField();
+  persistJourney();
 }
 
 export function setFlightDay(value) {
   if (uiState.loading === 'route' || !['today', 'tomorrow'].includes(value)) return;
   planState.flightDay = value;
+  planState.flightDate = hasFlight() ? flightDateForDay(value) : '';
   refreshFlightField();
+  persistJourney();
 }
 
 export function setFlightType(value) {
   if (uiState.loading === 'route' || !['domestic', 'international'].includes(value)) return;
   planState.flightType = value;
   refreshFlightField();
+  persistJourney();
 }
 
 function refreshFlightField() {
@@ -398,13 +424,14 @@ function refreshFlightField() {
   // Must match flightField() in HomeScreen.js — the estimated gate closing is
   // never shown as a bare time.
   help.innerHTML = filled
-    ? `${planState.flightDay === 'tomorrow' ? 'Amanhã' : 'Hoje'} · portão fecha <strong>~${esc(gateCloseClock())}</strong> (estimado).`
+    ? `${effectiveFlightDay() === 'tomorrow' ? 'Amanhã' : 'Hoje'} · portão fecha <strong>~${esc(gateCloseClock())}</strong> (estimado).`
     : 'Adicione seu voo e veja quanto tempo sobra.';
 }
 
 export function clearFlightTime() {
   if (uiState.loading === 'route') return;
   planState.flightTime = '';
+  planState.flightDate = '';
   render();
   requestAnimationFrame(() => {
     const input = $('flight-time');
@@ -457,6 +484,7 @@ export function selectRouteOption(id) {
     el.classList.toggle('is-selected', el.querySelector('.route-option-input')?.value === id);
   });
   refreshChoiceFooter();
+  persistJourney();
 }
 
 /** The passenger accepted that this route arrives after estimated gate close. */
@@ -514,30 +542,18 @@ function isSelectedRouteUnviable() {
  * Carry the chosen way into navigation.
  *
  * Alternatives are accepted only when the backend supplies a complete,
- * navigable path. All derived route state is rebuilt atomically here so the
- * floor map, instructions and progress always describe the same option.
+ * navigable path. The direct API route may intentionally be steps-only; its
+ * original steps and segments stay intact so progress remains restorable.
  */
 function applySelectedRouteOption() {
   const option = findOption(navState.routeOptions ?? [], navState.selectedOptionId);
-  const path = option?.path ?? [];
-  if (!option || !path.length) return;
-
   const base = navState.route;
-  if (base?.optionId === option.id) return;
+  if (!option || !base || base.optionId === option.id) return;
 
-  const steps = option.steps?.length
-    ? option.steps.map((step, index) => normalizeStep(step, index))
-    : [];
-  const segments = buildSegments(path);
-  navState.route = {
-    ...base,
-    optionId: option.id,
-    path,
-    steps,
-    segments,
-    warnings: option.warnings ?? [],
-    estimatedMinutes: option.minutes,
-  };
+  const selectedRoute = routeForSelectedOption(base, option);
+  if (!selectedRoute) return;
+  navState.route = selectedRoute;
+  const { path, segments } = selectedRoute;
   navState.routeFloorIds = new Set(
     segments.filter(segment => segment.type === 'floor').map(segment => segment.floorId).filter(Boolean)
   );
@@ -830,6 +846,7 @@ function applyStepChange(idx) {
   }
 
   announceStep(idx, step);
+  persistJourney();
 }
 
 /**

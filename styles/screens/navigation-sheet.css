@@ -395,6 +395,7 @@
 }
 .sg-navsheet__status strong { color: var(--text); font-weight: var(--weight-bold); }
 .sg-navsheet__status iconify-icon { color: var(--sky-ink); font-size: 14px; }
+.sg-navsheet__status-time { justify-content: flex-end; }
 
 .sg-navsheet .sg-navsheet__rail { margin: 5px 0 var(--space-2); gap: 0; }
 .sg-navsheet .sg-navsheet__rail .ds-steprail__label {
@@ -513,6 +514,15 @@
 
 @media (max-height: 720px) {
   .sg-navsheet__foot-hint { display: none; }
+}
+
+@media (max-height: 700px) {
+  .sg-ds.sg-navsheet { padding-top: var(--space-2); }
+  .sg-navsheet__pinned { padding-bottom: var(--space-1); }
+  .sg-navsheet .sg-navsheet__rail { margin-bottom: var(--space-1); }
+  .sg-navsheet__head { margin-bottom: var(--space-1); }
+  .sg-navsheet .sg-nav-tabs--sheet { margin-bottom: var(--space-1); }
+  .sg-navsheet__foot { padding-top: var(--space-1); }
 }
 
 /* The right panel needs side-facing elevation once the map and guidance sit

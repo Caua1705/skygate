@@ -403,6 +403,9 @@ export function bindSearchItemEvents() {
 // Keyboard
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
+    // The modal help dialog owns Escape through its `cancel` event. Letting
+    // this fall through would close Help and leave active navigation too.
+    if ($('help-dialog')) return;
     if (uiState.placeDetailId) { closePlaceDetail(); return; }
     if (uiState.modalNodeCode) { closeLocationDetail(); return; }
     if (uiState.showOverview)  { closeOverview(); return; }

@@ -1,4 +1,4 @@
-import { $ } from '../utils/dom.js';
+import { $, prefersReducedMotion } from '../utils/dom.js';
 import { getFloorTransform } from '../state/selectors.js';
 import { mapState } from '../state/appState.js';
 import { clamp } from '../utils/format.js';
@@ -16,9 +16,9 @@ import { buildLabelLayerHtml } from './floorMapBuilder.js';
 
    Only ANIMATED transforms qualify. duration > 0 means a deliberate
    re-frame (a fit, a floor change, a recentre) — a handful per session.
-   duration === 0 is a drag or a pinch, which arrives once per frame with a
-   finger down; re-laying out captions there would rebuild the layer sixty
-   times a second for a view the user is still choosing. */
+   duration === 0 is normally a drag or pinch, which arrives once per frame.
+   Under reduced motion it is also an instant auto-fit, so the debounced
+   relayout must run once after that transform settles. */
 let _labelRelayout = 0;
 function relayoutLabelsAfter(duration) {
   clearTimeout(_labelRelayout);
@@ -31,7 +31,7 @@ function relayoutLabelsAfter(duration) {
 export function applyMapTransform(duration = 0) {
   const wrapper = document.querySelector('#navigation-panel.sg-map-wrapper');
   if (!wrapper) return;
-  if (duration > 0) relayoutLabelsAfter(duration);
+  if (duration > 0 || prefersReducedMotion()) relayoutLabelsAfter(duration);
   const { x, y, scale } = getFloorTransform(mapState.selectedFloorId);
   const inner = wrapper.querySelector('.sg-map-inner');
   if (inner) {

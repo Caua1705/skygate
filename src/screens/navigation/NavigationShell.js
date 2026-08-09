@@ -93,13 +93,52 @@ export function getEstimatedRemainingMinutes() {
 export function getNavigationTiming() {
   const remaining = getEstimatedRemainingMinutes();
   const gate = hasFlight() ? gateCloseClock() : '';
+  const lastStep = Math.max(0, navState.semanticSteps.length - 1);
+  const isFinal = Boolean(navState.semanticSteps.length)
+    && navState.activeStepIndex >= lastStep;
+  const remainingText = isFinal
+    ? 'Etapa final'
+    : remaining
+      ? `~${remaining} min`
+      : 'Tempo indisponível';
+  const remainingAria = isFinal
+    ? 'Etapa final'
+    : remaining
+      ? `Tempo restante estimado: ${remaining} ${remaining === 1 ? 'minuto' : 'minutos'}`
+      : 'Tempo restante indisponível';
+  const ariaParts = [remainingAria];
+  if (gate) ariaParts.push(`Fechamento estimado do portão por volta de ${gate}`);
+
   return {
     remaining,
+    remainingText,
+    isFinal,
     gate,
-    ariaLabel: gate
-      ? `Fechamento estimado do portão por volta de ${gate}`
-      : `Tempo restante estimado: ${remaining} minutos`,
+    ariaLabel: `${ariaParts.join('. ')}.`,
   };
+}
+
+/**
+ * One compact timing sentence shared by Map and Steps.
+ *
+ * Keeping both estimates under one accessible name prevents the visible
+ * clock and gate deadline from being announced as unrelated or duplicated
+ * facts. The short visible form preserves the narrow status bands.
+ */
+export function renderNavigationTiming(className = '') {
+  const timing = getNavigationTiming();
+  const classes = ['sg-navtime', className].filter(Boolean).join(' ');
+
+  return `<span class="${esc(classes)}" aria-label="${esc(timing.ariaLabel)}">
+    ${dsIcon('solar:clock-circle-bold')}
+    <strong>${esc(timing.remainingText)}</strong>
+    ${!timing.gate && !timing.isFinal ? '<span>restantes</span>' : ''}
+    ${timing.gate ? `
+      <span class="sg-navtime__sep" aria-hidden="true">·</span>
+      ${dsIcon('lucide:plane-takeoff')}
+      <span class="sg-navtime__gate">Portão <strong>~${esc(timing.gate)}</strong> <span class="sg-navtime__estimate">(est.)</span></span>
+    ` : ''}
+  </span>`;
 }
 
 /**
@@ -112,14 +151,9 @@ export function getNavigationTiming() {
 export function renderSummaryStrip() {
   const total   = navState.semanticSteps.length;
   const active  = navState.activeStepIndex;
-  const timing = getNavigationTiming();
 
   return `<div class="sg-tl__strip" aria-label="Resumo da navegação">
-    <span class="sg-tl__strip-item" aria-label="${esc(timing.ariaLabel)}">
-      ${timing.gate
-        ? `${dsIcon('lucide:plane-takeoff')}Portão <b>~${esc(timing.gate)}</b> (estimado)`
-        : `${dsIcon('solar:clock-circle-bold')}<b>${esc(String(timing.remaining))}</b> min restantes`}
-    </span>
+    ${renderNavigationTiming('sg-tl__strip-item sg-tl__strip-item--timing')}
     <span class="sg-tl__strip-sep" aria-hidden="true"></span>
     <span class="sg-tl__strip-item">
       ${dsIcon('solar:routing-2-bold')}Etapa <b>${Math.min(active + 1, total)}</b> de ${total}

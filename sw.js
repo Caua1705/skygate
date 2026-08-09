@@ -1,5 +1,14 @@
 const CACHE_PREFIX = 'skygate-';
-const CACHE_NAME = `${CACHE_PREFIX}shell-v3`;
+const SHELL_CACHE_NAME = `${CACHE_PREFIX}shell-v4`;
+const RUNTIME_CACHE_NAME = `${CACHE_PREFIX}runtime-v1`;
+const ACTIVE_CACHE_NAMES = new Set([SHELL_CACHE_NAME, RUNTIME_CACHE_NAME]);
+const TRUSTED_RUNTIME_ORIGINS = new Set([
+  'https://api.gatesky.com.br',
+  'https://code.iconify.design',
+  'https://api.iconify.design',
+  'https://fonts.googleapis.com',
+  'https://fonts.gstatic.com',
+]);
 const PRECACHE = [
   '/',
   '/index.html',
@@ -67,6 +76,7 @@ const PRECACHE = [
   '/src/services/semanticStepBuilder.js',
   '/src/state/appState.js',
   '/src/state/createStore.js',
+  '/src/state/sessionPersistence.js',
   '/src/state/selectors.js',
   '/src/utils/dom.js',
   '/src/utils/format.js',
@@ -75,12 +85,13 @@ const PRECACHE = [
   '/assets/logo-symbol.png',
   '/assets/apple-touch-icon.png',
   '/assets/favicon.ico',
+  '/assets/favicon-32.png',
   '/assets/icon-192-maskable.png',
   '/assets/icon-512-maskable.png',
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(PRECACHE)));
+  event.waitUntil(caches.open(SHELL_CACHE_NAME).then(cache => cache.addAll(PRECACHE)));
   self.skipWaiting();
 });
 
@@ -89,19 +100,46 @@ self.addEventListener('activate', event => {
     caches.keys()
       .then(keys => Promise.all(
         keys
-          .filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+          .filter(key => key.startsWith(CACHE_PREFIX) && !ACTIVE_CACHE_NAMES.has(key))
           .map(key => caches.delete(key))
       ))
       .then(() => self.clients.claim()),
   );
 });
 
+function staleWhileRevalidate(event, request, cacheName) {
+  const cachePromise = caches.open(cacheName);
+  const revalidation = cachePromise.then(cache => (
+    fetch(request).then(response => {
+      if (!response.ok && response.type !== 'opaque') return response;
+      return cache.put(request, response.clone())
+        .then(() => response, () => response);
+    })
+  ));
+
+  // Keep the refresh alive after a cached response is returned, while making
+  // expected offline failures harmless to the service-worker lifecycle.
+  event.waitUntil(revalidation.then(() => undefined, () => undefined));
+  event.respondWith(
+    cachePromise
+      .then(cache => cache.match(request))
+      .then(cached => cached || revalidation)
+      .catch(() => Response.error()),
+  );
+}
+
 self.addEventListener('fetch', event => {
   const request = event.request;
   if (request.method !== 'GET') return;
 
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+  const isSameOrigin = url.origin === self.location.origin;
+  if (!isSameOrigin) {
+    if (!TRUSTED_RUNTIME_ORIGINS.has(url.origin)) return;
+    if (request.headers.has('authorization')) return;
+    staleWhileRevalidate(event, request, RUNTIME_CACHE_NAME);
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith(
@@ -109,7 +147,7 @@ self.addEventListener('fetch', event => {
         .then(response => {
           if (response.ok) {
             const copy = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put('/index.html', copy));
+            caches.open(SHELL_CACHE_NAME).then(cache => cache.put('/index.html', copy));
           }
           return response;
         })
@@ -118,23 +156,5 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then(cached => {
-      const network = fetch(request).then(response => {
-        if (response.ok) {
-          const copy = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
-        }
-        return response;
-      });
-      // A stale cached response wins immediately. Still refresh it in the
-      // background, but absorb offline failures so they do not become an
-      // unhandled promise rejection in the service worker.
-      if (cached) {
-        network.catch(() => {});
-        return cached;
-      }
-      return network;
-    }),
-  );
+  staleWhileRevalidate(event, request, SHELL_CACHE_NAME);
 });

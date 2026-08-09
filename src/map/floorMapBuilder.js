@@ -46,7 +46,12 @@ export function getCurrentRouteNode() {
 }
 
 export function getFloorBounds(floorId) {
-  const ns = appData.nodes.filter(n => n.floorId === floorId && (n.x || n.y));
+  // (0, 0) is a valid map coordinate, commonly used by the first node on a
+  // floor. Truthiness used to discard it and could project that node far
+  // outside the plan after normalising the remaining bounds.
+  const ns = appData.nodes.filter(n =>
+    n.floorId === floorId && Number.isFinite(n.x) && Number.isFinite(n.y)
+  );
   if (!ns.length) return { minX: 0, maxX: 100, minY: 0, maxY: 100, w: 100, h: 100 };
   const xs = ns.map(n => n.x), ys = ns.map(n => n.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
@@ -55,9 +60,19 @@ export function getFloorBounds(floorId) {
 }
 
 export function nodeToSvg(node, bounds) {
+  const innerW = MAP_W - MAP_PAD * 2;
+  const innerH = MAP_H - MAP_PAD * 2;
+  // One scale for both axes preserves angles and relative distances. Scaling
+  // x/y independently made a diagonal corridor change direction whenever the
+  // source floor's aspect ratio differed from the 900x600 canvas.
+  const scale = Math.min(innerW / bounds.w, innerH / bounds.h);
+  const drawnW = bounds.w * scale;
+  const drawnH = bounds.h * scale;
+  const offsetX = MAP_PAD + (innerW - drawnW) / 2;
+  const offsetY = MAP_PAD + (innerH - drawnH) / 2;
   return {
-    x: MAP_PAD + ((node.x - bounds.minX) / bounds.w) * (MAP_W - MAP_PAD * 2),
-    y: MAP_PAD + ((node.y - bounds.minY) / bounds.h) * (MAP_H - MAP_PAD * 2),
+    x: offsetX + (node.x - bounds.minX) * scale,
+    y: offsetY + (node.y - bounds.minY) * scale,
   };
 }
 
@@ -135,7 +150,10 @@ export function buildBaseFloorSvg(floorId) {
 
     <!-- Zone divider lines (barely there — a hint of structure) -->
     ${Array.from({ length: 3 }, (_, i) => {
-      const baseX = MAP_PAD + ((i + 1) * xRange / bounds.w) * (MAP_W - MAP_PAD * 2);
+      const baseX = toSvg({
+        x: bounds.minX + (i + 1) * xRange,
+        y: bounds.minY,
+      }).x;
       return `<line class="sg-map__divider" x1="${baseX.toFixed(1)}" y1="${(tY + 26).toFixed(1)}" x2="${baseX.toFixed(1)}" y2="${(tY + tH - 26).toFixed(1)}"/>`;
     }).join('')}
 
@@ -173,22 +191,29 @@ function overlaps(a, b, m = LBL.gap) {
          a.y - m < b.y + b.h && a.y + a.h + m > b.y;
 }
 
+const FULL_MAP_LABEL_FRAME = Object.freeze({ x: 2, y: 2, w: MAP_W - 4, h: MAP_H - 4 });
+
 /**
- * Anchor offsets tried in order, as [dx, dy] of the box centre relative to
- * the marker. Sides first (they read best), then the diagonals.
- *
- * LEFT is tried before right, and that ordering is deliberate: the floor
- * and recentre FABs float over the right edge of the map on every screen
- * size. This placer works in map units and cannot see them, so a caption
- * that defaults rightwards slides under the controls and gets chopped —
- * which is exactly what the active-step caption did on a phone. Going left first
- * costs nothing when there is room on both sides, and avoids the only
- * fixed obstacle on screen when there is not.
+ * Anchor order adapts to the marker's position in the visible frame. The
+ * first horizontal and vertical choices always point inwards; on a narrow
+ * frame a vertical anchor comes first because a capsule is much wider than
+ * it is tall. This avoids solving a right-edge collision by moving the same
+ * overflowing box to the left edge.
  */
-const ANCHORS = [
-  [-1,  0], [ 1,  0], [ 0, -1], [ 0,  1],
-  [-1, -1], [ 1, -1], [-1,  1], [ 1,  1],
-];
+function anchorsFor(item, frame, boxW, offset) {
+  const inwardX = item.x <= frame.x + frame.w / 2 ? 1 : -1;
+  const inwardY = item.y <= frame.y + frame.h / 2 ? 1 : -1;
+  const horizontal = [inwardX, 0];
+  const vertical = [0, inwardY];
+  const axial = frame.w < (boxW + offset) * 2
+    ? [vertical, horizontal, [0, -inwardY], [-inwardX, 0]]
+    : [horizontal, vertical, [0, -inwardY], [-inwardX, 0]];
+  return [
+    ...axial,
+    [inwardX, inwardY], [-inwardX, inwardY],
+    [inwardX, -inwardY], [-inwardX, -inwardY],
+  ];
+}
 
 /**
  * Greedy placer. Items are laid out most-important-first; each one tries
@@ -198,9 +223,11 @@ const ANCHORS = [
  *
  * @param {Array} items   { x, y, lines, priority, cls, radius }
  * @param {Array} blocked keep-out rects for the markers themselves
+ * @param {{x:number,y:number,w:number,h:number}} frame visible map-space box
  * @returns {Array} placed { box, lines, cls } — geometry only, no markup
  */
-export function placeLabels(items, blocked = []) {
+export function placeLabels(items, blocked = [], frame = FULL_MAP_LABEL_FRAME) {
+  const viewport = frame?.w > 0 && frame?.h > 0 ? frame : FULL_MAP_LABEL_FRAME;
   const taken = [...blocked];
   const placed = [];
 
@@ -212,13 +239,14 @@ export function placeLabels(items, blocked = []) {
 
     for (const lines of variants) {
       const { w, h } = labelSize(lines);
+      if (w > viewport.w || h > viewport.h) continue;
       const off = (item.radius ?? 14) + LBL.gap;
-      for (const [ax, ay] of ANCHORS) {
+      for (const [ax, ay] of anchorsFor(item, viewport, w, off)) {
         const cx = item.x + ax * (off + w / 2);
         const cy = item.y + ay * (off + h / 2);
         const box = {
-          x: clamp(cx - w / 2, 2, MAP_W - w - 2),
-          y: clamp(cy - h / 2, 2, MAP_H - h - 2),
+          x: clamp(cx - w / 2, viewport.x, viewport.x + viewport.w - w),
+          y: clamp(cy - h / 2, viewport.y, viewport.y + viewport.h - h),
           w, h,
         };
         if (taken.some(t => overlaps(box, t))) continue;
@@ -291,6 +319,34 @@ function controlsKeepOut(floorId) {
   return { x: x1, y: y1, w: Math.max(0, x2 - x1), h: Math.max(0, y2 - y1) };
 }
 
+/**
+ * The wrapper's currently visible rectangle projected back into map space.
+ * Auto-fit often shows only a small slice of the 900x600 canvas; clamping a
+ * caption to the whole canvas can therefore leave it correctly "on the map"
+ * but visibly cut off by the wrapper. Eight screen pixels remain as a stable
+ * edge gap regardless of zoom.
+ */
+function visibleMapFrame(floorId) {
+  if (typeof document === 'undefined') return null;
+  const wrapper = document.querySelector('#navigation-panel.sg-map-wrapper');
+  if (!wrapper) return null;
+
+  const w = wrapper.getBoundingClientRect();
+  const { x: tx, y: ty, scale } = getFloorTransform(floorId);
+  if (!w.width || !w.height || !Number.isFinite(scale) || scale <= 0) return null;
+
+  const toMapX = sx => (sx - w.width  / 2 - tx) / scale + MAP_W / 2;
+  const toMapY = sy => (sy - w.height / 2 - ty) / scale + MAP_H / 2;
+  const edge = 8;
+  const x1 = Math.max(FULL_MAP_LABEL_FRAME.x, toMapX(edge));
+  const y1 = Math.max(FULL_MAP_LABEL_FRAME.y, toMapY(edge));
+  const x2 = Math.min(FULL_MAP_LABEL_FRAME.x + FULL_MAP_LABEL_FRAME.w, toMapX(w.width - edge));
+  const y2 = Math.min(FULL_MAP_LABEL_FRAME.y + FULL_MAP_LABEL_FRAME.h, toMapY(w.height - edge));
+
+  if (x2 <= x1 || y2 <= y1) return null;
+  return { x: x1, y: y1, w: x2 - x1, h: y2 - y1 };
+}
+
 /** Captions for the visible floor, already collision-resolved. */
 export function buildLabelLayerHtml(floorId) {
   const route = navState.route;
@@ -319,12 +375,12 @@ export function buildLabelLayerHtml(floorId) {
     blocked.push({ x: destPt.x - 14, y: destPt.y - 36, w: 28, h: 38 });
   }
   if (currentPt) {
-    items.push({ x: currentPt.x, y: currentPt.y, radius: 20, priority: 3,
+    items.push({ x: currentPt.x, y: currentPt.y, radius: 20, priority: 4,
       cls: 'sg-map-label--here', lines: ['Etapa atual', getPublicNodeLabel(currentNode)] });
     blocked.push({ x: currentPt.x - 18, y: currentPt.y - 18, w: 36, h: 36 });
   }
 
-  return placeLabels(items, blocked).map(({ box, lines, cls }) => `
+  return placeLabels(items, blocked, visibleMapFrame(floorId) ?? undefined).map(({ box, lines, cls }) => `
     <div class="sg-map-label ${cls}" style="left:${box.x.toFixed(1)}px;top:${box.y.toFixed(1)}px;width:${box.w.toFixed(1)}px">
       ${lines.map((l, i) => `<span class="sg-map-label__text ${i === 0 ? 'is-title' : 'is-sub'}">${esc(l)}</span>`).join('')}
     </div>`).join('');
@@ -489,7 +545,7 @@ export function buildRouteOverlaySvg(floorId) {
     <!-- Upcoming route.
 
          When the current step covers a single node — which is exactly what
-         the FIRST step usually is ("Passe por Porta 3", one point) — there
+         the FIRST step usually is ("Comece em Porta 3", one point) — there
          is no active leg to be dominant, and the whole line was rendering
          in the dim upcoming treatment. The opening frame of the navigation,
          the one moment the route has to look like the subject, was the one
@@ -665,4 +721,3 @@ export function getBaseFloorSvg(floorId) {
   }
   return mapState.svgBaseCache[floorId];
 }
-

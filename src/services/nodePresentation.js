@@ -48,7 +48,7 @@ export const SEARCH_CATEGORIES = [
   { key:'restrooms',   label:'Banheiros',                    icon:'solar:bath-bold',            types:['restroom'] },
   { key:'services',    label:'Serviços',                     icon:'solar:info-circle-bold',     types:['service','service_area','atm','currency_exchange','medical','lounge','car_rental','transport_service','checkin'] },
   { key:'access',      label:'Entradas e saídas',            icon:'solar:exit-bold',            types:['entrance','exit'] },
-  { key:'circulation', label:'Acessibilidade e circulação',  icon:'solar:round-transfer-vertical-bold', types:['elevator','stairs','escalator'] },
+  { key:'circulation', label:'Circulação vertical',            icon:'solar:round-transfer-vertical-bold', types:['elevator','stairs','escalator'] },
 ];
 
 /* ── TYPE META ──────────────────────────────────────────────
@@ -217,14 +217,23 @@ export function getPublicNodeSubtitle(node){
   const ov=_OV[node.code];
   if(ov?.s) return ov.s;
   const f=getFloorLabel(node.floorId);
-  if(CIRCULATION_TYPES.has(node.type)) return `${f} · Acessibilidade e circulação`;
+  if(CIRCULATION_TYPES.has(node.type)) {
+    const category = node.type === 'elevator' && node.isAccessible === true
+      ? 'Acessibilidade e circulação'
+      : 'Circulação vertical';
+    return `${f} · ${category}`;
+  }
   if(node.type==='restroom') return `${f} · Banheiros`;
   return f;
 }
 
 export function getPublicNodeCategory(node){
   if(!node) return 'Serviço';
-  if(CIRCULATION_TYPES.has(node.type)) return 'Acessibilidade e circulação';
+  if(CIRCULATION_TYPES.has(node.type)) {
+    return node.type === 'elevator' && node.isAccessible === true
+      ? 'Acessibilidade e circulação'
+      : 'Circulação vertical';
+  }
   return getTypeMeta(node.type).publicType;
 }
 
@@ -266,9 +275,23 @@ export function getRouteLandmarkLabel(node, ctx={}){
   if(!node) return '';
   const label=getPublicNodeLabel(node);
   const toF=ctx.toFloor?getFloorLabel(ctx.toFloor):'';
-  if(node.type==='elevator')  return toF?`Use ${label} para subir ao ${toF}.`:`Use ${label}.`;
-  if(node.type==='stairs')    return toF?`Suba pela ${label} até o ${toF}.`:`Use a ${label}.`;
-  if(node.type==='escalator') return toF?`Use a ${label} até o ${toF}.`:`Use a ${label}.`;
+  const routeLabel=(fallback)=>{
+    const clean=label.replace(/^(?:o|a|os|as)\s+/i,'');
+    if(/\b(?:piso|andar)\b/i.test(clean)) return fallback;
+    return clean.charAt(0).toLocaleLowerCase('pt-BR')+clean.slice(1);
+  };
+  if(node.type==='elevator'){
+    const landmark=routeLabel('elevador');
+    return toF?`Use o ${landmark} até o ${toF}.`:`Use o ${landmark}.`;
+  }
+  if(node.type==='stairs'){
+    const landmark=routeLabel('escada');
+    return toF?`Use a ${landmark} até o ${toF}.`:`Use a ${landmark}.`;
+  }
+  if(node.type==='escalator'){
+    const landmark=routeLabel('escada rolante');
+    return toF?`Use a ${landmark} até o ${toF}.`:`Use a ${landmark}.`;
+  }
   if(node.type==='entrance')  return `Entre pelo ${label}.`;
   if(node.type==='exit')      return `Saia pelo ${label}.`;
   if(node.type==='gate')      return `Dirija-se ao ${label}.`;

@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { appData, planState } from '../src/state/appState.js';
-import { buildRouteOptions, scoreOptions } from '../src/services/routeOptions.js';
+import {
+  buildRouteOptions,
+  routeForSelectedOption,
+  scoreOptions,
+} from '../src/services/routeOptions.js';
 
 const previousNodes = appData.nodes;
 const previousFlight = planState.flightTime;
@@ -30,6 +34,21 @@ try {
   assert.deepEqual(fallback[0].passesBy, [], 'the client does not invent commercial detours');
   assert.equal(fallback[0].isEstimate, true);
 
+  const stepsOnlyBase = {
+    path: [],
+    steps: [{ text: 'Siga pelo corredor.', floorId: '0' }],
+    segments: [{ type: 'floor', floorId: '0', nodeCodes: [] }],
+    warnings: [],
+    estimatedMinutes: 5,
+    raw: {},
+  };
+  const stepsOnlyOption = buildRouteOptions(stepsOnlyBase)[0];
+  const selectedStepsOnly = routeForSelectedOption(stepsOnlyBase, stepsOnlyOption);
+  assert.equal(selectedStepsOnly.optionId, stepsOnlyOption.id);
+  assert.equal(selectedStepsOnly.estimatedMinutes, stepsOnlyOption.minutes);
+  assert.strictEqual(selectedStepsOnly.steps, stepsOnlyBase.steps, 'steps-only guidance is preserved');
+  assert.strictEqual(selectedStepsOnly.segments, stepsOnlyBase.segments, 'steps-only floor context is preserved');
+
   const withAlternatives = buildRouteOptions({
     ...base,
     raw: {
@@ -52,6 +71,7 @@ try {
       alternatives: [
         { id: 'lift', name: 'Pelo elevador', minutes: 9, path: ['A', 'C', 'D'] },
         { id: 'stairs', name: 'Pelas escadas', minutes: 6, path: ['A', 'S', 'D'] },
+        { id: 'contradictory', name: 'Texto inseguro', minutes: 8, path: ['A', 'C', 'D'], steps: ['Use as escadas até o piso 1.'] },
       ],
     },
   }, { accessible: true });

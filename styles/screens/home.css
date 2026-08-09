@@ -566,20 +566,30 @@
   position: relative;
   flex: 0 0 auto;
   width: 52px;
-  height: 32px;
+  height: 48px;
   padding: 0;
   border: none;
   border-radius: var(--radius-pill);
-  background: #94A3B8;   /* 3.02:1 on white — passes AA for a UI component */
+  background: transparent;
   cursor: pointer;
   transition: background var(--ds-transition);
 }
 
-.sg-ds.sg-home .sg-home__toggle.is-on { background: var(--sky-ink); }
+.sg-ds.sg-home .sg-home__toggle::before {
+  content: '';
+  position: absolute;
+  inset: 8px 0;
+  border-radius: var(--radius-pill);
+  background: #94A3B8;   /* 3.02:1 on white — passes AA for a UI component */
+  transition: background var(--ds-transition);
+}
+
+.sg-ds.sg-home .sg-home__toggle.is-on { background: transparent; }
+.sg-ds.sg-home .sg-home__toggle.is-on::before { background: var(--sky-ink); }
 
 .sg-ds.sg-home .sg-home__toggle .sg-toggle__thumb {
   position: absolute;
-  top: 3px;
+  top: 11px;
   left: 3px;
   width: 26px;
   height: 26px;
@@ -598,14 +608,7 @@
   opacity: .55;
 }
 
-/* The switch is 32px tall for visual balance; this pseudo-element
-   extends its HIT area to the full 44px minimum without changing
-   the drawn size. */
-.sg-ds.sg-home .sg-home__toggle::after {
-  content: '';
-  position: absolute;
-  inset: -8px;   /* 32 + 16 = 48px effective, matching --tap-min exactly */
-}
+/* The button is a real 48px target; ::before keeps its visible track 32px. */
 
 /* ---- CTA ----
    The primary action, and it should read as the strongest thing in the

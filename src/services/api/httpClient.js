@@ -26,10 +26,12 @@ export function createHttpClient({ baseUrl = getApiBaseUrl, timeoutMs = APP_CONF
         : controller.signal;
       let response;
       try {
+        const method = String(options.method ?? 'GET').toUpperCase();
+        const needsJsonHeader = options.body != null || !['GET', 'HEAD'].includes(method);
         response = await fetch(`${baseUrl()}${path}`, {
           ...options,
           signal,
-          headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+          headers: { ...(needsJsonHeader ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) },
         });
       } catch (cause) {
         const kind = cause?.name === 'AbortError' ? 'timeout' : 'network';

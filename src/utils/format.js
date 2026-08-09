@@ -12,7 +12,8 @@ export function asArray(v) {
 }
 
 export function first(...vals) {
-  return vals.find(v => v !== undefined && v !== null && v !== '');
+  const found = vals.find(v => v !== undefined && v !== null && v !== '');
+  return found === undefined ? vals.at(-1) : found;
 }
 
 export function esc(v) {
@@ -28,4 +29,3 @@ export function norm(v) {
 export function fmtMin(m) { return String(Math.max(1, Math.round(Number(m) || 0))); }
 
 export function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
-

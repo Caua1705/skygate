@@ -1,4 +1,4 @@
-import { app, mapState, navState, planState, uiState } from '../state/appState.js';
+import { app, appData, mapState, navState, planState, uiState } from '../state/appState.js';
 import { root , $ } from '../utils/dom.js';
 import { renderPlanning } from '../screens/home/HomeScreen.js';
 import { renderSearchOverlay, renderSearchResults } from '../components/SearchOverlay.js';
@@ -13,6 +13,7 @@ import { refreshSummaryTiming, scrollTimelineToCurrent } from './actions.js';
 import { buildLabelLayerHtml, buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../map/floorMapBuilder.js';
 import { getFloorLabel } from '../state/selectors.js';
 import { filterNodes, groupByCategory } from '../services/nodeSearch.js';
+import { persistSessionState } from '../state/sessionPersistence.js';
 
 /* ============================================================
    11. MAIN RENDER — dispatch by app.mode
@@ -69,11 +70,26 @@ function scheduleSummaryRefresh() {
   }, delay);
 }
 
+/** Save only stable journey state; loading renders can contain half a route. */
+export function persistJourney() {
+  if (uiState.loading || !appData.nodes.length || !appData.floors.length) return false;
+  return persistSessionState({
+    state: { app, planState, navState, mapState },
+    nodes: appData.nodes,
+    floors: appData.floors,
+  });
+}
+
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
+  if (document.visibilityState !== 'visible') {
+    persistJourney();
+    return;
+  }
   if (app.mode === 'summary' && planState.flightTime) refreshSummaryTiming();
   scheduleSummaryRefresh();
 });
+
+window.addEventListener('pagehide', persistJourney);
 
 export function render() {
   const previousMode = lastRenderedMode;
@@ -99,6 +115,7 @@ export function render() {
     // diagram does it from showRouteMap(), where the entrance is played.
     if (navState.view === 'timeline') requestAnimationFrame(() => scrollTimelineToCurrent('auto'));
   }
+  persistJourney();
 }
 
 /* Partial map update — only route overlay, not base or full render */

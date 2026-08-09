@@ -11,9 +11,9 @@ import { Button, IconButton, StepRail, dsIcon } from '../../components/ds/index.
 import { renderNavigationTimeline } from './NavigationTimeline.js';
 import { renderNavigationRouteMap } from './NavigationRouteMap.js';
 import {
-  getNavigationTiming,
   navigationPrimaryLabel,
   renderNavigationHeader,
+  renderNavigationTiming,
   renderViewToggle,
 } from './NavigationShell.js';
 
@@ -121,7 +121,6 @@ export function renderInstructionCardInner() {
   const isLast  = stepIdx >= total - 1;
   const fid = mapState.selectedFloorId;
   const currentDistance = formatMeters(curStep?.distanceMeters ?? 0);
-  const timing = getNavigationTiming();
   const floor = getFloorLabel(curStep?.floorId ?? fid);
   const instructionMeta = [
     currentDistance ? `${currentDistance} nesta etapa` : (isLast ? 'Etapa final' : 'Agora'),
@@ -135,11 +134,7 @@ export function renderInstructionCardInner() {
     <div class="sg-navsheet__pinned">
       <div class="sg-navsheet__status">
         <span aria-hidden="true">Etapa <strong>${stepIdx + 1}</strong> de ${total}</span>
-        <span aria-label="${esc(timing.ariaLabel)}">
-          ${timing.gate
-            ? `${dsIcon('lucide:plane-takeoff')}Portão <strong>~${esc(timing.gate)}</strong> (estimado)`
-            : `${dsIcon('solar:clock-circle-bold')}<strong>${timing.remaining ? `~${timing.remaining} min` : 'Etapa final'}</strong>`}
-        </span>
+        ${renderNavigationTiming('sg-navsheet__status-time')}
       </div>
 
       ${StepRail({
@@ -258,8 +253,8 @@ export function renderOverlayOverview() {
             <button type="button" class="sg-overview-item__btn" data-step-index="${i}" aria-label="Ir para passo ${i+1}: ${esc(step.text)}" aria-current="${active}">
               <div class="sg-overview-item__icon">
                 ${done
-                  ? '<iconify-icon icon="solar:check-circle-bold" aria-hidden="true"></iconify-icon>'
-                  : `<iconify-icon icon="${step.icon ?? meta.icon}" aria-hidden="true"></iconify-icon>`}
+                  ? dsIcon('solar:check-circle-bold')
+                  : dsIcon(step.icon ?? meta.icon)}
               </div>
               <div>
                 <p class="sg-overview-item__text">${esc(step.text)}</p>

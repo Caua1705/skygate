@@ -35,7 +35,7 @@ import { esc, fmtMin } from '../../utils/format.js';
 import { Button, Chip, dsIcon } from '../../components/ds/index.js';
 import { findOption, scoreOptions, slackHint } from '../../services/routeOptions.js';
 import {
-  formatDuration, formatSlack, gateCloseClock, hasFlight, minutesUntilGateClose,
+  effectiveFlightDay, formatDuration, formatSlack, gateCloseClock, hasFlight, minutesUntilGateClose,
 } from '../../services/flightSlack.js';
 import { getEstimatedRemainingMinutes } from '../navigation/NavigationShell.js';
 
@@ -142,7 +142,7 @@ export function renderMarginBanner() {
       <p class="sg-rc__margin-basis">
         portão fecha <strong>~${esc(gate)}</strong> <span class="sg-rc__margin-est">(estimado)</span>
         <span class="sg-rc__margin-sep" aria-hidden="true">·</span>
-        ${planState.flightDay === 'tomorrow' ? 'amanhã' : 'hoje'} ·
+        ${effectiveFlightDay() === 'tomorrow' ? 'amanhã' : 'hoje'} ·
         voo ${planState.flightType === 'international' ? 'internacional' : 'doméstico'} · ${esc(planState.flightTime)}
       </p>
     </div>

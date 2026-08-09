@@ -10,6 +10,7 @@ import { fileURLToPath } from 'url';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.argv[2]) || 5173;
+const host = process.env.SKYGATE_HOST || '127.0.0.1';
 
 const MIME = {
   '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
@@ -21,7 +22,16 @@ const MIME = {
 
 http.createServer((req, res) => {
   const urlPath = decodeURIComponent(req.url.split('?')[0]);
-  const filePath = path.join(root, urlPath === '/' ? '/index.html' : urlPath);
+  const relativePath = urlPath === '/' ? 'index.html' : urlPath.replace(/^[/\\]+/, '');
+  const filePath = path.resolve(root, relativePath);
+  const safeRoot = root.endsWith(path.sep) ? root : root + path.sep;
+
+  // Never let an encoded `../` escape the project directory.
+  if (!filePath.startsWith(safeRoot)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
 
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not found: ' + urlPath); return; }
@@ -36,6 +46,6 @@ http.createServer((req, res) => {
     });
     res.end(data);
   });
-}).listen(port, () => {
-  console.log(`SkyGate rodando em http://127.0.0.1:${port}`);
+}).listen(port, host, () => {
+  console.log(`SkyGate rodando em http://${host}:${port}`);
 });

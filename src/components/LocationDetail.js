@@ -1,4 +1,4 @@
-import { getPublicNodeLabel, getPublicNodeCategory, CIRCULATION_TYPES } from '../services/nodePresentation.js';
+import { getPublicNodeLabel, getPublicNodeCategory } from '../services/nodePresentation.js';
 import { planState, uiState } from '../state/appState.js';
 import { findNode, getFloorLabel } from '../state/selectors.js';
 import { getNodeMeta } from '../app/constants.js';
@@ -14,7 +14,9 @@ export function renderLocationDetail() {
   const label      = getPublicNodeLabel(node);
   const category   = getPublicNodeCategory(node);
   const floorLabel = getFloorLabel(node.floorId);
-  const accessible = CIRCULATION_TYPES.has(node.type);
+  // Accessibility is an operational API fact. A circulation type alone is
+  // not evidence: stairs and escalators are circulation nodes too.
+  const accessible = node.isAccessible === true || node.is_accessible === true;
   const isOrigin = node.code === planState.originCode;
   const isDestination = node.code === planState.destinationCode;
   const canRoute = !isOrigin && !isDestination;

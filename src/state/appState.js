@@ -20,6 +20,10 @@ export const planState = {
    */
   flightTime: '',
 
+  // Absolute local calendar date (`YYYY-MM-DD`) behind the Hoje/Amanhã UI.
+  // It prevents “tomorrow” from moving forward again when midnight passes.
+  flightDate: '',
+
   /**
    * A clock without a date is ambiguous around midnight. Defaulting to today
    * is deliberately conservative: a past time must never silently become
