@@ -116,64 +116,61 @@
    BASE PLAN — a surface map, painted by category
 
    The plan is the REAL drawing of the floor, inlined by buildBaseFloorSvg().
-   Inlining is the whole enabling trick: the Figma export puts its colours in
-   PRESENTATION ATTRIBUTES (fill="#E2E2EE"), and a presentation attribute
-   loses to any CSS rule. So every colour below is re-authored here without
-   touching a byte of the SVG. Nothing in those files competes for paint —
-   they carry no class, no meaningful data-*, and their only style="" is
-   mask-type on <mask>.
+   Inlining is the enabling trick: the Figma export puts its colours in
+   PRESENTATION ATTRIBUTES (fill="#E2E2EE"), and a presentation attribute loses
+   to any CSS rule, so every colour below is re-authored here without touching
+   a byte of geometry.
+
+   IT SELECTS CLASSES, NOT IDS. The four drawings agree on almost no layer
+   name — the terminal container is "for-t1-ps" / "for-t1-p0" / "for-t1-p1" /
+   absent, the walls are "paredes" on one floor and "parede" on another, and
+   the slab has no semantic name at all on floors 0 and 3. So the naming is
+   normalised once at build time by scripts/normalize-floor-svgs.mjs, which
+   stamps a single fixed vocabulary onto every plan. That script's tables are
+   where a Figma rename gets absorbed; nothing here needs to know.
 
    WHAT REPLACED WHAT. This used to be one global filter:
 
        .sg-map__plan { opacity:.42; filter: grayscale(.7) brightness(.5) }
 
-   That was the bug. The drawing is 1743 filled shapes against 264 stroked
-   ones — already a surface map — and crushing pale lavender fills into navy
-   left only the dark strokes standing. The map read as loose lines in the
-   dark precisely because the surfaces had been made invisible.
-
-   HOW SELECTION WORKS. The plans have rich Figma layer names, so categories
-   are addressed through the id attribute. Always [id="…"] / [id^="…"], never
-   #id: 746 of the 2376 ids carry a space, an accent, or mojibake from the
-   original export ("pisos areas", "RestituiÃ§Ã£o de bagagem",
-   id="ëlevador_12"), and #id cannot express those.
-
-   PILOT — FLOOR 2 ONLY. Every rule is scoped under [id="piso 2"], the
-   drawing's own root group, so floors 0/1/3 are untouched and keep the old
-   dim treatment until they are themed too (see the legacy block at the end).
+   That was the bug. The drawings are overwhelmingly FILLED shapes — already
+   surface maps — and crushing pale lavender fills into navy left only the dark
+   strokes standing. The map read as loose lines in the dark precisely because
+   the surfaces had been made invisible.
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── The palette. Everything is here; nothing below invents a colour. ──
    Ordered back-to-front, exactly as the map stacks. Luminance is the axis
    that does the work: the eye reads depth as brightness, so each layer is
-   measurably lighter than the one behind it, and every one of them stays
-   far below the route. Measured relative luminance (WCAG), for reference:
+   measurably lighter than the one behind it, and every one stays far below
+   the route. Measured relative luminance (WCAG):
 
-     stage #0A192F .010  ·  exterior .013  ·  facade .028  ·  vacant .036
-     FLOOR .048  ·  seating .062  ·  structure .071  ·  retail .082
-     restroom .083  ·  security .099  ·  food .097  ·  circulation .128
-     gate .142    ·············   ROUTE #29ABE2 .351  ·  crest #7FE3FF .667
+     stage .010 · outside .013 · facade .028 · vacant .036 · FLOOR .048
+     seating .062 · structure .071 · retail .082 · restroom .083
+     food .097 · security .099 · mobility .105 · airline .123
+     circulation .128 · gate .142
+     ·············   ROUTE #29ABE2 .351   ·   crest #7FE3FF .667
 
-   The brightest thing the plan may ever be is a gate at .142, and the route
-   line is 2.5x brighter than that before its glow, its gradient and its
-   travelling highlight are counted. That headroom is the rule this file
-   exists to keep — raise a token and check it against .351. */
+   The brightest the plan may ever be is a gate at .142, and the route line is
+   2.5x brighter than that before its glow, gradient and travelling highlight
+   are counted. That headroom is the rule this file exists to keep — raise a
+   token and check it against .351. */
 .sg-map__plan {
-  /* Back: context only. The street, the apron, the aircraft — a third of the
+  /* Back: context only. The street, the apron, the aircraft — a third of each
      drawing sits outside the building and must not read as walkable. */
   --plan-outside:        #0D1F35;
   --plan-outside-alpha:  .5;
 
-  /* The terminal body. --plan-facade is the offset edge the export draws
-     under the slab; together they give the raised-floor look. */
+  /* The terminal body. --plan-facade is the outline drawn under the slab;
+     together they give the raised-floor look. */
   --plan-facade:         #15304C;
   --plan-floor:          #20405F;
 
-  /* Interior structure: walls, floor areas, the seating deck. */
+  /* Interior structure: walls, floor areas, seating decks. */
   --plan-structure:      #2A4E70;
   --plan-seating:        #26496A;
 
-  /* Units, by what they are. Kept inside the navy→turquoise family: hue
+  /* Units, by what they are. Kept inside the navy-to-turquoise family: hue
      moves only enough to separate them, lightness does the rest. */
   --plan-retail:         #34546F;
   --plan-food:           #375C73;
@@ -181,12 +178,13 @@
   --plan-restroom:       #2F5570;
   --plan-circulation:    #2E6B85;
   --plan-security:       #445A78;
+  --plan-airline:        #356690;
+  --plan-mobility:       #3A5F79;
   --plan-vacant:         #1B3752;   /* dimmer than an occupied unit, on purpose */
 
-  /* One hairline for every unit, so the map reads as drawn rather than
-     as flat blocks of colour. */
+  /* One hairline for every unit, so the map reads as drawn rather than as
+     flat blocks of colour. */
   --plan-edge:           rgba(150, 205, 240, .20);
-  --plan-edge-strong:    rgba(150, 205, 240, .30);
 
   /* Everything the categories do not claim — see the catch-all below. */
   --plan-unclaimed:      #24466A;
@@ -195,152 +193,110 @@
 .sg-map__bg { fill: transparent; }   /* the stage gradient shows through */
 
 /* ── 0. CATCH-ALL ────────────────────────────────────────
-   Every shape inside the plan, before any category speaks. Without it, the
-   parts of the drawing no rule names would keep their raw Figma paint — pale
-   lavender, white, cobalt — and a handful of unclassified rooms would glow
-   brighter than the route. One tone means an unnamed room still reads as
-   part of the building.
+   Every shape in the plan, before any category speaks. Without it the parts of
+   a drawing no rule names would keep their raw Figma paint — pale lavender,
+   white, cobalt — and unclassified rooms would glow brighter than the route.
+   One tone means an unnamed room still reads as part of the building.
 
-   Specificity is what makes this safe: (0,2,1) here against (0,3,1) for every
-   category rule, so this can never win over a named layer regardless of
-   source order. It also flattens the 10 gradient/pattern fills, which is
-   deliberate — a photographic pattern has no place on a wayfinding map. */
-.sg-map__plan [id="piso 2"] :is(path, rect) {
+   Specificity is what makes this safe: (0,1,1) here against (0,2,0) for every
+   category, so it can never win over a tagged layer whatever the source order.
+   It also flattens the gradient and pattern fills, which is deliberate: a
+   photographic pattern has no place on a wayfinding map. */
+.sg-map__plan :is(path, rect) {
   fill: var(--plan-unclaimed);
   stroke: none;
 }
 
-/* The export opens with a full-canvas rect (3740x1800, #D5D5F6) as the very
-   first child. It is the artboard's paper, not part of the building, and left
-   alone it paints the entire map pale lavender. The stage gradient behind the
-   SVG is the real background, so this must be nothing at all. */
-.sg-map__plan [id="piso 2"] > rect {
+/* Figma opens every export with a full-canvas rect. It is the artboard's
+   paper, not the building; left alone it paints the whole map pale lavender.
+   The stage gradient behind the SVG is the real background. */
+.sg-map__plan .sg-artboard {
   fill: transparent;
   stroke: none;
 }
 
 /* ── 1. EXTERIOR ─────────────────────────────────────────
-   bg holds the street, kerbs and direction arrows; "Avioes e tuneis" holds
-   the aircraft and jet bridges. Context, nothing more. */
-.sg-map__plan [id="piso 2"] [id="bg"],
-.sg-map__plan [id="piso 2"] [id="Avioes e tuneis"] {
-  opacity: var(--plan-outside-alpha);
-}
-.sg-map__plan [id="piso 2"] [id="bg"] :is(path, rect),
-.sg-map__plan [id="piso 2"] [id="Avioes e tuneis"] :is(path, rect) {
+   Street, kerbs, direction arrows, aircraft and jet bridges. Context, no more. */
+.sg-map__plan .sg-outside { opacity: var(--plan-outside-alpha); }
+.sg-map__plan :is(.sg-outside, .sg-outside *) {
   fill: var(--plan-outside);
   stroke: none;
 }
 
 /* ── 2-3. THE TERMINAL BODY ──────────────────────────────
-   "fachada" and "Piso" are the same closed outline 19 units apart — the one
-   piece of this drawing that is a continuous surface rather than a cluster
-   of rooms. Painted first so everything else lands on top of it. */
-.sg-map__plan [id="piso 2"] [id="fachada"] :is(path, rect) {
+   The one continuous surface in the drawing, and the outline edge beneath it.
+   Painted first so everything else lands on top. Both are found geometrically
+   by the build script, not by name — floors 0 and 3 have no name for them. */
+.sg-map__plan :is(.sg-facade, .sg-facade *) {
   fill: var(--plan-facade);
   stroke: none;
 }
-.sg-map__plan [id="piso 2"] [id="Piso"] :is(path, rect) {
+.sg-map__plan :is(.sg-floor, .sg-floor *) {
   fill: var(--plan-floor);
   stroke: var(--plan-edge);
   stroke-width: 1.5;
 }
 
 /* ── 4. INTERIOR STRUCTURE ───────────────────────────────*/
-.sg-map__plan [id="piso 2"] [id="paredes"] :is(path, rect),
-.sg-map__plan [id="piso 2"] [id="pisos areas"] :is(path, rect) {
+.sg-map__plan :is(.sg-walls, .sg-walls *) {
   fill: var(--plan-structure);
   stroke: none;
 }
-.sg-map__plan [id="piso 2"] [id="piso_cadeiras"] :is(path, rect) {
+.sg-map__plan :is(.sg-areas, .sg-areas *) {
   fill: var(--plan-seating);
   stroke: none;
 }
 
 /* ── 5. UNITS, BY CATEGORY ───────────────────────────────
-   The tint is applied to EVERY shape inside a unit, not just its outer
-   surface. That is what makes the built-in pictogram disappear: the glyph is
-   a child path of the same group, so it takes the same fill and merges into
-   the surface it sits on. Two icon sets competing — the plan's and the app's
-   own POI markers — is the clutter this map is meant to be free of. */
-.sg-map__plan [id="piso 2"] :is(
-  [id^="retail_"],
-  [id="lojas"]
-) :is(path, rect) { fill: var(--plan-retail); stroke: none; }
+   The tint covers EVERY shape inside a unit, not just its outer surface. That
+   is what makes the built-in pictogram disappear: the glyph is a child of the
+   same group, takes the same fill, and merges into the surface it sits on. Two
+   icon sets competing — the plan's and the app's own POI markers — is the
+   clutter this map exists to be free of.
 
-.sg-map__plan [id="piso 2"] [id^="fb_"] :is(path, rect) {
-  fill: var(--plan-food); stroke: none;
-}
+   ORDER IS LOAD-BEARING. Every rule here has the same specificity, so the LAST
+   match wins, and units genuinely nest: a staircase sits inside the "lojas"
+   group on floor 2. Circulation therefore comes after retail, and vacant comes
+   last of all, so an empty unit inside a shop block still reads as empty. */
+.sg-map__plan :is(.sg-retail, .sg-retail *) { fill: var(--plan-retail); stroke: none; }
+.sg-map__plan :is(.sg-food, .sg-food *) { fill: var(--plan-food); stroke: none; }
+.sg-map__plan :is(.sg-restroom, .sg-restroom *) { fill: var(--plan-restroom); stroke: none; }
 
-.sg-map__plan [id="piso 2"] [id^="gate_"] :is(path, rect) {
-  fill: var(--plan-gate); stroke: none;
-}
+/* Airline desks and mobility/accessibility services: both are staffed places a
+   traveller is sent to, so they sit above the shops and below the gates. */
+.sg-map__plan :is(.sg-mobility, .sg-mobility *) { fill: var(--plan-mobility); stroke: none; }
+.sg-map__plan :is(.sg-airline, .sg-airline *) { fill: var(--plan-airline); stroke: none; }
 
-.sg-map__plan [id="piso 2"] [id^="sanitarios_"] :is(path, rect) {
-  fill: var(--plan-restroom); stroke: none;
-}
+.sg-map__plan :is(.sg-security, .sg-security *) { fill: var(--plan-security); stroke: none; }
 
-/* Vertical circulation. The most turquoise of the units, because after the
-   route itself this is the thing a traveller navigates by. "escada" covers
-   both stairs and escalators in this export; the elevator layers are named
-   three different ways, including a Figma layer literally called
-   id="elevador_12" whose quotes survived into the id as mojibake. */
-.sg-map__plan [id="piso 2"] :is(
-  [id^="escada"],
-  [id^="Escada"],
-  [id^="elevador"],
-  [id*="levador_"],
-  [id^="fraport-escada"],
-  [id^="fraport-elevaor"]
-) :is(path, rect) { fill: var(--plan-circulation); stroke: none; }
+/* The most turquoise of the units, because after the route itself this is what
+   a traveller navigates by. */
+.sg-map__plan :is(.sg-vertical, .sg-vertical *) { fill: var(--plan-circulation); stroke: none; }
 
-.sg-map__plan [id="piso 2"] :is(
-  [id^="Raio-X"],
-  [id^="X-ray"],
-  [id^="detectores"],
-  [id^="Controle de Passaporte"],
-  [id^="Passaport"]
-) :is(path, rect) { fill: var(--plan-security); stroke: none; }
+.sg-map__plan :is(.sg-gate, .sg-gate *) { fill: var(--plan-gate); stroke: none; }
 
-/* Vacant units read as available space, not as somewhere to go. */
-.sg-map__plan [id="piso 2"] :is(
-  [id="lojas vazias"],
-  [id^="vago_"]
-) :is(path, rect) { fill: var(--plan-vacant); stroke: none; }
+/* Vacant units read as available space, not as somewhere to go. Last, so an
+   empty unit nested in a retail block keeps its own tone. */
+.sg-map__plan :is(.sg-vacant, .sg-vacant *) { fill: var(--plan-vacant); stroke: none; }
 
-/* The hairline that turns blocks back into rooms. Applied to the unit's
-   OUTER group only, so an inner glyph does not get outlined too. */
-.sg-map__plan [id="piso 2"] :is(
-  [id^="retail_"], [id^="fb_"], [id^="gate_"], [id^="sanitarios_"],
-  [id^="escada_"], [id^="elevador_"], [id^="vago_"]
+/* The hairline that turns blocks back into rooms. Applied to the unit's own
+   outer shapes only, so an inner glyph is not outlined too. */
+.sg-map__plan :is(
+  .sg-retail, .sg-food, .sg-gate, .sg-restroom,
+  .sg-vertical, .sg-vacant, .sg-airline, .sg-mobility
 ) > :is(path, rect, g) > :is(path, rect) {
   stroke: var(--plan-edge);
   stroke-width: 1;
 }
 
 /* ── PICTOGRAMS: gone ────────────────────────────────────
-   The standalone badge chips — a filled disc with a glyph, drawn floating
-   over its unit — are the one pictogram the category tint cannot absorb,
-   because the disc overlaps the unit boundary. Removed outright rather than
-   recoloured. display:none also drops them from rendering entirely, which is
-   ~160 elements of paint saved on the busiest floor. */
-.sg-map__plan [id="piso 2"] :is(
-  [id^="Icone"],
-  [id^="icon"],
-  [id^="shopping-bag-"],
-  [id^="restaurant-"]
-) { display: none; }
+   The standalone badge chips — a filled disc with a glyph, floating over its
+   unit — are the one pictogram the category tint cannot absorb, because the
+   disc overlaps the unit boundary. Removed outright rather than recoloured.
+   display:none also drops them from rendering: 160 fewer elements to paint on
+   the busiest floor. */
+.sg-map__plan .sg-pictogram { display: none; }
 
-/* ── LEGACY: the floors not yet themed ───────────────────
-   Floors 0, 1 and 3 keep the old global dim until each gets its own pass.
-   Listed one per floor deliberately: theming a floor means deleting its line
-   here, and an untreated floor can never be forgotten silently. */
-.sg-map__plan [id="piso 0"],
-.sg-map__plan [id="piso 1"],
-.sg-map__plan [id="piso 3"] {
-  opacity: .42;
-  filter: grayscale(.7) brightness(.5) contrast(1.15);
-}
 /* 12px FLOOR EXCEPTION — deliberate, do not "fix".
    This is a <text> inside the floor-plan SVG: map lettering, not interface
    text. It is a decorative watermark at 24% opacity, it scales with the map's

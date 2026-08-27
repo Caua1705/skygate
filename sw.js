@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'skygate-';
-const SHELL_CACHE_NAME = `${CACHE_PREFIX}shell-v5`;
+const SHELL_CACHE_NAME = `${CACHE_PREFIX}shell-v6`;
 const RUNTIME_CACHE_NAME = `${CACHE_PREFIX}runtime-v1`;
 const ACTIVE_CACHE_NAMES = new Set([SHELL_CACHE_NAME, RUNTIME_CACHE_NAME]);
 const TRUSTED_RUNTIME_ORIGINS = new Set([
@@ -12,11 +12,18 @@ const TRUSTED_RUNTIME_ORIGINS = new Set([
 const PRECACHE = [
   '/',
   '/index.html',
-  // The floor plans. 2.7 MB across the four, which is most of this cache —
-  // they earn it: without them the navigation map has no plan to draw the
-  // route on, and that is the one screen a traveller opens with no signal
-  // airside. buildBaseFloorSvg() degrades to an empty stage if one is missing,
-  // so a partial cache is a dimmer map, never a broken one.
+  // The floor plans — the build output of scripts/normalize-floor-svgs.mjs,
+  // which reads assets/floors/lite (no Figma filters) and stamps the sg-*
+  // vocabulary the stylesheet paints. 1.9 MB across the four, down from 2.7:
+  // dropping the filters took 1178 shapes out from under a filter and 666
+  // feGaussianBlur out of the raster entirely.
+  //
+  // They earn their place here: without them the navigation map has no plan to
+  // draw the route on, and that is the one screen a traveller opens with no
+  // signal airside. buildBaseFloorSvg() degrades to an empty stage if one is
+  // missing, so a partial cache is a dimmer map, never a broken one.
+  // assets/floors/full and assets/floors/lite are BUILD INPUTS and are
+  // deliberately not cached — the app never fetches them.
   '/assets/floors/0.svg',
   '/assets/floors/1.svg',
   '/assets/floors/2.svg',
