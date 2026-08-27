@@ -62,7 +62,24 @@ export function normalizeRoute(raw) {
   return {
     raw, estimatedMinutes: Number.isFinite(estimatedMinutes) ? estimatedMinutes : 0,
     path, segments, steps, warnings: asArray(raw?.warnings),
+    // How much slack the SERVER says is left once this route is walked. It is
+    // only present when the request carried a boarding_time, so null is the
+    // normal state for a passenger who did not tell us their flight — never an
+    // error. See slackFor() for how it outranks the local estimate.
+    freeTimeMinutes: freeTimeMinutes(raw),
   };
+}
+
+/**
+ * free_time_minutes, or null when the server did not compute one.
+ * Deliberately not routed through first(): a missing value must stay null and
+ * never collapse into a very believable, very wrong zero.
+ */
+function freeTimeMinutes(raw) {
+  const value = raw?.free_time_minutes ?? raw?.freeTimeMinutes;
+  if (value === undefined || value === null || value === '') return null;
+  const minutes = Number(value);
+  return Number.isFinite(minutes) ? minutes : null;
 }
 
 export function normalizeSeg(s) {

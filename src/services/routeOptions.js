@@ -74,7 +74,7 @@ export function scoreOptions(options, now = new Date()) {
   const scored = options.map(option => ({
     ...option,
     isFastest: option.id === fastest?.id,
-    slack: slackFor(option.minutes, now),
+    slack: slackFor(option.minutes, now, { serverSlackMin: option.serverSlackMin }),
     recommended: false,
   }));
 
@@ -138,7 +138,7 @@ function normalizeApiOptions(raw, baseRoute, { accessible = false } = {}) {
       isEstimate: true,
       fits: String(first(item?.sugestao, item?.hint, '')),
       recommendedByApi: Boolean(first(item?.recommended, item?.recomendada, false)),
-      serverSlackMin: Number.isFinite(Number(item?.folga_min)) ? Number(item.folga_min) : null,
+      serverSlackMin: optionSlackMin(item, baseRoute, list.length === 1),
       serverStatus: String(first(item?.status, '')),
     };
   });
@@ -164,6 +164,19 @@ function normalizeApiOptions(raw, baseRoute, { accessible = false } = {}) {
   }));
 }
 
+/**
+ * An option's own folga_min wins. The route-level free_time_minutes only stands
+ * in when the response describes ONE option, because then it IS that option's
+ * slack; spreading a single number across several alternatives of different
+ * lengths would claim the same arrival time for all of them.
+ */
+function optionSlackMin(item, baseRoute, isOnlyOption) {
+  const supplied = Number(item?.folga_min);
+  if (Number.isFinite(supplied)) return supplied;
+  if (!isOnlyOption) return null;
+  return Number.isFinite(baseRoute?.freeTimeMinutes) ? baseRoute.freeTimeMinutes : null;
+}
+
 function directOption(route) {
   return {
     id: FASTEST_ID,
@@ -179,6 +192,9 @@ function directOption(route) {
     isEstimate: true,
     fits: '',
     recommendedByApi: false,
+    // The single-route response computes slack once, for the whole route.
+    serverSlackMin: Number.isFinite(route.freeTimeMinutes) ? route.freeTimeMinutes : null,
+    serverStatus: '',
   };
 }
 

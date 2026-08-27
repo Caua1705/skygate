@@ -11,6 +11,7 @@ import {
   routePathMatchesPlan,
 } from '../services/routeSteps.js';
 import { buildRouteOptions, scoreOptions } from '../services/routeOptions.js';
+import { boardingTimeISO } from '../services/flightSlack.js';
 
 let calculationGeneration = 0;
 
@@ -53,6 +54,7 @@ export async function handleCalculate() {
       destinationCode: planState.destinationCode,
       routeMode: planState.routeMode,
       flightTime: planState.flightTime,
+      boardingTime: boardingTimeISO(planState.flightTime),
     };
     uiState.loading = 'route';
     uiState.error = '';
@@ -64,10 +66,11 @@ export async function handleCalculate() {
       origin_code:      requestedPlan.originCode,
       destination_code: requestedPlan.destinationCode,
       route_mode:       requestedPlan.routeMode,
-      // Optional. When present the endpoint can return folga_min/status per
-      // route; the client recomputes both anyway (see routeOptions.js), so an
-      // endpoint that ignores this field changes nothing on screen.
-      ...(requestedPlan.flightTime ? { horario_voo: requestedPlan.flightTime } : {}),
+      // Optional, and the ONLY field that makes the server compute
+      // free_time_minutes. It must be a full ISO 8601 instant WITH the airport's
+      // offset — a bare 'HH:MM' is not in the request schema and is dropped
+      // silently, which is exactly how every slack came back null before.
+      ...(requestedPlan.boardingTime ? { boarding_time: requestedPlan.boardingTime } : {}),
     });
 
     // A slow response must never be rendered against a different trip.

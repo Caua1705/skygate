@@ -42,6 +42,17 @@ import { getAirportSlug } from '../state/selectors.js';
 /** A flight further out than this is a typo, not a plan. */
 const MAX_HORIZON_MIN = 48 * 60;
 
+/**
+ * The airport's own UTC offset. America/Fortaleza has no DST and has been
+ * UTC−03:00 for its whole modern history, so a fixed offset is exact here.
+ * It is a property of the airport, not of the traveller's phone: the HH:MM the
+ * passenger types is the departure time PRINTED ON THE TICKET — airport local
+ * time — so it is stamped with the airport's offset even when the device is
+ * somewhere else.
+ */
+const AIRPORT_TIME_ZONE = 'America/Fortaleza';
+const AIRPORT_UTC_OFFSET = '-03:00';
+
 function localDateKey(date) {
   return [
     date.getFullYear(),
@@ -160,15 +171,28 @@ export function minutesUntilGateClose(now = new Date(), flightTime = planState.f
 /**
  * How a given travel time lands against the gate closing.
  * Floored, so a route never claims a minute it does not have.
- * @returns {{ slackMin:number, status:string, meta:object }|null} null with no flight.
+ *
+ * `serverSlackMin` is the authority when the backend supplies one
+ * (free_time_minutes on the calculated route): the server knows the airport's
+ * real clock and its own walking model, while this module can only estimate the
+ * gate closing from a configured margin. The local computation stays as the
+ * fallback for responses without it — and for the offline/restored session,
+ * where a stale server number would keep counting down a deadline that has
+ * already moved.
+ *
+ * @returns {{ slackMin:number, status:string, meta:object, fromServer:boolean }|null}
+ *          null with no flight.
  */
-export function slackFor(travelMinutes, now = new Date()) {
+export function slackFor(travelMinutes, now = new Date(), { serverSlackMin = null } = {}) {
   const exact = exactMinutesUntilFlight(now, planState.flightTime);
   if (exact === null) return null;
 
-  const slackMin = Math.floor(exact - gateCloseMarginMin() - (Number(travelMinutes) || 0));
+  const fromServer = Number.isFinite(serverSlackMin);
+  const slackMin = fromServer
+    ? Math.floor(Number(serverSlackMin))
+    : Math.floor(exact - gateCloseMarginMin() - (Number(travelMinutes) || 0));
   const status = classifySlack(slackMin);
-  return { slackMin, status, meta: SLACK_STATUS[status] };
+  return { slackMin, status, meta: SLACK_STATUS[status], fromServer };
 }
 
 /** Slack minutes → status key. Bands come from config; airports differ. */
@@ -219,4 +243,62 @@ export function gateCloseClock(flightTime = planState.flightTime) {
   const target = parseClock(flightTime);
   if (target === null) return '';
   return formatClock(target - gateCloseMarginMin());
+}
+
+/**
+ * Today's date AT THE AIRPORT, as 'YYYY-MM-DD', plus its wall clock in minutes.
+ * The device may be in another timezone, and "did that time already pass?" is a
+ * question about the airport's clock, not the phone's. Falls back to the device
+ * clock if the runtime has no timezone data.
+ */
+function airportNow(now) {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: AIRPORT_TIME_ZONE,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(now).reduce((acc, part) => {
+      acc[part.type] = part.value;
+      return acc;
+    }, {});
+    const hour = Number(parts.hour) % 24;   // some runtimes render midnight as 24
+    return {
+      dateKey: `${parts.year}-${parts.month}-${parts.day}`,
+      minutes: hour * 60 + Number(parts.minute),
+    };
+  } catch {
+    return { dateKey: localDateKey(now), minutes: now.getHours() * 60 + now.getMinutes() };
+  }
+}
+
+/**
+ * The departure instant the backend needs, as ISO 8601 WITH the airport offset:
+ * '2026-08-27T14:30:00-03:00'. Returns '' without a usable flight time.
+ *
+ * The date comes from the explicit choice the traveller already made on Home
+ * (planState.flightDate, which Hoje/Amanhã resolves to an absolute date). With
+ * no explicit date we assume today at the airport, rolling to tomorrow when the
+ * typed time has already passed — a 06:00 flight entered at 23:00 is a morning
+ * flight, never one sixteen hours in the past.
+ */
+export function boardingTimeISO(flightTime = planState.flightTime, now = new Date()) {
+  const target = parseClock(flightTime);
+  if (target === null) return '';
+
+  const explicitDate = parseLocalDate(planState.flightDate);
+  let dateKey;
+  if (explicitDate) {
+    dateKey = localDateKey(explicitDate);
+  } else {
+    const airport = airportNow(now);
+    dateKey = airport.dateKey;
+    if (target < airport.minutes) {
+      const [year, month, day] = dateKey.split('-').map(Number);
+      dateKey = localDateKey(new Date(year, month - 1, day + 1));
+    }
+  }
+
+  const hh = String(Math.floor(target / 60)).padStart(2, '0');
+  const mm = String(target % 60).padStart(2, '0');
+  return `${dateKey}T${hh}:${mm}:00${AIRPORT_UTC_OFFSET}`;
 }

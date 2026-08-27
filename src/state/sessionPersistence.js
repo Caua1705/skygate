@@ -53,7 +53,10 @@ function captureRouteOptions(options) {
     isEstimate: option?.isEstimate,
     fits: option?.fits,
     recommendedByApi: option?.recommendedByApi,
-    serverSlackMin: Number.isFinite(option?.serverSlackMin) ? option.serverSlackMin : null,
+    // Deliberately dropped: the server's slack is a countdown measured at
+    // request time. Restoring one up to two hours later would show a deadline
+    // that has already moved. A restored journey recomputes it locally.
+    serverSlackMin: null,
     serverStatus: typeof option?.serverStatus === 'string' ? option.serverStatus : '',
   }));
 }
