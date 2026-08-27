@@ -13,9 +13,10 @@ import { prefersReducedMotion , $ } from '../utils/dom.js';
    7. MAP AUTO-FIT
 
    Geometry, once, so the rest reads easily:
-   `.sg-map-inner` is a fixed 900x600 box centred in `.sg-map-wrapper` and
-   transformed with translate(tx,ty) scale(s) about its own centre. A map
-   point (px,py) therefore lands at, relative to the wrapper:
+   `.sg-map-inner` is a fixed 3740x1800 box — the floor plans' own viewBox —
+   centred in `.sg-map-wrapper` and transformed with translate(tx,ty)
+   scale(s) about its own centre. A map point (px,py) therefore lands at,
+   relative to the wrapper:
 
        screenX = wrapperW/2 + tx + (px - MAP_W/2) * s
        screenY = wrapperH/2 + ty + (py - MAP_H/2) * s
@@ -27,23 +28,30 @@ import { prefersReducedMotion , $ } from '../utils/dom.js';
 
 /* These four numbers decide how close the map opens, and they fight each
    other: every unit of padding is a unit of the frame NOT spent on the
-   route. Tuned against the 900x600 map space, where a short first leg is
-   ~90 units and the whole floor is 900. Earlier values (260 min span, 60+90
-   padding) built a 560-unit frame around that 90-unit leg — 84% empty, the
-   "small route lost in a dark field" this was meant to fix. */
+   route.
+
+   RE-TUNED FOR THE REAL PLAN. They used to be measured in the old per-floor
+   normalised space, where the same constant meant a different distance on
+   every level: a 250-unit minimum frame was 155 m of terminal on floor 0,
+   347 m on floor 2 and 23 m on floor 3. Map units are physical now
+   (0.38 m/unit everywhere), so each value below is a real distance, and all
+   four are the old ones times MARK_SCALE (1.7) — the factor that reproduces
+   what floors 0 and 1 looked like before. Measured against the live API, a
+   walking leg on the reference route is 139-314 units (53-119 m), so the
+   min-span frame lands at ~430 units, about 165 m across. */
 /** Breathing room around the framed box, as a share of its own span. */
 const FIT_PAD_RATIO = 0.12;
-/** Floor for that padding in map units — clears a pin, which rises ~34. */
-const FIT_PAD_MIN = 40;
+/** Floor for that padding in map units — clears a pin, which rises ~58. */
+const FIT_PAD_MIN = 68;
 /** A leg shorter than this is grown, so a single node never zooms to 8x. */
-const MIN_SPAN = 170;
+const MIN_SPAN = 289;
 /**
- * Room for an origin/destination caption, which is ~195 map units wide.
+ * Room for an origin/destination caption, which is ~330 map units wide.
  * Not the full width: reserving all of it zooms the leg back out, and the
  * brief asked for close framing. Captions on markers OUTSIDE the current
  * leg (a destination two steps away) can still fall off-frame.
  */
-const CAPTION_PAD = 60;
+const CAPTION_PAD = 102;
 /**
  * Ceiling for the AUTO fit only — pinch-zoom still goes to MAX_SCALE.
  * Framing a short leg inside a large map area (desktop, where the map gets

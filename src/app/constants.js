@@ -8,7 +8,13 @@ import { app } from '../state/appState.js';
 export const FORTALEZA_SLUG = 'fortaleza';
 export const MAX_RESULTS    = 40;
 export const DEBOUNCE_MS    = 200;
-export const MIN_SCALE      = 0.25;
+/**
+ * Zoom-out floor. Dropped from 0.25 when the map moved to the plans' own
+ * 3740x1800 space: floor 2's nodes span 2935 units, so seeing a whole level
+ * on a 390px phone needs about 0.13. At the old 0.25 the user simply could
+ * not zoom out far enough to see where they were going.
+ */
+export const MIN_SCALE      = 0.12;
 export const MAX_SCALE      = 8;
 export const ROUTE_ANIM_MS  = 400; // route draw animation duration
 

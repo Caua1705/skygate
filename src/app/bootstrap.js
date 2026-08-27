@@ -1,6 +1,6 @@
 import { getAirports, getAirportMap, SkyGateApiError } from '../services/api/index.js';
 import { app, appData, mapState, navState, planState, uiState } from '../state/appState.js';
-import { buildBaseFloorSvg } from '../map/floorMapBuilder.js';
+import { getBaseFloorSvg } from '../map/floorMapBuilder.js';
 import { render } from './router.js';
 import { asArray } from '../utils/format.js';
 import { FORTALEZA_SLUG } from './constants.js';
@@ -13,18 +13,21 @@ import { autoFitRoute } from '../map/mapFit.js';
    16. INIT
    ============================================================ */
 
-/** Preload base SVGs for all floors after initial load */
+/**
+ * Warm the floor plans after initial load.
+ *
+ * They are fetched files now, not built strings, so this is real network
+ * work — hence idle time, and hence a swallowed rejection: a plan that fails
+ * to preload is retried when its floor is actually opened, and must never
+ * surface as an unhandled rejection during startup.
+ */
 export function preloadFloorSvgs() {
   if (!appData.floors.length) return;
-  // Build SVG for each floor in idle time — populates cache
+  const warm = id => { getBaseFloorSvg(id).catch(() => {}); };
   appData.floors.forEach(f => {
-    if (!mapState.svgBaseCache[f.id]) {
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => { mapState.svgBaseCache[f.id] = buildBaseFloorSvg(f.id); });
-      } else {
-        setTimeout(() => { mapState.svgBaseCache[f.id] = buildBaseFloorSvg(f.id); }, 200);
-      }
-    }
+    if (mapState.svgBaseCache[f.id]) return;
+    if ('requestIdleCallback' in window) requestIdleCallback(() => warm(f.id));
+    else setTimeout(() => warm(f.id), 200);
   });
 }
 

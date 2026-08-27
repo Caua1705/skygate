@@ -19,12 +19,16 @@ import {
   renderViewToggle,
 } from '../src/screens/navigation/NavigationShell.js';
 import {
-  buildBaseFloorSvg,
+  MAP_H,
+  MAP_W,
+  MARK_SCALE,
+  baseFloorPlaceholderSvg,
   buildLabelLayerHtml,
   buildRouteOverlaySvg,
   getCurrentRouteNode,
   getFloorBounds,
   nodeToSvg,
+  planInnerMarkup,
   placeLabels,
 } from '../src/map/floorMapBuilder.js';
 
@@ -54,46 +58,64 @@ appData.nodes = [
 planState.originCode = 'a';
 planState.destinationCode = 'e';
 
-// Zero is a real coordinate, not a missing value. Excluding the origin at
-// (0,0) from the bounds used to project it far outside the 900x600 map.
+// The map now lives in the floor plans' own space, so the projection is the
+// identity: a node is drawn at exactly the x/y the API reported. Anything
+// else and the nodes float off the real drawing behind them.
+assert.equal(MAP_W, 3740);
+assert.equal(MAP_H, 1800);
 const floorOneBounds = getFloorBounds('1');
+// Zero is a real coordinate, not a missing value.
 assert.equal(floorOneBounds.minX, 0);
 assert.equal(floorOneBounds.minY, 0);
-const projectedOrigin = nodeToSvg(appData.nodes[0], floorOneBounds);
-assert.ok(projectedOrigin.x >= 0 && projectedOrigin.x <= 900);
-assert.ok(projectedOrigin.y >= 0 && projectedOrigin.y <= 600);
-const projectedSecond = nodeToSvg(appData.nodes[1], floorOneBounds);
-const scaleX = (projectedSecond.x - projectedOrigin.x) / 40;
-const scaleY = (projectedSecond.y - projectedOrigin.y) / 10;
-assert.ok(Math.abs(scaleX - scaleY) < 1e-10, 'map projection uses one scale for both axes');
-
-const routeFixtureNodes = appData.nodes;
-appData.nodes = [
-  ...routeFixtureNodes,
-  { code: 'tall-a', type: 'waypoint', floorId: 'tall', x: 0, y: 0 },
-  { code: 'tall-b', type: 'waypoint', floorId: 'tall', x: 10, y: 100 },
-];
-const tallFloorSvg = buildBaseFloorSvg('tall');
-const tallDividers = [...tallFloorSvg.matchAll(/class="sg-map__divider" x1="([\d.]+)"/g)]
-  .map(match => Number(match[1]));
-assert.equal(tallDividers.length, 3);
-assert.ok(
-  Math.max(...tallDividers) - Math.min(...tallDividers) < 60,
-  'zone dividers follow the uniformly projected body on a tall, narrow floor',
+for (const node of appData.nodes) {
+  const projected = nodeToSvg(node, floorOneBounds);
+  assert.equal(projected.x, node.x, `${node.code} keeps its raw x`);
+  assert.equal(projected.y, node.y, `${node.code} keeps its raw y`);
+}
+// The bounds of the floor must not influence the projection at all — that
+// per-floor re-normalisation is exactly what made alignment impossible.
+assert.deepEqual(
+  nodeToSvg(appData.nodes[1], getFloorBounds('2')),
+  nodeToSvg(appData.nodes[1], floorOneBounds),
+  'projection ignores which floor bounds it is handed',
 );
-appData.nodes = routeFixtureNodes;
 
-// Auto-fit exposes only a slice of the 900x600 canvas. The current-step
+// The plan is now a fetched file, unwrapped and re-rooted by us. The
+// unwrapping is the part that has to be exact: the viewBox it declares is the
+// contract with the node coordinates.
+assert.equal(
+  planInnerMarkup('<svg viewBox="0 0 3740 1800"><g id="piso 1"><path d="M0 0h1"/></g></svg>'),
+  '<g id="piso 1"><path d="M0 0h1"/></g>',
+);
+assert.equal(planInnerMarkup('not an svg'), '', 'garbage in, empty stage out');
+assert.equal(planInnerMarkup(''), '');
+assert.equal(planInnerMarkup(null), '');
+
+const placeholder = baseFloorPlaceholderSvg('1');
+assert.match(placeholder, /viewBox="0 0 3740 1800"/, 'the empty stage keeps the plan space');
+assert.match(placeholder, /Piso 1/, 'and still says which floor it is');
+
+// Auto-fit exposes only a slice of the 3740x1800 canvas. The current-step
 // capsule must clamp to that live slice, including when the marker hugs
 // either horizontal edge; its compact title remains readable if the place
 // name is wider than the frame.
-const visibleFrame = { x: 300, y: 150, w: 126, h: 160 };
-for (const markerX of [304, 422]) {
-  const marker = { x: markerX - 18, y: 212, w: 36, h: 36 };
+//
+// The frame and the marker are scaled by MARK_SCALE along with the caption
+// box itself: this asserts the clamping, not the absolute size, and an
+// unscaled frame would simply be too small for any caption to fit.
+const visibleFrame = {
+  x: 300 * MARK_SCALE, y: 150 * MARK_SCALE,
+  w: 126 * MARK_SCALE, h: 160 * MARK_SCALE,
+};
+for (const markerX of [304 * MARK_SCALE, 422 * MARK_SCALE]) {
+  const marker = {
+    x: markerX - 18 * MARK_SCALE, y: 212 * MARK_SCALE,
+    w: 36 * MARK_SCALE, h: 36 * MARK_SCALE,
+  };
   const [callout] = placeLabels([{
     x: markerX,
-    y: 230,
-    radius: 20,
+    y: 230 * MARK_SCALE,
+    radius: 20 * MARK_SCALE,
     priority: 4,
     cls: 'sg-map-label--here',
     lines: ['Etapa atual', 'Nome de local deliberadamente muito comprido'],

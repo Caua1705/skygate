@@ -66,16 +66,19 @@
   display: flex; align-items: center; justify-content: center;
 }
 
-/* flex-shrink:0 is load-bearing. .sg-map-wrapper is a flex container, so on
-   any viewport narrower than 900px this box was being SHRUNK to the
-   container width — the SVG then letterboxed its 900-unit viewBox into
-   ~400px, scaling the whole map down by another ~0.44 on a phone. Every
-   fit calculation assumes 1 map unit == 1px here, so that silent shrink is
-   what made the map open "zoomed way out" on mobile and nowhere else. */
+/* 3740x1800 is the floor plans' own viewBox (assets/floors/*.svg) and the
+   space the API reports node x/y in. Keeping the box at exactly that size is
+   what makes 1 map unit == 1 CSS px, which every fit calculation, the POI
+   layer and the caption layer all assume.
+
+   flex-shrink:0 is load-bearing. .sg-map-wrapper is a flex container, so this
+   box would otherwise be SHRUNK to the container width and the SVG would
+   letterbox its viewBox into ~400px, scaling the whole map down again on a
+   phone — the "opens zoomed way out on mobile and nowhere else" bug. */
 .sg-map-inner {
   position: relative;
   flex: 0 0 auto;
-  width: 900px; height: 600px;
+  width: 3740px; height: 1800px;
   transform-origin: center center;
   will-change: transform;
 }
@@ -110,13 +113,21 @@
 .sg-map-base { background: transparent; overflow: hidden; }
 
 /* ── Base plan: QUIET ARCHITECTURE ──────────────────────
-   The contours stay secondary to the luminous route, but remain readable
-   in a bright terminal. Earlier .06–.10 strokes disappeared into the navy
-   and removed the spatial context the route needs to feel trustworthy. */
-.sg-map__bg        { fill: transparent; }   /* the stage gradient shows through */
-.sg-map__terminal  { fill: rgba(41, 171, 226, .04); stroke: rgba(120, 205, 245, .26); stroke-width: 1.5; }
-.sg-map__zone      { fill: none; stroke: rgba(120, 205, 245, .17); stroke-width: 1.15; }
-.sg-map__divider   { stroke: rgba(120, 205, 245, .12); stroke-width: 1; stroke-dasharray: 4 10; }
+   The plan is now the REAL drawing of the floor, inlined by
+   buildBaseFloorSvg(). It ships as a full-colour Figma export on a pale
+   lavender ground, which would read as a lit page under a dark UI and drown
+   the route — the exact opposite of the "dark stage, lit route" premise.
+
+   Inlining is what lets this be fixed in CSS at all: an <image href> would be
+   an opaque bitmap. Desaturated and dimmed, the drawing becomes scenery —
+   walls, gates and shopfronts still legible as context, none of them
+   competing with the line. This is the one knob to turn if the plan reads too
+   dark or too loud; the geometry underneath is untouched either way. */
+.sg-map__bg   { fill: transparent; }   /* the stage gradient shows through */
+.sg-map__plan {
+  opacity: .42;
+  filter: grayscale(.7) brightness(.5) contrast(1.15);
+}
 /* 12px FLOOR EXCEPTION — deliberate, do not "fix".
    This is a <text> inside the floor-plan SVG: map lettering, not interface
    text. It is a decorative watermark at 24% opacity, it scales with the map's
@@ -127,7 +138,9 @@
 .sg-map__watermark {
   fill: rgba(150, 210, 240, .24);
   font-family: Inter, system-ui, sans-serif;
-  font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  /* 11px x MARK_SCALE: this is <text> inside the map's own coordinate space,
+     so it is sized in map units like every other drawn dimension. */
+  font-size: 18.7px; font-weight: 600; letter-spacing: .08em;
 }
 
 /* Shared compact timing sentence used by the dark timeline strip and the
@@ -233,7 +246,10 @@
   position: absolute;
   box-sizing: border-box;
   display: flex; flex-direction: column; justify-content: center;
-  padding: 9px 12px;
+  /* 9px 12px x MARK_SCALE (1.7). Captions sit in the map's coordinate space
+     and are NOT counter-scaled, so these must match LBL in floorMapBuilder.js
+     exactly or placeLabels() reserves the wrong box and captions collide. */
+  padding: 15.3px 20.4px;
   border-radius: var(--radius-md);
   background: rgba(8, 24, 42, .66);
   border: 1px solid rgba(120, 205, 245, .20);
@@ -246,7 +262,8 @@
   font-family: Inter, system-ui, sans-serif;
   white-space: nowrap;
 }
-.sg-map-label__text { font-size: 12.5px; line-height: 17px; }
+/* 12.5px / 17px x MARK_SCALE — see the note on .sg-map-label's padding. */
+.sg-map-label__text { font-size: 21.25px; line-height: 28.9px; }
 /* #FFFFFF on that capsule ≈ 15:1; the muted line still clears 9:1. */
 .sg-map-label__text.is-title { color: #FFFFFF; font-weight: 700; }
 .sg-map-label__text.is-sub   { color: rgba(255, 255, 255, .76); font-weight: 500; }

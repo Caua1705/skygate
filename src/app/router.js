@@ -10,7 +10,7 @@ import { bindEvents, bindFloorControlEvents, bindMapPoiEvents, bindSearchItemEve
 import { applyMapTransform, bindMapPan } from '../map/mapPanZoom.js';
 import { autoFitRoute } from '../map/mapFit.js';
 import { refreshSummaryTiming, scrollTimelineToCurrent } from './actions.js';
-import { buildLabelLayerHtml, buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../map/floorMapBuilder.js';
+import { buildLabelLayerHtml, buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg, peekBaseFloorSvg } from '../map/floorMapBuilder.js';
 import { getFloorLabel } from '../state/selectors.js';
 import { filterNodes, groupByCategory } from '../services/nodeSearch.js';
 import { persistSessionState } from '../state/sessionPersistence.js';
@@ -110,12 +110,29 @@ export function render() {
     // nothing here and the map view keeps its previous behaviour.
     applyMapTransform(0);
     bindMapPan();
+    // The template painted the empty stage; fill it in once the plan for
+    // this floor has been fetched (immediately, from cache, after the first).
+    if (navState.view === 'map') mountBaseFloorSvg(mapState.selectedFloorId);
     // The traveller must land on the step they are actually on, not at the
     // top of a route they are halfway through. Each view scrolls itself; the
     // diagram does it from showRouteMap(), where the entrance is played.
     if (navState.view === 'timeline') requestAnimationFrame(() => scrollTimelineToCurrent('auto'));
   }
   persistJourney();
+}
+
+/**
+ * Drop a floor plan into the base layer once its fetch resolves.
+ *
+ * Guarded on the floor still being the selected one: a traveller who taps
+ * through two floors while the first plan is in flight must not have it
+ * land under the second floor's route.
+ */
+export async function mountBaseFloorSvg(floorId) {
+  const svg = await getBaseFloorSvg(floorId);
+  if (mapState.selectedFloorId !== floorId) return;
+  const baseEl = $('map-base');
+  if (baseEl) baseEl.innerHTML = svg;
 }
 
 /* Partial map update — only route overlay, not base or full render */
@@ -153,7 +170,8 @@ export function updateMapForFloor(floorId) {
   const routeEl = $('map-route');
   if (!baseEl || !routeEl) return;
   requestAnimationFrame(() => {
-    baseEl.innerHTML  = getBaseFloorSvg(floorId);
+    baseEl.innerHTML  = peekBaseFloorSvg(floorId);
+    mountBaseFloorSvg(floorId);
     routeEl.innerHTML = buildRouteOverlaySvg(floorId);
     $('map-area')?.setAttribute('aria-label', `Mapa da rota \u2014 ${getFloorLabel(floorId)}`);
     updatePoiLayer();

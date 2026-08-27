@@ -3,13 +3,26 @@ import { appData, mapState, navState, planState } from '../state/appState.js';
 import { NAV_VISIBLE_TYPES } from '../app/constants.js';
 import { clamp, esc } from '../utils/format.js';
 import { findNode, getFloorLabel, getFloorTransform } from '../state/selectors.js';
+import { createSvgMapCache } from './svgMapCache.js';
 
 /* ============================================================
-   6. FLOOR MAP BUILDER — Clean semantic map (no technical nodes)
+   6. FLOOR MAP BUILDER — the real floor plan, with the route over it
 
-   IMPORTANT: there is no floor plan from the backend. The API returns only
-   nodes (code/type/name/x/y/floor); everything drawn here is synthesised
-   from those coordinates. So "the SVG" is entirely ours to restyle.
+   THE PLAN IS REAL NOW. assets/floors/{floorId}.svg is the architectural
+   drawing of that level, exported on a 3740x1800 viewBox — the SAME space
+   the API reports node x/y in. Nothing is synthesised any more and nothing
+   is re-scaled: a node at (2263.88, 942.59) is drawn at (2263.88, 942.59)
+   and lands on the door the plan draws there.
+
+   That is the whole reason nodeToSvg() is the identity function. It used to
+   re-normalise each floor's node cloud into 900x600 with its own bounding
+   box, which gave every floor a DIFFERENT scale (floor 2 shrank to 0.27x,
+   floor 3 was blown up 4.15x) and made alignment with any real plan
+   impossible by construction.
+
+   One consequence worth stating: map units are now physical. 1 unit is
+   APP_CONFIG.distance.metersPerUnit (0.38 m) on every floor, so a constant
+   expressed in units below is a real distance, not an arbitrary number.
 
    VISUAL PREMISE — "dark stage, lit route":
    the plan is scenery and the route is the only thing under the spotlight.
@@ -27,8 +40,25 @@ import { findNode, getFloorLabel, getFloorTransform } from '../state/selectors.j
      inline fill/stroke, so the map can be re-themed without touching JS.
    ============================================================ */
 
-export const MAP_W = 900, MAP_H = 600;
-export const MAP_PAD = 48; // internal padding
+/** The floor plans' own viewBox. Node x/y are already in this space. */
+export const MAP_W = 3740, MAP_H = 1800;
+
+/**
+ * Everything drawn in map units — pins, marker rings, caption boxes — is
+ * multiplied by this so it keeps its old ON-SCREEN size in the new space.
+ *
+ * It is 1.7, not the 4.15 the canvas grew by, and the difference matters.
+ * The old code fitted each floor's node cloud into 900x600 separately, so
+ * the drawn scale was never 900/3740; measured against the live API it was
+ * 0.61 on floor 0, 0.58 on floor 1, 0.27 on floor 2 and 4.15 on floor 3.
+ * 1/0.6 ≈ 1.7 reproduces what floors 0 and 1 — where a journey starts —
+ * looked like before, and gives every floor that same honest scale instead
+ * of four different ones. See the note in mapFit.js on the framing.
+ */
+export const MARK_SCALE = 1.7;
+
+/** Round to one decimal; SVG output never needs more. */
+const u = n => (n * MARK_SCALE).toFixed(1);
 
 /**
  * The node represented by the passenger's manually confirmed active step.
@@ -59,112 +89,87 @@ export function getFloorBounds(floorId) {
   return { minX, maxX, minY, maxY, w: maxX - minX || 1, h: maxY - minY || 1 };
 }
 
-export function nodeToSvg(node, bounds) {
-  const innerW = MAP_W - MAP_PAD * 2;
-  const innerH = MAP_H - MAP_PAD * 2;
-  // One scale for both axes preserves angles and relative distances. Scaling
-  // x/y independently made a diagonal corridor change direction whenever the
-  // source floor's aspect ratio differed from the 900x600 canvas.
-  const scale = Math.min(innerW / bounds.w, innerH / bounds.h);
-  const drawnW = bounds.w * scale;
-  const drawnH = bounds.h * scale;
-  const offsetX = MAP_PAD + (innerW - drawnW) / 2;
-  const offsetY = MAP_PAD + (innerH - drawnH) / 2;
-  return {
-    x: offsetX + (node.x - bounds.minX) * scale,
-    y: offsetY + (node.y - bounds.minY) * scale,
-  };
+/**
+ * Project a node into the map's coordinate space — which is now the plan's
+ * own space, so this is the identity.
+ *
+ * `bounds` is accepted and ignored on purpose: every caller already computes
+ * it and passes it, and keeping the signature means the projection stays a
+ * single function that the base plan, the route overlay, the POI layer and
+ * mapFit all share. Re-scaling here is precisely what stopped nodes from
+ * landing on the plan.
+ */
+export function nodeToSvg(node, _bounds) {
+  return { x: node.x, y: node.y };
+}
+
+/* -- THE FLOOR PLAN ------------------------------------------------
+   assets/floors/{floorId}.svg, fetched once per floor and INLINED.
+
+   Inlined rather than <image href> or a CSS background for one reason: the
+   plan is a full-colour Figma export and this screen is a dark stage. Only
+   real DOM can be re-themed, and .sg-map__plan in navigation.css is where
+   that happens. An <image> would be an opaque bitmap the theme cannot reach
+   into.
+   ------------------------------------------------------------------ */
+
+const floorPlanUrl = floorId => `/assets/floors/${encodeURIComponent(floorId)}.svg`;
+
+/**
+ * The plan's contents without its own <svg> wrapper.
+ *
+ * We supply the wrapper ourselves so the class names, the aria-hidden and
+ * the viewBox are ours. The file's viewBox is already 0 0 3740 1800, exactly
+ * what we re-declare, so dropping its root tag changes nothing geometric.
+ */
+export function planInnerMarkup(svgText) {
+  const text = String(svgText ?? '');
+  const rootStart = text.indexOf('<svg');
+  if (rootStart < 0) return '';
+  const rootEnd = text.indexOf('>', rootStart);
+  const close = text.lastIndexOf('</svg>');
+  if (rootEnd < 0 || close < rootEnd) return '';
+  return text.slice(rootEnd + 1, close);
+}
+
+/** The empty stage: what the base layer shows before a plan has arrived. */
+export function baseFloorPlaceholderSvg(floorId) {
+  return `<svg viewBox="0 0 ${MAP_W} ${MAP_H}" class="sg-map-svg sg-map-base" aria-hidden="true">
+    <rect class="sg-map__bg" width="${MAP_W}" height="${MAP_H}"/>
+    <text class="sg-map__watermark" x="${MAP_W / 2}" y="${MAP_H / 2}" text-anchor="middle">${esc(getFloorLabel(floorId))}</text>
+  </svg>`;
 }
 
 /**
- * Build the BASE floor SVG — terminal shape + zone areas.
- * This NEVER shows corridor/waypoint nodes.
- * Cached per floorId — rebuilt only when floor data changes.
+ * Build the BASE floor SVG: the real plan, wrapped in our own root.
+ *
+ * A plan that fails to load degrades to the empty stage rather than to a
+ * broken screen — the route overlay, the POIs and the captions live in
+ * separate layers and stay usable without the scenery behind them.
  */
-export function buildBaseFloorSvg(floorId) {
-  const allNodes = appData.nodes.filter(n => n.floorId === floorId);
-  if (!allNodes.length) {
-    return `<svg viewBox="0 0 ${MAP_W} ${MAP_H}" class="sg-map-svg sg-map-base" aria-hidden="true"><rect class="sg-map__bg" width="${MAP_W}" height="${MAP_H}"/></svg>`;
+export async function buildBaseFloorSvg(floorId) {
+  let inner = '';
+  try {
+    const response = await fetch(floorPlanUrl(floorId));
+    if (!response.ok) throw new Error(`floor plan ${floorId}: HTTP ${response.status}`);
+    inner = planInnerMarkup(await response.text());
+  } catch (error) {
+    console.warn('[SkyGate] planta do piso indisponivel', floorId, error);
+    return baseFloorPlaceholderSvg(floorId);
   }
+  if (!inner) return baseFloorPlaceholderSvg(floorId);
 
-  const bounds = getFloorBounds(floorId);
-  const toSvg  = n => nodeToSvg(n, bounds);
-
-  // Terminal outline — hull from all nodes + generous padding
-  const termPad = 60;
-  const allPts   = allNodes.map(toSvg);
-  const xs = allPts.map(p => p.x), ys = allPts.map(p => p.y);
-  const tX = Math.min(...xs) - termPad;
-  const tY = Math.min(...ys) - termPad;
-  const tW = Math.max(...xs) - Math.min(...xs) + termPad * 2;
-  const tH = Math.max(...ys) - Math.min(...ys) + termPad * 2;
-
-  // Zone clusters — group POI nodes by area (x-quartile)
-  const poiNodes = allNodes.filter(n => n.isPoi && !n.isInternal);
-
-  // Divide into 4 x-bands
-  const xRange = bounds.w / 4;
-  const zones = Array.from({ length: 4 }, (_, qi) => {
-    const band = poiNodes.filter(n => {
-      const relX = n.x - bounds.minX;
-      return relX >= qi * xRange && relX < (qi + 1) * xRange;
-    });
-    if (band.length < 2) return null;
-    const pts = band.map(toSvg);
-    const bxs = pts.map(p => p.x), bys = pts.map(p => p.y);
-    const zPad = 28;
-    return {
-      x: Math.min(...bxs) - zPad, y: Math.min(...bys) - zPad,
-      w: Math.max(...bxs) - Math.min(...bxs) + zPad * 2,
-      h: Math.max(...bys) - Math.min(...bys) + zPad * 2,
-    };
-  }).filter(Boolean);
-
-  /* GHOST PLAN ONLY.
-     Vertical connections and gate chips used to be drawn here — dozens of
-     discs and labelled boxes scattered over the whole floor, all at the same
-     visual weight as everything else. That is exactly the noise the "dark
-     stage" premise removes: the lifts and stairs the traveller actually has
-     to use are on the route, and the route overlay marks those. Anything
-     else was decoration competing with the line. */
-
-  return `<svg
-    viewBox="0 0 ${MAP_W} ${MAP_H}"
-    class="sg-map-svg sg-map-base"
-    aria-hidden="true"
-    style="overflow:visible"
-  >
-    <!-- Background: transparent on purpose, so the radial "stage" gradient
-         painted on .sg-map-area shows through and keeps covering the map
-         when the user pans past the edge of the 900x600 plan. -->
+  return `<svg viewBox="0 0 ${MAP_W} ${MAP_H}" class="sg-map-svg sg-map-base" aria-hidden="true">
     <rect class="sg-map__bg" width="${MAP_W}" height="${MAP_H}"/>
-
-    <!-- Terminal body: contour only -->
-    <rect class="sg-map__terminal" x="${tX.toFixed(1)}" y="${tY.toFixed(1)}"
-      width="${tW.toFixed(1)}" height="${tH.toFixed(1)}" rx="28"/>
-
-    <!-- Zone areas: contour only -->
-    ${zones.map(z =>
-      `<rect class="sg-map__zone" x="${z.x.toFixed(1)}" y="${z.y.toFixed(1)}" width="${z.w.toFixed(1)}" height="${z.h.toFixed(1)}" rx="16"/>`
-    ).join('')}
-
-    <!-- Zone divider lines (barely there — a hint of structure) -->
-    ${Array.from({ length: 3 }, (_, i) => {
-      const baseX = toSvg({
-        x: bounds.minX + (i + 1) * xRange,
-        y: bounds.minY,
-      }).x;
-      return `<line class="sg-map__divider" x1="${baseX.toFixed(1)}" y1="${(tY + 26).toFixed(1)}" x2="${baseX.toFixed(1)}" y2="${(tY + tH - 26).toFixed(1)}"/>`;
-    }).join('')}
-
-    <!-- Floor label watermark -->
-    <text class="sg-map__watermark" x="${(MAP_W / 2).toFixed(1)}" y="${(tY + tH - 18).toFixed(1)}" text-anchor="middle" aria-hidden="true">${esc(getFloorLabel(floorId))}</text>
+    <g class="sg-map__plan">${inner}</g>
   </svg>`;
 }
 
 /** Teardrop map pin whose tip sits exactly on (x, y). */
 export function mapPin(x, y, cls = '') {
-  return `<g class="sg-map-pin ${cls}" transform="translate(${x.toFixed(1)},${y.toFixed(1)})">
+  // The tip is at the group's own origin, so scaling about it leaves the tip
+  // exactly on (x, y) — the one property this shape has to keep.
+  return `<g class="sg-map-pin ${cls}" transform="translate(${x.toFixed(1)},${y.toFixed(1)}) scale(${MARK_SCALE})">
     <path class="sg-map-pin__body" d="M0 0c-6.6-9.2-11.2-14.5-11.2-19.8a11.2 11.2 0 0 1 22.4 0C11.2-14.5 6.6-9.2 0 0z"/>
     <circle class="sg-map-pin__core" cy="-19.8" r="4.8"/>
   </g>`;
@@ -179,7 +184,15 @@ export function mapPin(x, y, cls = '') {
 
 // charW is a deliberate slight over-estimate of Inter's average advance at
 // 12.5px: the box is sized from character count, so erring narrow would clip.
-const LBL = { padX: 12, lineH: 17, padY: 9, charW: 7.05, gap: 6 };
+// All five are map units, so they carry MARK_SCALE like every other drawn
+// dimension, and the caption CSS in navigation.css is scaled to match.
+const LBL = {
+  padX: 12 * MARK_SCALE,
+  lineH: 17 * MARK_SCALE,
+  padY: 9 * MARK_SCALE,
+  charW: 7.05 * MARK_SCALE,
+  gap: 6 * MARK_SCALE,
+};
 
 function labelSize(lines) {
   const widest = Math.max(...lines.map(l => l.length));
@@ -240,7 +253,7 @@ export function placeLabels(items, blocked = [], frame = FULL_MAP_LABEL_FRAME) {
     for (const lines of variants) {
       const { w, h } = labelSize(lines);
       if (w > viewport.w || h > viewport.h) continue;
-      const off = (item.radius ?? 14) + LBL.gap;
+      const off = (item.radius ?? 14 * MARK_SCALE) + LBL.gap;
       for (const [ax, ay] of anchorsFor(item, viewport, w, off)) {
         const cx = item.x + ax * (off + w / 2);
         const cy = item.y + ay * (off + h / 2);
@@ -268,7 +281,7 @@ export function placeLabels(items, blocked = [], frame = FULL_MAP_LABEL_FRAME) {
    Captions used to be <rect> + <text> inside the route SVG. They are now
    HTML in their own layer, for one reason: `backdrop-filter` is what makes
    a glass capsule read as glass, and it does not work on SVG shapes. The
-   layer is the same 900x600 box as the viewBox, so the geometry computed by
+   layer is the same 3740x1800 box as the viewBox, so the geometry computed by
    placeLabels() drops straight in as left/top/width pixels.
 
    The dark rgba background is deliberately opaque enough to stand on its
@@ -321,7 +334,7 @@ function controlsKeepOut(floorId) {
 
 /**
  * The wrapper's currently visible rectangle projected back into map space.
- * Auto-fit often shows only a small slice of the 900x600 canvas; clamping a
+ * Auto-fit often shows only a small slice of the 3740x1800 canvas; clamping a
  * caption to the whole canvas can therefore leave it correctly "on the map"
  * but visibly cut off by the wrapper. Eight screen pixels remain as a stable
  * edge gap regardless of zoom.
@@ -364,20 +377,29 @@ export function buildLabelLayerHtml(floorId) {
 
   // POI dots share this coordinate space, so they are obstacles too —
   // otherwise a caption lands on top of one and neither is readable.
-  const blocked = getRoutePois(floorId).map(({ p }) => ({ x: p.x - 12, y: p.y - 12, w: 24, h: 24 }));
+  const blocked = getRoutePois(floorId).map(({ p }) => ({
+    x: p.x - 12 * MARK_SCALE, y: p.y - 12 * MARK_SCALE,
+    w: 24 * MARK_SCALE, h: 24 * MARK_SCALE,
+  }));
   const controls = controlsKeepOut(floorId);
   if (controls) blocked.push(controls);
   const items = [];
 
   if (destPt) {
-    items.push({ x: destPt.x, y: destPt.y - 20, radius: 18, priority: 3,
+    items.push({ x: destPt.x, y: destPt.y - 20 * MARK_SCALE, radius: 18 * MARK_SCALE, priority: 3,
       cls: 'sg-map-label--dest', lines: [getPublicNodeLabel(destNode), 'Seu destino'] });
-    blocked.push({ x: destPt.x - 14, y: destPt.y - 36, w: 28, h: 38 });
+    blocked.push({
+      x: destPt.x - 14 * MARK_SCALE, y: destPt.y - 36 * MARK_SCALE,
+      w: 28 * MARK_SCALE, h: 38 * MARK_SCALE,
+    });
   }
   if (currentPt) {
-    items.push({ x: currentPt.x, y: currentPt.y, radius: 20, priority: 4,
+    items.push({ x: currentPt.x, y: currentPt.y, radius: 20 * MARK_SCALE, priority: 4,
       cls: 'sg-map-label--here', lines: ['Etapa atual', getPublicNodeLabel(currentNode)] });
-    blocked.push({ x: currentPt.x - 18, y: currentPt.y - 18, w: 36, h: 36 });
+    blocked.push({
+      x: currentPt.x - 18 * MARK_SCALE, y: currentPt.y - 18 * MARK_SCALE,
+      w: 36 * MARK_SCALE, h: 36 * MARK_SCALE,
+    });
   }
 
   return placeLabels(items, blocked, visibleMapFrame(floorId) ?? undefined).map(({ box, lines, cls }) => `
@@ -558,7 +580,7 @@ export function buildRouteOverlaySvg(floorId) {
     <!-- Active route segment (dominant) -->
     ${activePts.length > 1 ? routeLine(activePts, 'active', { flow: true })
       : activeSpot ? `
-      <circle class="sg-route__spot" cx="${activeSpot.x.toFixed(1)}" cy="${activeSpot.y.toFixed(1)}" r="6"/>
+      <circle class="sg-route__spot" cx="${activeSpot.x.toFixed(1)}" cy="${activeSpot.y.toFixed(1)}" r="${u(6)}"/>
     ` : ''}
 
     <!-- Full route fallback (no step data) -->
@@ -579,8 +601,8 @@ export function buildRouteOverlaySvg(floorId) {
       return `<g class="sg-route-mark" aria-label="${esc(getPublicNodeLabel(n))}"
         transform="translate(${p.x.toFixed(1)},${p.y.toFixed(1)})">
         <g class="sg-pop">
-          <circle class="sg-route-mark__ring" r="5.5"/>
-          <circle class="sg-route-mark__core" r="2.4"/>
+          <circle class="sg-route-mark__ring" r="${u(5.5)}"/>
+          <circle class="sg-route-mark__core" r="${u(2.4)}"/>
         </g>
       </g>`;
     }).join('')}
@@ -588,9 +610,9 @@ export function buildRouteOverlaySvg(floorId) {
     <!-- Destination: glowing pin, the end of the light -->
     ${destPt ? `<g class="sg-map-dest" aria-label="Destino: ${esc(getPublicNodeLabel(destNode))}"
       transform="translate(${destPt.x.toFixed(1)},${destPt.y.toFixed(1)})">
-      <circle class="sg-map-dest__glow" r="34"/>
+      <circle class="sg-map-dest__glow" r="${u(34)}"/>
       <g class="sg-pop">
-        <circle class="sg-map-dest__halo" r="20"/>
+        <circle class="sg-map-dest__halo" r="${u(20)}"/>
         ${mapPin(0, 0, 'sg-map-pin--dest')}
       </g>
     </g>` : ''}
@@ -598,12 +620,12 @@ export function buildRouteOverlaySvg(floorId) {
     <!-- Passenger-confirmed active step: progress, not live positioning. -->
     ${currentPt ? `<g class="sg-map-here" aria-label="Etapa atual: ${esc(getPublicNodeLabel(currentNode))}"
       transform="translate(${currentPt.x.toFixed(1)},${currentPt.y.toFixed(1)})">
-      <circle class="sg-map-here__wave" r="13"/>
-      <circle class="sg-map-here__wave sg-map-here__wave--2" r="13"/>
-      <circle class="sg-map-here__halo" r="26"/>
+      <circle class="sg-map-here__wave" r="${u(13)}"/>
+      <circle class="sg-map-here__wave sg-map-here__wave--2" r="${u(13)}"/>
+      <circle class="sg-map-here__halo" r="${u(26)}"/>
       <g class="sg-pop">
-        <circle class="sg-map-here__dot" r="8.5"/>
-        <circle class="sg-map-here__center" r="3.2"/>
+        <circle class="sg-map-here__dot" r="${u(8.5)}"/>
+        <circle class="sg-map-here__center" r="${u(3.2)}"/>
       </g>
     </g>` : ''}
 
@@ -614,7 +636,7 @@ export function buildRouteOverlaySvg(floorId) {
 
 /* ── POIs ALONG THE ROUTE ──────────────────────────────────────
    Rendered as HTML, not SVG, in their own layer. The layer is exactly the
-   same 900x600 box as the SVG viewBox, so 1 SVG unit == 1 CSS px and the
+   same 3740x1800 box as the SVG viewBox, so 1 SVG unit == 1 CSS px and the
    markers land precisely on the plan. HTML buys us real <button>s (focus,
    aria-label, comfortable tap targets) and <iconify-icon> for the category
    glyph, which cannot be used inside an SVG document.
@@ -633,8 +655,14 @@ function distToPolyline(p, pts) {
   return best;
 }
 
-/** How close to the line a POI has to be to count as "on the way". */
-export const POI_NEAR_UNITS = 78;
+/**
+ * How close to the line a POI has to be to count as "on the way".
+ *
+ * Now a real distance: 133 units x 0.38 m/unit is about 50 m. The old 78 was
+ * measured in the per-floor normalised space, where it meant 108 m on floor 2
+ * and 7 m on floor 3 — one constant describing two different products.
+ */
+export const POI_NEAR_UNITS = 133;
 /**
  * Hard ceiling on visible POIs. Was 10 with a 78-unit catchment, which put
  * a labelled icon roughly every centimetre of route on a phone — the exact
@@ -715,9 +743,22 @@ export function buildPoiLayerHtml(floorId) {
   }).join('');
 }
 
-export function getBaseFloorSvg(floorId) {
-  if (!mapState.svgBaseCache[floorId]) {
-    mapState.svgBaseCache[floorId] = buildBaseFloorSvg(floorId);
-  }
-  return mapState.svgBaseCache[floorId];
+/**
+ * One in-flight fetch per floor however many callers ask at once — a floor
+ * switch and the idle preloader routinely race for the same file.
+ * mapState.svgBaseCache keeps the RESOLVED markup, so the synchronous first
+ * paint has something to render.
+ */
+const floorPlanCache = createSvgMapCache(floorId => buildBaseFloorSvg(floorId));
+
+/** The plan if it is already here, the empty stage if it is still coming. */
+export function peekBaseFloorSvg(floorId) {
+  return mapState.svgBaseCache[floorId] ?? baseFloorPlaceholderSvg(floorId);
+}
+
+export async function getBaseFloorSvg(floorId) {
+  if (mapState.svgBaseCache[floorId]) return mapState.svgBaseCache[floorId];
+  const svg = await floorPlanCache.load(floorId);
+  mapState.svgBaseCache[floorId] = svg;
+  return svg;
 }

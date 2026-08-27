@@ -2,7 +2,7 @@ import { getPublicNodeLabel } from '../../services/nodePresentation.js';
 import { appData, mapState, navState, planState, uiState } from '../../state/appState.js';
 import { esc, fmtMin } from '../../utils/format.js';
 import { findNode, getFloorLabel } from '../../state/selectors.js';
-import { buildLabelLayerHtml, buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg } from '../../map/floorMapBuilder.js';
+import { buildLabelLayerHtml, buildPoiLayerHtml, buildRouteOverlaySvg, peekBaseFloorSvg } from '../../map/floorMapBuilder.js';
 import { getStepIconName, navIcon } from '../../components/Icon.js';
 import { render } from '../../app/router.js';
 import { formatMeters } from '../../services/routeSteps.js';
@@ -42,15 +42,17 @@ export function renderNavigationMap() {
       <div class="sg-map-area" id="map-area" aria-label="Mapa da rota — ${esc(getFloorLabel(fid))}" role="region">
         <div class="sg-map-wrapper" id="navigation-panel" role="tabpanel" aria-labelledby="tab-route-btn">
           <div class="sg-map-inner" id="map-inner">
-            <!-- Base floor SVG (cached, never rebuilt on step change) -->
+            <!-- The real floor plan. Rendering is synchronous but the plan
+                 is fetched, so this paints the empty stage on a cold start
+                 and mountBaseFloorSvg() drops the plan in when it lands. -->
             <div id="map-base" class="sg-map-layer sg-map-layer--base">
-              ${getBaseFloorSvg(fid)}
+              ${peekBaseFloorSvg(fid)}
             </div>
             <!-- Route overlay SVG (rebuilt on step change only) -->
             <div id="map-route" class="sg-map-layer sg-map-layer--route">
               ${buildRouteOverlaySvg(fid)}
             </div>
-            <!-- POIs along the route: HTML buttons in the same 900x600 space -->
+            <!-- POIs along the route: HTML buttons in the same 3740x1800 space -->
             <div id="map-pois" class="sg-map-layer sg-map-layer--pois">
               ${buildPoiLayerHtml(fid)}
             </div>
