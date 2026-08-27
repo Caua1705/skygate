@@ -682,6 +682,113 @@
 .sg-poi:focus .sg-poi__label,
 .sg-poi:focus-visible .sg-poi__label { opacity: 1; }
 
+/* ═══════════════════════════════════════════════════════════════════
+   TILTED CAMERA — EXPERIMENT, NOT SHIPPED
+
+   A driving-navigation camera: the plan lies down and the route runs towards
+   a horizon, the way Google Maps behaves while navigating. Reversible by
+   construction — every rule below is gated on [data-map-tilt="on"], so the
+   flat map is literally the untouched default, and deleting this block plus
+   #tilt-toggle-btn, its listener in events.js and mapState.tilt removes the
+   experiment without a trace.
+
+   WHERE THE TRANSFORM LIVES. #map-inner already carries an INLINE
+   transform: translate() scale() written by applyMapTransform() on every pan,
+   zoom and auto-fit, and an inline style beats any rule here. So the tilt is
+   applied one level up, on .sg-map-wrapper, which owns no transform of its
+   own; the perspective sits one level above that again, on .sg-map-area.
+   Pan and zoom keep working inside the tilted plane, untouched.
+   ═══════════════════════════════════════════════════════════════════ */
+
+.sg-map-area[data-map-tilt] {
+  /* THE TWO KNOBS. --map-tilt is the camera angle; --map-tilt-persp is how
+     wide-angle the lens is (smaller = stronger, more dramatic convergence). */
+  --map-tilt:        55deg;
+  --map-tilt-persp:  1400px;
+  /* Low on the frame, so the vanishing point sits near the top of the screen
+     and the ground opens up towards the traveller — the near-ground-at-the-
+     bottom composition that makes this read as "ahead of me" and not as a
+     tilted picture of a map. */
+  --map-tilt-origin: 50% 78%;
+}
+
+.sg-map-area[data-map-tilt="on"] {
+  perspective: var(--map-tilt-persp);
+  perspective-origin: var(--map-tilt-origin);
+}
+
+.sg-map-area[data-map-tilt="on"] .sg-map-wrapper {
+  transform: rotateX(var(--map-tilt));
+  transform-origin: var(--map-tilt-origin);
+  transition: transform 420ms cubic-bezier(.22, .61, .36, 1);
+}
+
+/* preserve-3d has to be unbroken from the tilted element down to every label,
+   or the layer flattens and the counter-rotation below silently does nothing:
+   the labels would be painted INTO the tilted plane and stay unreadable. */
+.sg-map-area[data-map-tilt="on"] .sg-map-wrapper,
+.sg-map-area[data-map-tilt="on"] .sg-map-inner,
+.sg-map-area[data-map-tilt="on"] .sg-map-layer--pois,
+.sg-map-area[data-map-tilt="on"] .sg-map-layer--labels {
+  transform-style: preserve-3d;
+}
+
+/* ── BILLBOARDING ────────────────────────────────────────
+   The SVG layers SHOULD lie down — they are the ground. The HTML layers must
+   not: a POI name rotated 55 degrees away from the eye is a smear.
+
+   Each label is counter-rotated by exactly -1x the camera angle about its own
+   BOTTOM edge, so it stands upright out of the ground at the point it marks
+   and faces the camera square-on, like a pin in a driving map. Rotating about
+   the centre instead would lift the anchor off the spot it names.
+
+   The counter-rotation is composed INTO each element's existing transform,
+   never appended as a second rule — .sg-poi already carries a translate and a
+   zoom counter-scale, and a second `transform` would replace them outright
+   and throw every marker into the corner of the map. */
+.sg-map-area[data-map-tilt="on"] .sg-poi {
+  transform-origin: 50% 100%;
+  transform:
+    translate(-50%, -50%)
+    rotateX(calc(var(--map-tilt) * -1))
+    scale(calc(1 / var(--map-zoom, 1)));
+}
+
+.sg-map-area[data-map-tilt="on"] .sg-map-label {
+  transform-origin: 50% 100%;
+  transform: rotateX(calc(var(--map-tilt) * -1));
+}
+
+/* ── DEPTH ───────────────────────────────────────────────
+   Only the PLAN fades towards the horizon, and only the plan. Distance is what
+   sells a tilted camera, but the route is exempt from every dimming rule in
+   this file: it stays the brightest thing on screen at both ends of its run,
+   which is the one promise the map makes. The mask is on the base layer alone,
+   so the route SVG above it is never touched. */
+.sg-map-area[data-map-tilt="on"] .sg-map-layer--base {
+  -webkit-mask-image: linear-gradient(to top, #000 42%, rgba(0, 0, 0, .35) 78%, transparent 100%);
+  mask-image: linear-gradient(to top, #000 42%, rgba(0, 0, 0, .35) 78%, transparent 100%);
+}
+
+/* The toggle reads as pressed while the experiment is on. */
+.sg-map-fab--tilt[aria-pressed="true"] {
+  background: var(--map-accent-soft);
+  border-color: rgba(41, 171, 226, .45);
+  color: #EAF8FF;
+}
+
+/* ── REDUCED MOTION ──────────────────────────────────────
+   A 3D camera is exactly the kind of thing this preference exists to soften.
+   Two changes, not one: the 420ms tilt animation is removed outright, and the
+   resting angle drops to 30 degrees. The toggle keeps working — silently
+   forcing the map flat would take the experiment away from the people most
+   likely to have an opinion about whether it is comfortable — but it can no
+   longer swing the whole floor through 55 degrees under them. */
+@media (prefers-reduced-motion: reduce) {
+  .sg-map-area[data-map-tilt] { --map-tilt: 30deg; }
+  .sg-map-area[data-map-tilt="on"] .sg-map-wrapper { transition: none; }
+}
+
 /* ── Inline icon sizing ─────────────────────────────── */
 .sg-ico { width: 1em; height: 1em; flex-shrink: 0; display: block; }
 .sg-ico--sm { width: .8em; height: .8em; }

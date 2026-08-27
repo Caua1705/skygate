@@ -11,7 +11,7 @@ import {
 } from './actions.js';
 import { handleCalculate } from './routeController.js';
 import { init } from './bootstrap.js';
-import { app, navState, uiState } from '../state/appState.js';
+import { app, mapState, navState, uiState } from '../state/appState.js';
 import { render, updateSearchChips_, updateSearchResults_ } from './router.js';
 import { autoFitRoute } from '../map/mapFit.js';
 import { zoomAt } from '../map/mapPanZoom.js';
@@ -95,6 +95,14 @@ export function bindEvents() {
   $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
   $('nav-next')?.addEventListener('click', activateNavigationPrimary);
   $('fit-segment-btn')?.addEventListener('click', () => autoFitRoute());
+  // EXPERIMENT — flat / tilted camera. Flips the attribute in place instead of
+  // re-rendering: the whole point is to A/B the two on a phone, and rebuilding
+  // the map DOM between taps would hide the very difference being judged.
+  $('tilt-toggle-btn')?.addEventListener('click', event => {
+    mapState.tilt = !mapState.tilt;
+    $('map-area')?.setAttribute('data-map-tilt', mapState.tilt ? 'on' : 'off');
+    event.currentTarget.setAttribute('aria-pressed', mapState.tilt ? 'true' : 'false');
+  });
   $('zoom-in-btn')?.addEventListener('click', () => zoomAt(0.4));
   $('zoom-out-btn')?.addEventListener('click', () => zoomAt(-0.4));
   $('overview-btn')?.addEventListener('click', openOverview);

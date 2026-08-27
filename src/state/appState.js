@@ -65,6 +65,11 @@ export const mapState = {
   floorTransforms: {},  // { floorId: { x, y, scale } }
   svgBaseCache: {},     // { floorId: svgString } — never rebuilt
   manualFloor: false,
+  // EXPERIMENT — tilted camera, see the "TILTED CAMERA" block in
+  // styles/screens/navigation.css. Lives here only so the choice survives a
+  // re-render; deliberately NOT persisted, so every session starts flat and
+  // the experiment can be deleted without touching the session schema.
+  tilt: false,
 };
 
 export const uiState = {

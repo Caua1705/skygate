@@ -39,7 +39,8 @@ export function renderNavigationMap() {
       <button type="button" class="sg-skip-navview" id="focus-view-tabs">
         Ir para Etapas e Mapa
       </button>
-      <div class="sg-map-area" id="map-area" aria-label="Mapa da rota — ${esc(getFloorLabel(fid))}" role="region">
+      <div class="sg-map-area" id="map-area" aria-label="Mapa da rota — ${esc(getFloorLabel(fid))}" role="region"
+        data-map-tilt="${mapState.tilt ? 'on' : 'off'}">
         <div class="sg-map-wrapper" id="navigation-panel" role="tabpanel" aria-labelledby="tab-route-btn">
           <div class="sg-map-inner" id="map-inner">
             <!-- The real floor plan. Rendering is synchronous but the plan
@@ -71,6 +72,15 @@ export function renderNavigationMap() {
           ${renderFloorControl()}
           <button type="button" class="sg-map-fab" id="fit-segment-btn" aria-label="Centralizar no passo atual">
             ${navIcon('navigate')}
+          </button>
+          <!-- EXPERIMENT — flat / tilted camera. Temporary control: it exists
+               to be compared on a phone, not to ship. Removing the experiment
+               means deleting this button, its listener in events.js, mapState
+               .tilt and the TILTED CAMERA block in navigation.css. -->
+          <button type="button" class="sg-map-fab sg-map-fab--tilt" id="tilt-toggle-btn"
+            aria-pressed="${mapState.tilt ? 'true' : 'false'}"
+            aria-label="Alternar câmera inclinada (experimento)">
+            ${navIcon('layers')}
           </button>
           <div class="sg-map-zoom" role="group" aria-label="Zoom do mapa">
             <button type="button" class="sg-map-fab" id="zoom-in-btn" aria-label="Aumentar zoom">
