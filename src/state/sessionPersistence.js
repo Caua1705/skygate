@@ -310,100 +310,68 @@ function transitionKind(step) {
   return '';
 }
 
-function accessibleRouteIsSafe(route, nodeFacts, originCode, destinationCode) {
-  if (route.path.some(code => ['stairs', 'escalator'].includes(nodeFacts.get(code)?.type))) return false;
-  const transitionEntries = route.steps
-    .map(step => ({ step, kind: transitionKind(step) }))
-    .filter(entry => entry.kind);
-  const transitionKinds = transitionEntries.map(entry => entry.kind);
-  if (transitionKinds.some(kind => kind !== 'elevator')) return false;
-  const segmentEntries = (route.segments ?? [])
-    .filter(segment => segment.type === 'transition')
-    .map(segment => ({
-      segment,
-      kind: transitionKind({ isTransition: true, transitionType: segment.transitionType }),
-    }));
-  const segmentKinds = segmentEntries.map(entry => entry.kind);
-  if (segmentKinds.some(kind => kind !== 'elevator')) return false;
+const BLOCKED_ACCESSIBLE_KINDS = new Set(['stairs', 'escalator']);
 
-  const stepPairs = new Map();
-  const segmentPairs = new Map();
-  const firstFloor = (...values) => values.find(value => (
-    typeof value === 'string' && value.trim().length > 0
-  ))?.trim() ?? '';
-  const addPair = (target, fromFloor, toFloor) => {
-    const key = `${fromFloor}->${toFloor}`;
-    target.set(key, (target.get(key) ?? 0) + 1);
-  };
-  transitionEntries.forEach(({ step, kind }) => {
-    const fromFloor = step.floorId || step.floor || step.floor_id || '';
-    const toFloor = step.toFloor
-      || step.to_floor
-      || step.transition?.toFloor
-      || step.transition?.to_floor
-      || '';
-    if (kind === 'elevator' && fromFloor && toFloor && fromFloor !== toFloor) {
-      addPair(stepPairs, fromFloor, toFloor);
-    }
+/**
+ * Does this stored route already say something about stairs?
+ *
+ * routeController writes a NAMED warning at calculation time ("passa por
+ * Escada C"), which is strictly better than the generic one this layer can
+ * produce — nodeFacts carries types and floors, never names. So an existing
+ * mention wins and nothing is added, which is also what keeps a warning from
+ * accumulating a near-duplicate on every save/restore cycle.
+ */
+function alreadyMentionsStairs(warnings) {
+  return (warnings ?? []).some(warning => {
+    const text = typeof warning === 'string'
+      ? warning
+      : String(warning?.message ?? warning?.text ?? '');
+    return /escada/i.test(text.normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
   });
-  segmentEntries.forEach(({ segment, kind }) => {
-    if (kind === 'elevator' && segment.fromFloor && segment.toFloor && segment.fromFloor !== segment.toFloor) {
-      addPair(segmentPairs, segment.fromFloor, segment.toFloor);
-    }
-  });
-  const elevatorPairs = new Map(
-    [...new Set([...stepPairs.keys(), ...segmentPairs.keys()])]
-      .map(key => [key, Math.max(stepPairs.get(key) ?? 0, segmentPairs.get(key) ?? 0)]),
-  );
-  const consumeElevatorPair = (fromFloor, toFloor) => {
-    if (!fromFloor || !toFloor) return false;
-    if (fromFloor === toFloor) return true;
-    const pair = `${fromFloor}->${toFloor}`;
-    const pairCount = elevatorPairs.get(pair) ?? 0;
-    if (pairCount <= 0) return false;
-    elevatorPairs.set(pair, pairCount - 1);
-    return true;
-  };
-  const floorCrossings = [];
-  for (let index = 0; index < route.path.length - 1; index++) {
-    const from = nodeFacts.get(route.path[index]);
-    const to = nodeFacts.get(route.path[index + 1]);
-    if (!from?.floorId || !to?.floorId) return false;
-    if (from.floorId === to.floorId) continue;
-    floorCrossings.push({
-      fromFloor: from.floorId,
-      toFloor: to.floorId,
-      hasElevatorNode: from.type === 'elevator' || to.type === 'elevator',
-    });
-  }
-  for (const crossing of floorCrossings.filter(item => item.hasElevatorNode)) {
-    consumeElevatorPair(crossing.fromFloor, crossing.toFloor);
-  }
-  for (const crossing of floorCrossings.filter(item => !item.hasElevatorNode)) {
-    if (!consumeElevatorPair(crossing.fromFloor, crossing.toFloor)) return false;
-  }
+}
 
-  if (!route.path.length) {
-    let currentFloor = firstFloor(nodeFacts.get(originCode)?.floorId);
-    if (!currentFloor) return false;
-    for (const step of route.steps) {
-      const record = isRecord(step) ? step : {};
-      const stepFloor = firstFloor(record.floorId, record.floor, record.floor_id, currentFloor);
-      if (!consumeElevatorPair(currentFloor, stepFloor)) return false;
-      const nextFloor = firstFloor(
-        record.toFloor,
-        record.to_floor,
-        record.transition?.toFloor,
-        record.transition?.to_floor,
-        stepFloor,
-      );
-      if (!consumeElevatorPair(stepFloor, nextFloor)) return false;
-      currentFloor = nextFloor;
-    }
-    const destinationFloor = firstFloor(nodeFacts.get(destinationCode)?.floorId);
-    if (!destinationFloor || !consumeElevatorPair(currentFloor, destinationFloor)) return false;
-  }
-  return true;
+/**
+ * Non-blocking accessibility review of a RESTORED journey.
+ *
+ * This used to be accessibleRouteIsSafe(), a hard gate that dropped the whole
+ * session — the same duplicated logic, and the same flaw, as the one removed
+ * from routeSteps.js: it demanded that every floor transition be PROVEN an
+ * elevator through step floorId/toFloor metadata the API does not send. So an
+ * accessible journey was calculated fine, persisted fine, and then silently
+ * refused to come back on reload.
+ *
+ * The backend already pruned stair edges before Dijkstra under
+ * route_mode='accessible'. What is left here is the same rule as the live
+ * review: speak up only on POSITIVE evidence, never on absence of it.
+ *
+ * Storage is still untrusted — every structural check in validRoute() and
+ * validRouteOption() is untouched. This one concerns comfort and safety
+ * advice, not integrity, and advice is not a reason to throw a journey away.
+ *
+ * Mutates `route.warnings` in place, by design: the caller has just validated
+ * the object it is about to hand back.
+ */
+function addAccessibleWarnings(route, nodeFacts) {
+  if (!isRecord(route) || alreadyMentionsStairs(route.warnings)) return;
+
+  const blockedNodeType = (route.path ?? [])
+    .map(code => nodeFacts.get(code)?.type)
+    .find(type => BLOCKED_ACCESSIBLE_KINDS.has(type));
+
+  const declared = [
+    ...(route.steps ?? []).map(transitionKind),
+    ...(route.segments ?? [])
+      .filter(segment => segment?.type === 'transition')
+      .map(segment => transitionKind({ isTransition: true, transitionType: segment.transitionType })),
+  ].find(kind => BLOCKED_ACCESSIBLE_KINDS.has(kind));
+
+  const found = blockedNodeType ?? declared;
+  if (!found) return;
+
+  if (!Array.isArray(route.warnings)) route.warnings = [];
+  route.warnings.push(found === 'escalator'
+    ? 'Esta rota passa por uma escada rolante. Procure um elevador próximo se precisar evitar degraus.'
+    : 'Esta rota passa por escadas. Procure um elevador próximo se precisar evitar degraus.');
 }
 
 function validateJourney(journey, nodes, floors, now) {
@@ -491,18 +459,15 @@ function validateJourney(journey, nodes, floors, now) {
     || !NAV_VIEWS.has(nav.view)
   ) return null;
 
+  // Advice, not a gate: a restored accessible journey is annotated, never
+  // discarded. See addAccessibleWarnings().
   if (plan.routeMode === 'accessible') {
     const nodeFacts = new Map(nodes.map(node => [String(node?.code ?? ''), {
       type: String(node?.type ?? ''),
       floorId: String(node?.floorId ?? ''),
     }]));
-    if (!accessibleRouteIsSafe(nav.route, nodeFacts, plan.originCode, plan.destinationCode)
-      || nav.routeOptions.some(option => !accessibleRouteIsSafe(
-        option,
-        nodeFacts,
-        plan.originCode,
-        plan.destinationCode,
-      ))) return null;
+    addAccessibleWarnings(nav.route, nodeFacts);
+    nav.routeOptions.forEach(option => addAccessibleWarnings(option, nodeFacts));
   }
 
   const expectedFloorIds = new Set(

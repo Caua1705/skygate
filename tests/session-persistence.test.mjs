@@ -154,16 +154,58 @@ const badReference = JSON.parse(serializeSessionState(source, now));
 badReference.journey.navigation.route.path[2] = 'missing-node';
 assert.equal(decodeSessionState(JSON.stringify(badReference), { now, nodes, floors }).status, 'invalid');
 
+/* -- Accessible restore: annotate, never discard --------------------------
+   The gate here was the same duplicated logic removed from routeSteps.js, and
+   it had the same effect: an accessible journey was calculated fine, saved
+   fine, and then refused to come back on reload. Structural validation is
+   untouched; only the accessibility advice stopped being fatal. */
 const accessible = makeState();
 accessible.planState.routeMode = 'accessible';
 accessible.planState.accessibleRoute = true;
-assert.equal(decodeSessionState(serializeSessionState(accessible, now), { now, nodes, floors }).status, 'valid');
+const cleanAccessible = decodeSessionState(serializeSessionState(accessible, now), { now, nodes, floors });
+assert.equal(cleanAccessible.status, 'valid');
+assert.deepEqual(cleanAccessible.value.navigation.route.warnings, [], 'a clean accessible journey says nothing');
+
 const nodesWithUnsafeLift = nodes.map(node => node.code === 'lift' ? { ...node, type: 'stairs' } : node);
-assert.equal(
-  decodeSessionState(serializeSessionState(accessible, now), { now, nodes: nodesWithUnsafeLift, floors }).status,
-  'invalid',
-  'an accessible journey cannot bypass the stairs safety gate through restoration',
+const unsafeLift = decodeSessionState(
+  serializeSessionState(accessible, now),
+  { now, nodes: nodesWithUnsafeLift, floors },
 );
+assert.equal(unsafeLift.status, 'valid', 'a staircase on the path no longer throws the session away');
+assert.equal(unsafeLift.value.navigation.route.warnings.length, 1, 'it is reported instead');
+assert.match(unsafeLift.value.navigation.route.warnings[0], /escadas/i);
+assert.equal(
+  unsafeLift.value.navigation.routeOptions[0].warnings.length,
+  1,
+  'the option carries the same advice as the route',
+);
+
+// A named warning written at calculation time is better than the generic one
+// this layer can produce, and must not be joined by a near-duplicate — which
+// is also what stops warnings growing on every save/restore cycle.
+const alreadyWarned = makeState();
+alreadyWarned.planState.routeMode = 'accessible';
+alreadyWarned.planState.accessibleRoute = true;
+alreadyWarned.navState.route.warnings = ['Esta rota passa por Escada C. Procure um elevador próximo.'];
+alreadyWarned.navState.routeOptions[0].warnings = ['Esta rota passa por Escada C. Procure um elevador próximo.'];
+const rewarned = decodeSessionState(
+  serializeSessionState(alreadyWarned, now),
+  { now, nodes: nodesWithUnsafeLift, floors },
+);
+assert.equal(rewarned.status, 'valid');
+assert.deepEqual(
+  rewarned.value.navigation.route.warnings,
+  ['Esta rota passa por Escada C. Procure um elevador próximo.'],
+  'an existing stairs warning is kept as-is and never doubled',
+);
+
+// A journey that is NOT accessible-mode is not annotated at all.
+const plainWithStairs = decodeSessionState(
+  serializeSessionState(makeState(), now),
+  { now, nodes: nodesWithUnsafeLift, floors },
+);
+assert.equal(plainWithStairs.status, 'valid');
+assert.deepEqual(plainWithStairs.value.navigation.route.warnings, []);
 
 const implicitAccessible = makeState('summary');
 implicitAccessible.planState.routeMode = 'accessible';
@@ -175,11 +217,16 @@ implicitAccessible.navState.route.steps = [
 ];
 implicitAccessible.navState.routeOptions[0].path = [];
 implicitAccessible.navState.routeOptions[0].steps = implicitAccessible.navState.route.steps;
-assert.equal(
-  decodeSessionState(serializeSessionState(implicitAccessible, now), { now, nodes, floors }).status,
-  'invalid',
-  'a pathless cross-floor session cannot hide an unknown transition',
+const implicitRestored = decodeSessionState(
+  serializeSessionState(implicitAccessible, now),
+  { now, nodes, floors },
 );
+assert.equal(
+  implicitRestored.status,
+  'valid',
+  'a pathless cross-floor session comes back: an unproven transition is not evidence of stairs',
+);
+assert.deepEqual(implicitRestored.value.navigation.route.warnings, [], 'and it has nothing to warn about');
 
 const emptyAliasAccessible = makeState('summary');
 emptyAliasAccessible.planState.routeMode = 'accessible';
@@ -197,8 +244,8 @@ emptyAliasAccessible.navState.routeOptions[0].path = [];
 emptyAliasAccessible.navState.routeOptions[0].steps = emptyAliasAccessible.navState.route.steps;
 assert.equal(
   decodeSessionState(serializeSessionState(emptyAliasAccessible, now), { now, nodes, floors }).status,
-  'invalid',
-  'empty normalized fields cannot mask non-empty floor aliases during restoration',
+  'valid',
+  'empty normalized floor fields are the API shape, not a session to reject',
 );
 
 const orderDependentAccessible = makeState('summary');
@@ -228,8 +275,8 @@ assert.equal(
     nodes: orderDependentNodes,
     floors,
   }).status,
-  'invalid',
-  'known elevator crossings reserve matching evidence before generic crossings on restore',
+  'valid',
+  'a multi-floor accessible route is restored instead of being re-derived away',
 );
 
 const legacyView = JSON.parse(serializeSessionState(source, now));
