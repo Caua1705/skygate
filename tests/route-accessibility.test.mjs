@@ -3,11 +3,11 @@ import { APP_CONFIG } from '../src/app/config/appConfig.js';
 import { appData, planState } from '../src/state/appState.js';
 import { normalizeStep } from '../src/services/normalize.js';
 import {
+  accessibleModeWarnings,
   attachStepDistances,
   buildSemanticSteps,
   formatMeters,
   getStepTransitionType,
-  isRouteCompatibleWithAccessibleMode,
   pathMeters,
   routePathMatchesPlan,
   segmentMeters,
@@ -44,45 +44,61 @@ assert.equal(stairs.transitionType, 'stairs');
 assert.equal(stairs.toFloor, '1');
 assert.equal(getStepTransitionType(stairs), 'stairs');
 
+// ── Accessible mode reviews, it does not reject ───────────────────────────
+// route_mode='accessible' makes the backend prune inaccessible nodes and stair
+// edges before Dijkstra, so its answer is accessible by construction. These
+// assertions pin the rule that only POSITIVE evidence of stairs speaks up.
 const stepsOnlyStairs = { path: [], segments: [], steps: [stairs] };
-assert.equal(
-  isRouteCompatibleWithAccessibleMode(stepsOnlyStairs),
-  false,
-  'a steps-only staircase route is rejected in accessible mode',
-);
+const stairsWarnings = accessibleModeWarnings(stepsOnlyStairs);
+assert.equal(stairsWarnings.length, 1, 'an instruction naming stairs is worth saying out loud');
+assert.match(stairsWarnings[0], /escadas/i);
 
-// Presentation must stay truthful even if a caller builds the rejected route:
-// never erase the unsafe instruction or relabel it as an elevator.
+// Presentation must stay truthful: never erase the unsafe instruction or
+// relabel it as an elevator.
 planState.routeMode = 'accessible';
 const preserved = buildSemanticSteps(stepsOnlyStairs);
 assert.equal(preserved[0].text, 'Use as escadas até o piso 1.');
 assert.equal(preserved[0].nodeType, 'stairs');
 assert.equal(preserved[0].toFloor, '1');
 
+const escalator = normalizeStep({
+  instruction: 'Pegue a escada rolante até o piso 1.',
+  floor: '0',
+  transition: { type: 'escalator', to_floor: '1' },
+}, 0);
+assert.match(
+  accessibleModeWarnings({ path: [], segments: [], steps: [escalator] })[0],
+  /escada rolante/i,
+  'an escalator is named as an escalator, not folded into "escadas"',
+);
+
 const elevator = normalizeStep({
   instruction: 'Use o elevador até o piso 1.',
   floor: '0',
   transition: { type: 'elevator', to_floor: '1' },
 }, 0);
-assert.equal(
-  isRouteCompatibleWithAccessibleMode({ path: [], segments: [], steps: [elevator] }),
-  true,
-  'a steps-only route with an explicit elevator remains valid',
+assert.deepEqual(
+  accessibleModeWarnings({ path: [], segments: [], steps: [elevator] }),
+  [],
+  'an explicit elevator has nothing to warn about',
 );
 
+// The heart of the fix: steps[] arrives from the API as strings, so floorId and
+// toFloor are always ''. An unproven floor change must stay silent — treating
+// absence of evidence as evidence of stairs is what rejected valid routes.
 const unknown = normalizeStep({ instruction: 'Suba até o piso 1.', floor: '0', transition: true }, 0);
-assert.equal(
-  isRouteCompatibleWithAccessibleMode({ path: [], segments: [], steps: [unknown] }),
-  false,
-  'an unidentified steps-only floor transition fails closed',
+assert.deepEqual(
+  accessibleModeWarnings({ path: [], segments: [], steps: [unknown] }),
+  [],
+  'an unidentified floor transition is not evidence of stairs',
 );
 
 const descent = normalizeStep({ instruction: 'Desça até o piso 1.', floor: '0' }, 0);
 assert.equal(descent.isTransition, true, 'Portuguese descent copy is recognized as a transition');
-assert.equal(
-  isRouteCompatibleWithAccessibleMode({ path: [], segments: [], steps: [descent] }),
-  false,
-  'an unidentified descent fails closed',
+assert.deepEqual(
+  accessibleModeWarnings({ path: [], segments: [], steps: [descent] }),
+  [],
+  'an unidentified descent is not evidence of stairs either',
 );
 assert.equal(
   normalizeStep({ instruction: 'Desconto no café.', floor: '0' }, 0).isTransition,
@@ -90,36 +106,60 @@ assert.equal(
   'ordinary words beginning with desc are not floor transitions',
 );
 
+const stringSteps = ['Siga pelo corredor.', 'Use o elevador até o piso 1.'].map(normalizeStep);
+assert.deepEqual(
+  accessibleModeWarnings({ path: ['A', 'E', 'D'], segments: [], steps: stringSteps }),
+  [],
+  'the real API shape — steps[] as plain strings — passes without complaint',
+);
+
 const implicitFloorChange = [
   normalizeStep({ instruction: 'Siga pelo corredor.', floor: '0' }, 0),
   normalizeStep({ instruction: 'Chegue ao destino.', floor: '1' }, 1),
 ];
-assert.equal(
-  isRouteCompatibleWithAccessibleMode({ path: [], segments: [], steps: implicitFloorChange }),
-  false,
-  'a steps-only floor change without explicit elevator metadata fails closed',
+assert.deepEqual(
+  accessibleModeWarnings({ path: [], segments: [], steps: implicitFloorChange }),
+  [],
+  'a steps-only floor change without elevator metadata is normal, not suspicious',
 );
 
-assert.equal(
-  isRouteCompatibleWithAccessibleMode({ path: ['A', 'S', 'D'], steps: [] }),
-  false,
-  'a staircase node in a concrete path is rejected',
+const stairsNodeWarnings = accessibleModeWarnings({ path: ['A', 'S', 'D'], steps: [] });
+assert.equal(stairsNodeWarnings.length, 1, 'a staircase NODE in the geometry is real evidence');
+assert.match(stairsNodeWarnings[0], /Escada/);
+assert.deepEqual(
+  accessibleModeWarnings({ path: ['A', 'E', 'D'], steps: [] }),
+  [],
+  'a concrete elevator path is quiet',
+);
+assert.deepEqual(
+  accessibleModeWarnings({ path: ['A', 'D'], steps: [], segments: [] }),
+  [],
+  'a floor change the client cannot explain belongs to the server, not to a warning',
+);
+assert.deepEqual(
+  accessibleModeWarnings({ path: ['A', 'MISSING', 'D'], steps: [], segments: [] }),
+  [],
+  'an unknown node is caught by routePathMatchesPlan, and does not crash the review',
+);
+assert.match(
+  accessibleModeWarnings({
+    path: ['A', 'E', 'D'],
+    steps: [],
+    segments: [{ type: 'transition', transitionType: 'stairs', fromFloor: '0', toFloor: '1' }],
+  })[0],
+  /escadas/i,
+  'stairs declared in segment metadata are still reported',
 );
 assert.equal(
-  isRouteCompatibleWithAccessibleMode({ path: ['A', 'E', 'D'], steps: [] }),
-  true,
-  'a concrete elevator path remains valid',
+  accessibleModeWarnings({
+    path: ['A', 'S', 'D'],
+    steps: [stairs],
+    segments: [{ type: 'transition', transitionType: 'stairs', fromFloor: '0', toFloor: '1' }],
+  }).length,
+  1,
+  'one staircase is one warning, however many places describe it',
 );
-assert.equal(
-  isRouteCompatibleWithAccessibleMode({ path: ['A', 'D'], steps: [], segments: [] }),
-  false,
-  'a concrete floor change without a known elevator fails closed',
-);
-assert.equal(
-  isRouteCompatibleWithAccessibleMode({ path: ['A', 'MISSING', 'D'], steps: [], segments: [] }),
-  false,
-  'an accessible route cannot rely on path nodes absent from the loaded map',
-);
+
 assert.equal(routePathMatchesPlan({ path: ['A', 'E', 'D'], steps: [] }, 'A', 'D'), true);
 assert.equal(
   routePathMatchesPlan({ path: ['A', 'E'], steps: [] }, 'A', 'D'),
@@ -141,15 +181,6 @@ assert.equal(
   true,
   'API variants that intentionally return instructions without geometry remain supported',
 );
-assert.equal(
-  isRouteCompatibleWithAccessibleMode({
-    path: ['A', 'E', 'D'],
-    steps: [],
-    segments: [{ type: 'transition', transitionType: 'stairs', fromFloor: '0', toFloor: '1' }],
-  }),
-  false,
-  'unsafe segment metadata overrides an apparently safe path',
-);
 
 appData.nodes.push(
   { code: 'G0', floorId: '0', type: 'corridor', name: 'Corredor térreo' },
@@ -158,14 +189,14 @@ appData.nodes.push(
   { code: 'E1', floorId: '1', type: 'elevator', name: 'Elevador superior' },
   { code: 'B', floorId: '1', type: 'gate', name: 'Portão B' },
 );
-assert.equal(
-  isRouteCompatibleWithAccessibleMode({
+assert.deepEqual(
+  accessibleModeWarnings({
     path: ['A', 'G0', 'G1', 'E0', 'E1', 'B'],
     steps: [elevator],
     segments: [{ type: 'transition', transitionType: 'elevator', fromFloor: '0', toFloor: '1' }],
   }),
-  false,
-  'elevator metadata is reserved for proven crossings before generic edges, regardless of path order',
+  [],
+  'a real multi-floor accessible route is accepted instead of being second-guessed',
 );
 
 // Rendering is a truthful fallback even if a caller bypasses the guard: the

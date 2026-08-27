@@ -14,7 +14,7 @@ import { asArray, first } from '../utils/format.js';
 import { findNode } from '../state/selectors.js';
 import { slackFor } from './flightSlack.js';
 import { buildSegments, normalizeStep } from './normalize.js';
-import { isRouteCompatibleWithAccessibleMode } from './routeSteps.js';
+import { accessibleModeWarnings } from './routeSteps.js';
 
 export const FASTEST_ID = 'fastest';
 
@@ -145,12 +145,11 @@ function normalizeApiOptions(raw, baseRoute, { accessible = false } = {}) {
 
   const expectedStart = baseRoute?.path?.[0] ?? '';
   const expectedEnd = baseRoute?.path?.at?.(-1) ?? '';
+  // Geometry is still checked — an option we cannot draw is not an option.
+  // Accessibility is not: the backend already built these under route_mode,
+  // and a local re-derivation only ever removed routes it could not prove.
   const valid = parsed.filter(option => {
     if (option.path.length < 2 || option.path.some(code => !findNode(code))) return false;
-    if (accessible && !isRouteCompatibleWithAccessibleMode({
-      path: option.path,
-      steps: option.steps.map((step, stepIndex) => normalizeStep(step, stepIndex)),
-    })) return false;
     if (expectedStart && option.path[0] !== expectedStart) return false;
     if (expectedEnd && option.path.at(-1) !== expectedEnd) return false;
     return true;
@@ -161,6 +160,12 @@ function normalizeApiOptions(raw, baseRoute, { accessible = false } = {}) {
   return valid.map(option => ({
     ...option,
     deltaMinutes: option.deltaMinutes || Math.max(0, option.minutes - fastestMinutes),
+    warnings: accessible
+      ? [...option.warnings, ...accessibleModeWarnings({
+        path: option.path,
+        steps: option.steps.map((step, stepIndex) => normalizeStep(step, stepIndex)),
+      })]
+      : option.warnings,
   }));
 }
 

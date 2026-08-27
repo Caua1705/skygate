@@ -75,7 +75,28 @@ try {
       ],
     },
   }, { accessible: true });
-  assert.deepEqual(accessible.map(option => option.id), ['lift']);
+  // The backend built these under route_mode='accessible'; the client no longer
+  // discards them. It annotates the ones that name stairs out loud.
+  assert.deepEqual(
+    accessible.map(option => option.id),
+    ['lift', 'stairs', 'contradictory'],
+    'accessible options survive instead of being re-derived away',
+  );
+  assert.deepEqual(accessible[0].warnings, [], 'a clean accessible option says nothing');
+  assert.equal(accessible[1].warnings.length, 1, 'a staircase node is flagged, not removed');
+  assert.match(accessible[1].warnings[0], /escada/i);
+  assert.equal(accessible[2].warnings.length, 1, 'unsafe instruction text is flagged too');
+  assert.match(accessible[2].warnings[0], /escadas/i);
+
+  const notAccessible = buildRouteOptions({
+    ...base,
+    raw: { alternatives: [{ id: 'stairs', name: 'Pelas escadas', minutes: 6, path: ['A', 'S', 'D'] }] },
+  });
+  assert.deepEqual(
+    notAccessible[0].warnings,
+    [],
+    'stairs are only worth a warning when the passenger asked to avoid them',
+  );
 } finally {
   appData.nodes = previousNodes;
   planState.flightTime = previousFlight;

@@ -54,101 +54,59 @@ export function getStepTransitionType(step) {
 }
 
 /**
- * Client-side safety gate for the "evitar escadas" mode.
+ * Non-blocking accessibility review of a route the backend already built.
  *
- * A path containing stairs/escalators is incompatible. For a steps-only API
- * response, an unidentified floor transition is incompatible too: without a
- * path or explicit elevator signal, the client cannot honestly claim that the
- * route avoids stairs. Explicitly unsafe step text always wins over a
- * contradictory path.
+ * ── WHY THIS NO LONGER REJECTS ────────────────────────────────────────
+ * When route_mode is 'accessible' the backend removes inaccessible nodes and
+ * stair edges BEFORE running Dijkstra, so the route it returns is accessible by
+ * construction. The client cannot improve on that, and the old gate did not
+ * try to: it demanded PROOF of every floor transition through steps[].floorId
+ * and steps[].toFloor, fields the API does not send — steps[] arrives as plain
+ * strings and normalizeStep() fixes both to ''. Absence of evidence was read as
+ * evidence of stairs, so valid accessible routes were thrown away and the
+ * passenger who most needs one was told no route exists.
+ *
+ * What remains is a review that only ever speaks up on POSITIVE evidence:
+ * a stairs/escalator node in the geometry, or an instruction that says so out
+ * loud. Those come from the map and from passenger-facing text, not from the
+ * metadata that was never populated. Silence means "nothing to add", never
+ * "unverified" — an unproven floor change is normal and produces no warning.
+ *
+ * @returns {string[]} passenger-facing warnings, empty when nothing was found.
  */
-export function isRouteCompatibleWithAccessibleMode(route) {
-  const path = route?.path ?? [];
-  const pathNodes = path.map(findNode);
-  if (pathNodes.some(node => !node)) return false;
-  if (pathNodes.some(node => BLOCKED_ACCESSIBLE_TRANSITIONS.has(node?.type))) return false;
+export function accessibleModeWarnings(route) {
+  const warnings = [];
 
-  const transitions = (route?.steps ?? []).filter(step => step?.isTransition);
-  const types = transitions.map(getStepTransitionType);
-  if (types.some(type => BLOCKED_ACCESSIBLE_TRANSITIONS.has(type))) return false;
-  if (types.some(type => type !== 'elevator')) return false;
+  const blockedNode = (route?.path ?? [])
+    .map(findNode)
+    .find(node => BLOCKED_ACCESSIBLE_TRANSITIONS.has(node?.type));
+  if (blockedNode) {
+    // Name the place when the map gives it a name; otherwise still say what it
+    // is. A warning that reads "passa por ." helps nobody.
+    const kind = blockedNode.type === 'escalator' ? 'uma escada rolante' : 'escadas';
+    const place = getPublicNodeLabel(blockedNode) || kind;
+    warnings.push(`Esta rota passa por ${place}. Procure um elevador próximo se precisar evitar degraus.`);
+  }
 
-  const transitionSegments = (route?.segments ?? [])
-    .filter(segment => segment?.type === 'transition');
-  const segmentTypes = transitionSegments
+  const spokenTypes = (route?.steps ?? [])
+    .filter(step => step?.isTransition)
+    .map(getStepTransitionType);
+  const segmentTypes = (route?.segments ?? [])
+    .filter(segment => segment?.type === 'transition')
     .map(segment => getStepTransitionType({
       isTransition: true,
       transitionType: segment.transitionType,
       text: '',
     }));
-  if (segmentTypes.some(type => type !== 'elevator')) return false;
-
-  const stepPairs = new Map();
-  const segmentPairs = new Map();
-  const addPair = (target, fromFloor, toFloor) => {
-    const key = `${fromFloor}->${toFloor}`;
-    target.set(key, (target.get(key) ?? 0) + 1);
-  };
-  transitions.forEach((step, index) => {
-    if (types[index] === 'elevator' && step.floorId && step.toFloor && step.floorId !== step.toFloor) {
-      addPair(stepPairs, step.floorId, step.toFloor);
-    }
-  });
-  transitionSegments.forEach((segment, index) => {
-    if (segmentTypes[index] === 'elevator'
-      && segment.fromFloor
-      && segment.toFloor
-      && segment.fromFloor !== segment.toFloor) {
-      addPair(segmentPairs, segment.fromFloor, segment.toFloor);
-    }
-  });
-  const elevatorPairs = new Map(
-    [...new Set([...stepPairs.keys(), ...segmentPairs.keys()])]
-      .map(key => [key, Math.max(stepPairs.get(key) ?? 0, segmentPairs.get(key) ?? 0)]),
-  );
-  const consumeElevatorPair = (fromFloor, toFloor) => {
-    if (!fromFloor || !toFloor || fromFloor === toFloor) return true;
-    const pair = `${fromFloor}->${toFloor}`;
-    const pairCount = elevatorPairs.get(pair) ?? 0;
-    if (pairCount <= 0) return false;
-    elevatorPairs.set(pair, pairCount - 1);
-    return true;
-  };
-  const floorCrossings = [];
-  for (let index = 0; index < pathNodes.length - 1; index++) {
-    const from = pathNodes[index];
-    const to = pathNodes[index + 1];
-    if (!from.floorId || !to.floorId) return false;
-    if (from.floorId === to.floorId) continue;
-    floorCrossings.push({
-      fromFloor: from.floorId,
-      toFloor: to.floorId,
-      hasElevatorNode: from.type === 'elevator' || to.type === 'elevator',
-    });
-  }
-  // Reserve matching API metadata for crossings already proven by an elevator
-  // node before evaluating generic crossings. Otherwise the result depends on
-  // path order and one metadata entry can accidentally validate the wrong edge.
-  for (const crossing of floorCrossings.filter(item => item.hasElevatorNode)) {
-    consumeElevatorPair(crossing.fromFloor, crossing.toFloor);
-  }
-  for (const crossing of floorCrossings.filter(item => !item.hasElevatorNode)) {
-    if (!consumeElevatorPair(crossing.fromFloor, crossing.toFloor)) return false;
+  const declared = [...spokenTypes, ...segmentTypes]
+    .find(type => BLOCKED_ACCESSIBLE_TRANSITIONS.has(type));
+  if (declared && !blockedNode) {
+    warnings.push(declared === 'escalator'
+      ? 'Uma das instruções menciona escada rolante. Confira se há elevador no trecho.'
+      : 'Uma das instruções menciona escadas. Confira se há elevador no trecho.');
   }
 
-  if (!path.length) {
-    let currentFloor = findNode(planState.originCode)?.floorId ?? '';
-    for (const step of route?.steps ?? []) {
-      const stepFloor = step.floorId || currentFloor;
-      if (!consumeElevatorPair(currentFloor, stepFloor)) return false;
-      const nextFloor = step.toFloor || stepFloor;
-      if (!consumeElevatorPair(stepFloor, nextFloor)) return false;
-      currentFloor = nextFloor;
-    }
-    const destinationFloor = findNode(planState.destinationCode)?.floorId ?? '';
-    if (!consumeElevatorPair(currentFloor, destinationFloor)) return false;
-  }
-  return true;
+  return warnings;
 }
 
 export function classifyNode(node) {

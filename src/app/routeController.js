@@ -5,9 +5,9 @@ import { render } from './router.js';
 import { findNode, getAirportSlug } from '../state/selectors.js';
 import { normalizeRoute } from '../services/normalize.js';
 import {
+  accessibleModeWarnings,
   attachStepDistances,
   buildSemanticSteps,
-  isRouteCompatibleWithAccessibleMode,
   routePathMatchesPlan,
 } from '../services/routeSteps.js';
 import { buildRouteOptions, scoreOptions } from '../services/routeOptions.js';
@@ -83,12 +83,13 @@ export async function handleCalculate() {
     if (!routePathMatchesPlan(route, requestedPlan.originCode, requestedPlan.destinationCode)) {
       throw Object.assign(new Error('Route geometry does not match the requested journey.'), { kind: 'no_path' });
     }
+    // The backend prunes inaccessible nodes and stair edges before it runs
+    // Dijkstra, so an 'accessible' response is accessible by construction and
+    // is never second-guessed here. The local review only ADDS warnings when it
+    // sees stairs named out loud; the summary screen already shows them.
     if (requestedPlan.routeMode === 'accessible') {
-      if (!isRouteCompatibleWithAccessibleMode(route)) {
-        throw Object.assign(new Error('Accessible route contains an unsafe or unknown floor transition.'), {
-          kind: 'accessible_path',
-        });
-      }
+      const warnings = accessibleModeWarnings(route);
+      if (warnings.length) route.warnings = [...route.warnings, ...warnings];
     }
 
     navState.route = route;
@@ -136,12 +137,25 @@ export async function handleCalculate() {
   }
 }
 
-export function routeError(err) {
-  if (err?.kind === 'no_path') return 'Não foi possível encontrar um caminho entre os pontos selecionados.';
-  if (err?.kind === 'accessible_path') return 'Não encontramos uma rota sem escadas entre estes pontos.';
+/**
+ * `routeMode` only sharpens the wording of a REAL failure. The client no longer
+ * invents an accessibility failure of its own, so "sem escadas" is said only
+ * when the backend itself found no route under route_mode='accessible'.
+ */
+export function routeError(err, routeMode = planState.routeMode) {
+  const accessible = routeMode === 'accessible';
+  if (err?.kind === 'no_path') {
+    return accessible
+      ? 'Não encontramos uma rota sem escadas entre estes pontos.'
+      : 'Não foi possível encontrar um caminho entre os pontos selecionados.';
+  }
   if (err instanceof SkyGateApiError) {
     if (err.kind === 'network') return 'Sem conexão. Verifique sua internet e tente novamente.';
-    if (err.status === 404)     return 'Rota não encontrada para estes pontos.';
+    if (err.status === 404) {
+      return accessible
+        ? 'Não encontramos uma rota sem escadas entre estes pontos.'
+        : 'Rota não encontrada para estes pontos.';
+    }
     if (err.status === 422)     return 'Não foi possível calcular esta rota. Verifique origem e destino.';
     if (err.status >= 500)      return 'Servidor temporariamente indisponível. Tente novamente.';
   }
