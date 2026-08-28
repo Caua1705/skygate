@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tests/presentation.test.mjs && node tests/state-and-map.test.mjs && node tests/route-accessibility.test.mjs && node tests/session-persistence.test.mjs && node tests/route-diagram.test.mjs && node tests/place-data.test.mjs && node tests/node-search-ranking.test.mjs && node tests/route-options.test.mjs && node tests/flight-slack.test.mjs",
+    "test": "node tests/presentation.test.mjs && node tests/state-and-map.test.mjs && node tests/route-accessibility.test.mjs && node tests/session-persistence.test.mjs && node tests/navigation.test.mjs && node tests/place-data.test.mjs && node tests/node-search-ranking.test.mjs && node tests/route-options.test.mjs && node tests/flight-slack.test.mjs",
     "dev": "node serve.js",
     "start": "node serve.js"
   }

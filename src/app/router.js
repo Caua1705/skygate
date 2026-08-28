@@ -9,8 +9,8 @@ import { renderFloorControl, renderNavigation } from '../screens/navigation/Navi
 import { bindEvents, bindFloorControlEvents, bindMapPoiEvents, bindSearchItemEvents } from './events.js';
 import { applyMapTransform, bindMapPan } from '../map/mapPanZoom.js';
 import { autoFitRoute } from '../map/mapFit.js';
-import { refreshSummaryTiming, scrollTimelineToCurrent } from './actions.js';
-import { buildLabelLayerHtml, buildPoiLayerHtml, buildRouteOverlaySvg, getBaseFloorSvg, peekBaseFloorSvg } from '../map/floorMapBuilder.js';
+import { refreshSummaryTiming } from './actions.js';
+import { buildPoiLayerHtml, buildRouteOverlaySvg, buildStepLayerHtml, getBaseFloorSvg, peekBaseFloorSvg } from '../map/floorMapBuilder.js';
 import { getFloorLabel } from '../state/selectors.js';
 import { filterNodes, groupByCategory } from '../services/nodeSearch.js';
 import { persistSessionState } from '../state/sessionPersistence.js';
@@ -27,8 +27,8 @@ const MODE_ORDER = { planning: 0, summary: 1, navigation: 2 };
 
 /**
  * Screen changes get one restrained transition and a predictable focus
- * destination. Re-renders inside the same screen stay instant, so typing,
- * selecting a route or advancing a step never replays page choreography.
+ * destination. Re-renders inside the same screen stay instant, so typing
+ * or selecting a route never replays page choreography.
  */
 function finishScreenChange(previousMode) {
   const currentMode = app.mode;
@@ -91,11 +91,13 @@ document.addEventListener('visibilitychange', () => {
 
 window.addEventListener('pagehide', persistJourney);
 
+/** Every screen is light now; the map stage is the palest of them. */
+const THEME_COLOR = { planning: '#F4F6FA', summary: '#F4F6FA', navigation: '#EFEDE7' };
+
 export function render() {
   const previousMode = lastRenderedMode;
-  const theme = app.mode === 'navigation' ? '#0A192F' : '#F4F6FA';
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme);
-  document.documentElement.style.colorScheme = app.mode === 'navigation' ? 'dark' : 'light';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR[app.mode] ?? '#F4F6FA');
+  document.documentElement.style.colorScheme = 'light';
   switch (app.mode) {
     case 'planning':   root.innerHTML = renderPlanning() + renderSearchOverlay() + renderLocationDetail() + renderPlaceDetailSheet(); break;
     case 'summary':    root.innerHTML = renderSummary() + renderSearchOverlay() + renderLocationDetail() + renderPlaceDetailSheet(); break;
@@ -106,17 +108,11 @@ export function render() {
   bindEvents();
   scheduleSummaryRefresh();
   if (app.mode === 'navigation') {
-    // Both are no-ops without the map DOM, so the timeline view costs
-    // nothing here and the map view keeps its previous behaviour.
     applyMapTransform(0);
     bindMapPan();
     // The template painted the empty stage; fill it in once the plan for
     // this floor has been fetched (immediately, from cache, after the first).
-    if (navState.view === 'map') mountBaseFloorSvg(mapState.selectedFloorId);
-    // The traveller must land on the step they are actually on, not at the
-    // top of a route they are halfway through. Each view scrolls itself; the
-    // diagram does it from showRouteMap(), where the entrance is played.
-    if (navState.view === 'timeline') requestAnimationFrame(() => scrollTimelineToCurrent('auto'));
+    mountBaseFloorSvg(mapState.selectedFloorId);
   }
   persistJourney();
 }
@@ -135,33 +131,31 @@ export async function mountBaseFloorSvg(floorId) {
   if (baseEl) baseEl.innerHTML = svg;
 }
 
-/* Partial map update — only route overlay, not base or full render */
+/* Partial map update — route, POIs and badges; not the base, not the sheet. */
 export function updateRouteOverlay() {
   const routeEl = $('map-route');
   if (!routeEl) return;
   requestAnimationFrame(() => {
     routeEl.innerHTML = buildRouteOverlaySvg(mapState.selectedFloorId);
     updatePoiLayer();
+    updateStepLayer();
   });
 }
 
-/* POIs depend on the active step (what is still ahead), so they refresh
-   with the route overlay and need their listeners re-attached. */
+/* POIs are re-rendered per floor and need their listeners re-attached. */
 export function updatePoiLayer() {
   const el = $('map-pois');
   if (!el) return;
   el.innerHTML = buildPoiLayerHtml(mapState.selectedFloorId);
   bindMapPoiEvents();
-  // Captions are laid out AROUND the POI dots, so they can only be correct
-  // once the dots for this step exist.
-  updateLabelLayer();
 }
 
-/* Caption capsules — same cadence as the POIs they avoid. */
-export function updateLabelLayer() {
-  const el = $('map-labels');
+/* Step badges: the layer's click handling is delegated to the container
+   (events.js), so a swap of its contents needs no re-binding. */
+export function updateStepLayer() {
+  const el = $('map-steps');
   if (!el) return;
-  el.innerHTML = buildLabelLayerHtml(mapState.selectedFloorId);
+  el.innerHTML = buildStepLayerHtml(mapState.selectedFloorId);
 }
 
 /* Full map swap on floor change */
@@ -173,8 +167,10 @@ export function updateMapForFloor(floorId) {
     baseEl.innerHTML  = peekBaseFloorSvg(floorId);
     mountBaseFloorSvg(floorId);
     routeEl.innerHTML = buildRouteOverlaySvg(floorId);
-    $('map-area')?.setAttribute('aria-label', `Mapa da rota \u2014 ${getFloorLabel(floorId)}`);
+    $('map-area')?.setAttribute('aria-label',
+      `Mapa da rota — ${getFloorLabel(floorId)}. Use as setas para mover e mais ou menos para o zoom.`);
     updatePoiLayer();
+    updateStepLayer();
     applyMapTransform(0);
     // Re-frame on the new floor: the stored per-floor transform is usually
     // a stale frame from a different leg, which lands the user on empty plan.
@@ -189,10 +185,6 @@ export function updateMapForFloor(floorId) {
     // Update floor control without full re-render
     const fc = $('floor-ctrl');
     if (fc) { fc.outerHTML = renderFloorControl(); bindFloorControlEvents(); }
-    // Update return button
-    const rb = $('return-btn');
-    const showReturn = navState.route && mapState.manualFloor;
-    if (rb) rb.hidden = !showReturn;
   });
 }
 

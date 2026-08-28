@@ -81,22 +81,10 @@ a { text-decoration: none; color: inherit; }
   --card-max-w:   480px;
   --instr-card-h: 148px;
 
-  /* Navigation screen (map + bottom sheet) */
-  --nav-map-bg:       #16263a;
-  --nav-sheet-overlap: 8px;   /* sheet lifts slightly over the map */
-  --nav-sheet-h:      clamp(316px, 42%, 364px);
-  --nav-map-h:        calc(100% - var(--nav-sheet-h) + var(--nav-sheet-overlap));
-  --nav-sheet-radius: var(--radius-sheet);   /* was 30px — folded into the system */
-  --nav-sheet-pad:    22px;
-  --nav-navy:         #0f2540;
-  --nav-teal:         #2dd4bf;
-  --nav-teal-deep:    #0d9488;
-  --nav-teal-soft:    #e3f5f1;
-  --nav-ink:          #0a1f38;
-  --nav-muted:        #7c8ca3;
-  --nav-fab-size:     54px;
-  --nav-fab-shadow:   0 8px 24px rgba(6, 18, 33, .38);
-  --nav-sheet-w:      420px;  /* desktop only */
+  /* Navigation screen: the step sheet's width when it becomes a side
+     column (desktop / phone landscape). Everything else the screen needs
+     is scoped on .sg-nav-screen in styles/screens/navigation.css. */
+  --nav-sheet-w:      420px;
 
   /* ============================================================
      RADIUS — THE WHOLE SYSTEM IS FOUR VALUES

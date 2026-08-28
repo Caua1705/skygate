@@ -3,18 +3,12 @@ import {
   _searchDebounce,
   bindChoiceFooterEvents,
   bindFocusTrap,
-  bindNavigationTabs,
   bindRouteOptionEvents,
-  bindTimelinePlaceEvents,
   releaseModalBackground,
 } from './events.js';
 import { app, appData, mapState, navState, planState, uiState } from '../state/appState.js';
-import { persistJourney, render, updateRouteOverlay } from './router.js';
+import { persistJourney, render, updateStepLayer } from './router.js';
 import { findNode } from '../state/selectors.js';
-import { renderInstructionCardInner, renderOverlayOverview } from '../screens/navigation/NavigationScreen.js';
-import { renderTimelineList } from '../screens/navigation/NavigationTimeline.js';
-import { renderRouteDiagram } from '../screens/navigation/NavigationRouteMap.js';
-import { navigationPrimaryLabel, renderSummaryStrip } from '../screens/navigation/NavigationShell.js';
 import {
   renderChoiceFooterInner,
   renderChoiceOptions,
@@ -34,6 +28,8 @@ import { hasPlaceDetails } from '../components/PlaceDetailSheet.js';
 import { attachStepDistances, buildSemanticSteps, formatMeters, pathMeters, segmentMeters } from '../services/routeSteps.js';
 import { findOption, routeForSelectedOption, scoreOptions } from '../services/routeOptions.js';
 import { getCurrentRouteNode } from '../map/floorMapBuilder.js';
+import { setSheetDetent } from '../screens/navigation/stepsSheet.js';
+
 
 /* ============================================================
    14. ACTIONS
@@ -42,10 +38,10 @@ import { getCurrentRouteNode } from '../map/floorMapBuilder.js';
 /**
  * How long the navigation entrance runs, in ms. Must outlast the slowest
  * keyframe in the `.sg-map-inner.is-entering` block in navigation.css
- * (destination pop: 760ms delay + 460ms) — cut it short and the marker
- * freezes half-scaled.
+ * (badges: 720ms delay + 420ms) — cut it short and a badge freezes
+ * half-scaled.
  */
-const ENTRANCE_MS = 1500;
+const ENTRANCE_MS = 1300;
 
 export function openSearch(kind) {
   if (!['origin', 'destination'].includes(kind)) return;
@@ -84,16 +80,15 @@ function stableDetailTriggerSelector(el) {
   }
 
   const placeCode = el.dataset?.placeCode;
-  if (placeCode && el.classList.contains('sg-tl__hit')) {
-    return `.sg-tl__hit[data-place-code="${CSS.escape(placeCode)}"]`;
+  if (placeCode && el.classList.contains('sg-step__place')) {
+    return `.sg-step__place[data-place-code="${CSS.escape(placeCode)}"]`;
   }
   return '';
 }
 
 function detailFocusFallback() {
   return $('search-input')
-    ?? document.querySelector('.sg-nav-tab[aria-selected="true"]')
-    ?? $('nav-next')
+    ?? $('sheet-grip')
     ?? $('calc-btn');
 }
 
@@ -186,14 +181,12 @@ function buildRouteContext(code) {
   const target = findNode(code);
   if (!target || !path.length) return null;
 
-  const here = navState.semanticSteps[navState.activeStepIndex]?.rawFrom ?? 0;
   const idx  = path.indexOf(code);
 
-  // On the route, still ahead of the traveller: distance along the path.
+  // On the route: walking distance from the start of the trip.
   if (idx >= 0) {
-    if (idx < here) return { text: 'No seu caminho · já passou' };
-    const d = formatMeters(pathMeters(path, here, idx));
-    return { text: d ? `No seu caminho · a ${d}` : 'No seu caminho' };
+    const d = formatMeters(pathMeters(path, 0, idx));
+    return { text: d ? `No seu caminho · a ${d} da partida` : 'No seu caminho' };
   }
 
   // Off the path: straight-line distance to the closest node of the route.
@@ -244,10 +237,10 @@ export function tracePlaceRoute(code) {
   uiState.placeDetailId = '';
   uiState.placeRouteContext = null;
 
-  // When this action comes from active navigation, replan from the last
-  // position the passenger explicitly confirmed instead of the trip's old
-  // origin. selectLocation retains the existing validation, cleanup, render
-  // and focus flow after this origin correction.
+  // From active navigation the app has no idea where the passenger is, so
+  // the replan keeps the trip's origin (getCurrentRouteNode resolves to it).
+  // selectLocation retains the existing validation, cleanup, render and
+  // focus flow after this origin correction.
   if (app.mode === 'navigation' && navState.route) {
     const currentCode = getCurrentRouteNode()?.code;
     if (currentCode === code) { render(); return; }
@@ -475,8 +468,7 @@ export function addFlightFromChoice() {
 export function selectRouteOption(id) {
   if (!id || navState.selectedOptionId === id) return;
   navState.selectedOptionId = id;
-  // Progress belongs to the path it was confirmed on. A different route
-  // starts at its own first step instead of inheriting an unrelated index.
+  // A different route is a different trip: it opens fresh, not as "retomar".
   navState.activeStepIndex = 0;
   navState.hasStarted = false;
   uiState.riskAcknowledged = false;
@@ -560,53 +552,13 @@ function applySelectedRouteOption() {
   navState.semanticSteps = attachStepDistances(buildSemanticSteps(navState.route), path);
 }
 
-export function openOverview() {
-  uiState.showOverview = true;
-  // Partial: just inject the overlay
-  const existing = $('route-overview');
-  if (existing) return;
-  const navScreen = $('nav-screen');
-  if (navScreen) {
-    navScreen.insertAdjacentHTML('beforeend', renderOverlayOverview());
-    bindFocusTrap($('route-overview'));
-    document.querySelector('.sg-overview-item__btn')?.focus({ preventScroll: true });
-    // Bind events for new overlay
-    $('close-overview')?.addEventListener('click', closeOverview);
-    $('overview-backdrop')?.addEventListener('click', closeOverview);
-    document.querySelectorAll('.sg-overview-item__btn').forEach(btn =>
-      btn.addEventListener('click', () => {
-        const idx = parseInt(btn.dataset.stepIndex, 10);
-        if (!isNaN(idx)) { closeOverview(); goToStep(idx); }
-      })
-    );
-  }
-}
 
-export function closeOverview() {
-  uiState.showOverview = false;
-  const overlay = $('route-overview');
-  releaseModalBackground(overlay);
-  overlay?.remove();
-}
-
-export function returnToCurrentStep() {
-  if (!navState.route) return;
-  const stepFloor = navState.semanticSteps[navState.activeStepIndex]?.floorId
-    ?? [...navState.routeFloorIds][0]
-    ?? appData.floors[0]?.id;
-  if (stepFloor) { switchFloor(stepFloor, false); }
-  mapState.manualFloor = false;
-  const rb = $('return-btn');
-  if (rb) rb.hidden = true;
-  requestAnimationFrame(() => {
-    autoFitRoute();
-    $('fit-segment-btn')?.focus({ preventScroll: true });
-  });
-}
+/* ============================================================
+   NAVIGATION — one screen, every step visible, nothing to confirm
+   ============================================================ */
 
 export function startNavigation() {
   if (!navState.semanticSteps.length) return;
-  const isResume = navState.hasStarted;
   // Belt and braces: the CTA is already disabled in this state, but the guard
   // means no other caller can start a route that arrives after gate closing
   // without the passenger having said so.
@@ -619,87 +571,36 @@ export function startNavigation() {
   }
   applySelectedRouteOption();
   app.mode = 'navigation';
-  // A route that was temporarily exited resumes at the passenger's last
-  // confirmed step. A newly calculated route already starts at zero.
-  navState.activeStepIndex = Math.min(
-    Math.max(0, navState.activeStepIndex),
-    Math.max(0, navState.semanticSteps.length - 1),
-  );
-  // A resumed trip returns to the view the passenger was using. A new or
-  // restarted trip opens on the floor plan, the spatial source of truth.
-  if (!isResume) navState.view = 'map';
+  // There is no current step to resume at: the whole route is shown every
+  // time. hasStarted only records that the trip was opened, which is what
+  // lets the choice screen say "retomar" instead of "iniciar".
   navState.hasStarted = true;
+  uiState.focusedStepIndex = -1;
+  uiState.sheetDetent = 'half';
+  uiState.floorMenuOpen = false;
 
-  const activeStep = navState.semanticSteps[navState.activeStepIndex];
-  const targetFloor = activeStep?.floorId || findNode(planState.originCode)?.floorId || mapState.selectedFloorId;
+  const firstStep = navState.semanticSteps[0];
+  const targetFloor = firstStep?.floorId || findNode(planState.originCode)?.floorId || mapState.selectedFloorId;
   mapState.selectedFloorId = targetFloor;
   mapState.manualFloor = false;
 
   render();
-  if (navState.view === 'map') playMapEntrance();
+  playMapEntrance();
 }
 
 export function restartNavigation() {
   if (!navState.route) return;
   navState.activeStepIndex = 0;
   navState.hasStarted = false;
-  navState.view = 'map';
   startNavigation();
 }
 
-/** Open the route map on the passenger's confirmed active step. */
-export function showRouteMap() {
-  if (!navState.route) return;
-  // The toggle shows both tabs in both views, so the active one gets clicked.
-  // Re-rendering the view you are already on would replay its entrance for
-  // no reason; switching views is idempotent instead.
-  if (navState.view === 'map') return;
-  navState.view = 'map';
-  const step = navState.semanticSteps[navState.activeStepIndex];
-  if (step?.floorId) mapState.selectedFloorId = step.floorId;
-  mapState.manualFloor = false;
-  render();
-  // Switching views should feel instant. The full route-draw choreography is
-  // reserved for starting navigation; here we only re-frame the current leg.
-  requestAnimationFrame(() => autoFitRoute(180));
-  requestAnimationFrame(() => $('tab-route-btn')?.focus({ preventScroll: true }));
-}
-
-/** Backward-compatible name for callers that explicitly request the plan. */
-export function showFloorPlan() {
-  if (!navState.route) return;
-  navState.view = 'map';
-  const step = navState.semanticSteps[navState.activeStepIndex];
-  if (step?.floorId) mapState.selectedFloorId = step.floorId;
-  mapState.manualFloor = false;
-  render();
-  playMapEntrance();
-}
-
-/** Back to the timeline, on the same step. Idempotent, like showRouteMap(). */
-export function showTimeline() {
-  if (navState.view === 'timeline') return;
-  navState.view = 'timeline';
-  render();
-  scrollTimelineToCurrent('auto');
-  requestAnimationFrame(() => $('tab-steps-btn')?.focus({ preventScroll: true }));
-}
-
 function playMapEntrance() {
-  // After render: play the entrance and frame the CURRENT LEG close up.
-  // The old whole-route overview left the route as a small squiggle in a
-  // large dark field on a phone; autoFitRoute zooms to the leg being walked.
-  //
-  // ENTRANCE. One class on .sg-map-inner drives the whole choreography in
-  // CSS: the plan settles in, the route draws itself along its length, then
-  // the markers pop in origin → landmarks → destination. It has to come off
-  // again (ENTRANCE_MS), because the route overlay and POI layers are
-  // re-rendered inside this element on every step change — leave the class
-  // on and each step would replay the whole opening sequence.
-  //
-  // Nothing here animates the header, the FABs or the sheet: autoFitRoute
-  // measures those three elements to work out the visible region, and a
-  // moving target gives a wrong frame.
+  // After render: play the entrance and frame the WHOLE route on this floor.
+  // One class on .sg-map-inner drives the choreography in CSS: the plan
+  // settles in, the route draws itself along its length, the badges arrive.
+  // It has to come off again (ENTRANCE_MS), because the overlay layers are
+  // re-rendered inside this element on every floor change.
   if (!prefersReducedMotion()) {
     requestAnimationFrame(() => {
       const inner = $('map-inner');
@@ -717,252 +618,100 @@ function playMapEntrance() {
 export function exitNavigation() {
   app.mode = 'summary';
   mapState.manualFloor = false;
+  uiState.focusedStepIndex = -1;
+  uiState.floorMenuOpen = false;
   render();
 }
 
 /**
- * Finish is intentionally different from temporarily leaving navigation.
- * The destination becomes the next journey's origin, while all route-derived
- * state is cleared so stale steps can never leak into a new calculation.
+ * Centre the map on one step. A LOOK, not a confirmation: nothing about
+ * the route's state changes, the list keeps every row, and the traveller
+ * can tap any step in any order.
+ *
+ * @param {number} idx
+ * @param {{ fromMap?: boolean }} [opts]  true when the tap came from a map
+ *   badge — then the list is scrolled to the row instead of the other way
+ *   round, so the two stay in sync whichever one was touched.
  */
-export function finishNavigation() {
-  if (app.mode !== 'navigation' || !navState.semanticSteps.length) return;
+export function focusStep(idx, { fromMap = false } = {}) {
+  const step = navState.semanticSteps[idx];
+  if (!step) return;
+  const toggledOff = uiState.focusedStepIndex === idx && !fromMap;
+  uiState.focusedStepIndex = toggledOff ? -1 : idx;
+  refreshFocusedStep();
 
-  const completedDestination = planState.destinationCode;
-  const completedNode = findNode(completedDestination);
-  const completedLabel = completedNode ? getPublicNodeLabel(completedNode) : 'seu destino';
-  planState.originCode = completedDestination;
-  planState.destinationCode = '';
+  if (toggledOff) {
+    requestAnimationFrame(() => autoFitRoute(280));
+  } else if (step.floorId && step.floorId !== mapState.selectedFloorId) {
+    // updateMapForFloor re-renders the overlays and re-frames through
+    // autoFitRoute, which now honours the focused step.
+    switchFloor(step.floorId, false);
+  } else {
+    updateStepLayer();
+    requestAnimationFrame(() => fitStepToView(idx, 320) || autoFitRoute(320));
+  }
 
-  navState.route = null;
-  navState.semanticSteps = [];
-  navState.activeStepIndex = 0;
-  navState.hasStarted = false;
-  navState.routeFloorIds = new Set();
-  navState.routeOptions = [];
-  navState.selectedOptionId = '';
-  navState.view = 'map';
+  // The map has to be visible for the tap to have meant anything.
+  if (!toggledOff && uiState.sheetDetent === 'full') setSheetDetent('half');
 
-  mapState.manualFloor = false;
-  uiState.showOverview = false;
-  uiState.floorMenuOpen = false;
-  uiState.routeAnimating = false;
-  uiState.riskAcknowledged = false;
-  uiState.modalNodeCode = '';
-  uiState.placeDetailId = '';
-  uiState.placeRouteContext = null;
-  uiState.error = '';
+  if (fromMap && !toggledOff) {
+    const row = document.querySelector(`.sg-step[data-step-index="${idx}"]`);
+    row?.scrollIntoView({ block: 'center', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    if (uiState.sheetDetent === 'collapsed') setSheetDetent('half');
+    row?.querySelector('.sg-step__hit')?.focus({ preventScroll: true });
+  }
 
-  app.mode = 'planning';
-  render();
-  requestAnimationFrame(() => {
-    $('nav-live')?.replaceChildren(document.createTextNode('Rota finalizada.'));
-    showCompletionToast(completedLabel);
-    $('destination-btn')?.focus({ preventScroll: true });
+  const liveEl = $('nav-live');
+  if (liveEl) {
+    liveEl.textContent = toggledOff
+      ? 'Mostrando a rota completa no mapa.'
+      : `Mostrando o passo ${idx + 1} no mapa: ${String(step.text ?? '')}`;
+  }
+}
+
+/** Keep the list rows and the map badges agreeing on which step is focused. */
+export function refreshFocusedStep() {
+  const focused = uiState.focusedStepIndex;
+  document.querySelectorAll('.sg-step').forEach(row => {
+    const idx = Number(row.dataset.stepIndex);
+    const on = idx === focused;
+    row.classList.toggle('is-focused', on);
+    row.querySelector('.sg-step__hit')?.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+  document.querySelectorAll('.sg-map-step').forEach(badge => {
+    badge.classList.toggle('is-focused', Number(badge.dataset.stepIndex) === focused);
   });
 }
 
 /**
- * Completion must be visible as well as announced. The toast is deliberately
- * transient and presentation-only: finishing has already committed all state,
- * so dismissing it can never affect the next route.
+ * The recentre control: the focused step if there is one (switching to
+ * its floor when needed), otherwise the whole route on a floor it runs on.
  */
-function showCompletionToast(destinationLabel) {
-  const screen = $('planning-root');
-  if (!screen) return;
-
-  const toast = document.createElement('div');
-  toast.className = 'sg-completion-toast';
-  toast.setAttribute('aria-hidden', 'true');
-  toast.innerHTML = `
-    <span class="sg-completion-toast__icon">
-      <iconify-icon icon="lucide:check" aria-hidden="true"></iconify-icon>
-    </span>
-    <span class="sg-completion-toast__copy">
-      <strong>Você chegou</strong>
-      <small>Rota até ${esc(destinationLabel)} concluída.</small>
-    </span>
-  `;
-  screen.appendChild(toast);
-  requestAnimationFrame(() => toast.classList.add('is-visible'));
-  setTimeout(() => {
-    toast.classList.remove('is-visible');
-    toast.addEventListener('transitionend', () => toast.remove(), { once: true });
-    setTimeout(() => toast.remove(), 320);
-  }, 4200);
-}
-
-/** The stable footer action: advance until the final step, then finish. */
-export function activateNavigationPrimary() {
-  const last = navState.semanticSteps.length - 1;
-  if (last < 0) return;
-  if (navState.activeStepIndex >= last) {
-    finishNavigation();
+export function recenterMap() {
+  if (!navState.route) return;
+  const focused = navState.semanticSteps[uiState.focusedStepIndex];
+  if (focused) {
+    if (focused.floorId && focused.floorId !== mapState.selectedFloorId) {
+      switchFloor(focused.floorId, false);
+    } else {
+      requestAnimationFrame(() => autoFitRoute(320));
+    }
     return;
   }
-  advanceStep(1);
-}
-
-export function goToStep(idx) {
-  const total = navState.semanticSteps.length;
-  if (idx < 0 || idx >= total) return;
-  applyStepChange(idx);
-}
-
-export function advanceStep(delta) {
-  const total = navState.semanticSteps.length;
-  const next  = navState.activeStepIndex + delta;
-  if (next < 0 || next >= total) return;
-  applyStepChange(next);
-}
-
-/**
- * Move the active step and refresh whichever view is on screen.
- *
- * The views share the state but not the update path: the timeline swaps its
- * list and scrolls, the diagram redraws itself, the plan redraws its overlay
- * and re-frames. Doing all three regardless would run the plan's fit against
- * elements that are not in the document, which is how you get a silent
- * ReferenceError per keypress.
- */
-function applyStepChange(idx) {
-  navState.activeStepIndex = idx;
-  const step = navState.semanticSteps[idx];
-  if (step?.floorId && step.floorId !== mapState.selectedFloorId) {
-    switchFloor(step.floorId, false);
-  }
-
-  if (navState.view === 'map') {
-    // Update only changed parts (no full re-render)
-    updateInstructionCard();
-    updateRouteOverlay();
-    // Always re-frame; fitStepToView itself drops the animation to 0ms under
-    // prefers-reduced-motion, so skipping it entirely just left the map behind.
-    requestAnimationFrame(() => fitStepToView(idx));
-  } else if (navState.view === 'trajeto') {
-    updateRouteMap();
+  const onRoute = navState.routeFloorIds.has(mapState.selectedFloorId);
+  const firstRouteFloor = navState.semanticSteps[0]?.floorId ?? [...navState.routeFloorIds][0];
+  if (!onRoute && firstRouteFloor) {
+    switchFloor(firstRouteFloor, false);
   } else {
-    updateTimeline();
+    requestAnimationFrame(() => autoFitRoute(320));
   }
-
-  announceStep(idx, step);
-  persistJourney();
 }
 
-/**
- * Redraw the metro diagram in place.
- *
- * The whole SVG is rebuilt rather than patched: one step moves the boundary
- * between the solid and the dotted line, retypes three pills and moves the
- * marker, which is most of the drawing anyway. Only the panel is touched, so
- * the frame stays put and the entrance choreography is not replayed.
- */
-export function updateRouteMap() {
-  // The panel id is shared with the timeline, so check it is actually the
-  // diagram before overwriting it.
-  const el = $('navigation-panel');
-  if (!el?.classList.contains('sg-rt__map')) return;
-  el.innerHTML = renderRouteDiagram();
-  updateTimelineFooter();
-  scrollRouteMapToCurrent();
-}
-
-/**
- * Keep the traveller's marker on screen after a step.
- *
- * A third down the viewport, like the timeline, so what fills the screen
- * below it is the part of the trip that has not happened yet.
- */
-export function scrollRouteMapToCurrent(behavior) {
-  const scroller = $('nav-scroll');
-  const here     = $('rt-here');
-  if (!scroller || !here) return;
-  const mode = behavior ?? (prefersReducedMotion() ? 'auto' : 'smooth');
-  // Rect deltas, not offsetTop: the marker is an SVG node, which has no
-  // offsetTop at all, and the scroller is not its offsetParent either.
-  const delta = here.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-  const top = scroller.scrollTop + delta - scroller.clientHeight * 0.32;
-  scroller.scrollTo({ top: Math.max(0, top), behavior: mode });
-}
-
-/**
- * Re-render the timeline list in place and bring the new current node into
- * view. The list is swapped rather than diffed because a step change moves
- * the done/current/upcoming boundary on nearly every row anyway.
- */
-export function updateTimeline() {
-  const list = $('tl-list');
-  if (!list) return;
-  list.innerHTML = renderTimelineList();
-  bindTimelinePlaceEvents();
-  updateTimelineFooter();
-  scrollTimelineToCurrent();
-}
-
-/** Keep Previous/Next/Finish and the summary strip honest after a step.
-    Both views render the same footer button and the same strip, so both
-    refresh through here. */
-function updateTimelineFooter() {
-  const isFirst = navState.activeStepIndex <= 0;
-  const isLast = navState.activeStepIndex >= navState.semanticSteps.length - 1;
-  const previous = $('nav-prev');
-  if (previous) previous.disabled = isFirst;
-  const next = $('nav-next');
-  if (next) {
-    next.disabled = false;
-    const label = next.querySelector('span');
-    if (label) label.textContent = navigationPrimaryLabel();
-    const icon = next.querySelector('iconify-icon:last-of-type');
-    if (icon) icon.setAttribute('icon', isLast ? 'solar:flag-2-bold' : 'lucide:check');
-  }
-  const strip = document.querySelector('.sg-tl__strip');
-  if (strip) strip.outerHTML = renderSummaryStrip();
-}
-
-/**
- * Scroll the current node to a comfortable reading position — a third down
- * the viewport, not dead centre, so the steps that come NEXT are the ones
- * filling the screen below it.
- */
-export function scrollTimelineToCurrent(behavior) {
-  const scroller = $('nav-scroll');
-  const current  = document.querySelector('.sg-tl__item.is-current');
-  if (!scroller || !current) return;
-  const mode = behavior ?? (prefersReducedMotion() ? 'auto' : 'smooth');
-  // Measured from rects, not offsetTop. Timeline items are position:relative
-  // but the scroller is not, so their offsetParent is the fixed screen —
-  // offsetTop therefore included the header and scrolled every step short by
-  // its height. Rect deltas do not care what the offsetParent happens to be.
-  const delta = current.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
-  const top = scroller.scrollTop + delta - scroller.clientHeight * 0.28;
-  scroller.scrollTo({ top: Math.max(0, top), behavior: mode });
-}
-
-export function updateInstructionCard() {
-  const card = $('instruction-card');
-  if (!card) return;
-  const focusedId = document.activeElement?.id ?? '';
-
-  card.innerHTML = renderInstructionCardInner();
-
-  // Re-bind the controls the sheet owns
-  $('nav-next')?.addEventListener('click', activateNavigationPrimary);
-  $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
-  $('instr-steps-btn')?.addEventListener('click', openOverview);
-  bindNavigationTabs();
-  requestAnimationFrame(() => {
-    const previousControl = focusedId ? $(focusedId) : null;
-    if (previousControl && !previousControl.matches(':disabled')) {
-      previousControl.focus({ preventScroll: true });
-      return;
-    }
-    $('nav-next')?.focus({ preventScroll: true });
-  });
-}
-
-export function announceStep(idx, step) {
-  const liveEl = $('nav-live');
-  if (liveEl) liveEl.textContent = `Etapa ${idx + 1} de ${navState.semanticSteps.length}: ${step?.text ?? ''}`;
+/** The sheet moved: what is visible changed, so the frame is recomputed. */
+export function onSheetSnap() {
+  if (app.mode !== 'navigation' || !navState.route) return;
+  // After the height transition, not during it — the fit measures the sheet.
+  setTimeout(() => autoFitRoute(260), prefersReducedMotion() ? 0 : 300);
 }
 
 export function showHelp() {
@@ -980,9 +729,9 @@ export function showHelp() {
         eyebrow: 'Durante a rota',
         title: 'Navegue no seu ritmo',
         items: [
-          ['lucide:map', 'Mapa da rota', 'Use o mapa para se orientar e Etapas para conferir o trajeto completo.'],
-          ['lucide:circle-check', 'Confirme seu avanço', 'Concluir etapa registra manualmente o seu progresso.'],
-          ['lucide:rotate-ccw', 'Saia sem perder o ponto', 'Ao voltar, a rota continua na última etapa confirmada.'],
+          ['lucide:list', 'Todos os passos, sempre', 'Arraste a lista para cima ou para baixo. Não há nada para confirmar.'],
+          ['lucide:map-pin', 'Toque num passo', 'O mapa centraliza naquele ponto; os números do mapa são os da lista.'],
+          ['lucide:layers', 'Atenção às trocas de piso', 'Elas aparecem destacadas na lista e no mapa; use o botão de pisos para ver outro andar.'],
         ],
       }
     : app.mode === 'summary'

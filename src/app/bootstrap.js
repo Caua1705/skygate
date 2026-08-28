@@ -78,7 +78,7 @@ export async function init() {
     uiState.loading = '';
     if (!restoredJourney) app.mode = 'planning';
     render();
-    if (restoredJourney && app.mode === 'navigation' && navState.view === 'map') {
+    if (restoredJourney && app.mode === 'navigation') {
       // One millisecond is visually instant, while still taking the deliberate
       // re-frame path that relays out callouts against the restored viewport.
       requestAnimationFrame(() => autoFitRoute(1));

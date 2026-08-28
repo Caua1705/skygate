@@ -42,8 +42,16 @@ export const planState = {
 export const navState = {
   route: null,          // normalized route
   semanticSteps: [],    // { text, icon, nodeType, isTransition, floorId, rawFrom, rawTo }
+  /**
+   * RETAINED, NOT USED BY THE SCREEN. Navigation no longer has a "current
+   * step" — every step is shown at once and nothing is confirmed — so this
+   * stays at 0 for the whole trip. It is kept because the session schema
+   * (sessionPersistence.js, schema v1) validates it and the route-choice
+   * screen's resume estimate reads it through getEstimatedRemainingMinutes().
+   * Removing it means a schema bump; see the note in NavigationShell.js.
+   */
   activeStepIndex: 0,
-  hasStarted: false,    // distinguishes a paused first step from a fresh route
+  hasStarted: false,    // the trip was opened at least once — drives "retomar" on the choice screen
   routeFloorIds: new Set(),
   /**
    * The WAYS of walking `route` offered on the choice screen, and which one
@@ -53,9 +61,8 @@ export const navState = {
   routeOptions: [],
   selectedOptionId: '',
   /**
-   * 'map' is the default spatial view and 'timeline' is its instruction-first
-   * companion. Both read the same steps/index, so switching views preserves
-   * confirmed progress. 'trajeto' remains a compatibility-only schematic.
+   * RETAINED for the session schema only. Navigation is ONE screen now (map
+   * with the step list in a sheet), so this is always 'map'.
    */
   view: 'map',
 };
@@ -64,12 +71,7 @@ export const mapState = {
   selectedFloorId: '',
   floorTransforms: {},  // { floorId: { x, y, scale } }
   svgBaseCache: {},     // { floorId: svgString } — never rebuilt
-  manualFloor: false,
-  // EXPERIMENT — tilted camera, see the "TILTED CAMERA" block in
-  // styles/screens/navigation.css. Lives here only so the choice survives a
-  // re-render; deliberately NOT persisted, so every session starts flat and
-  // the experiment can be deleted without touching the session schema.
-  tilt: false,
+  manualFloor: false,   // kept for the session restore path; navigation no longer sets it
 };
 
 export const uiState = {
@@ -78,13 +80,23 @@ export const uiState = {
   searchOpenFor: '',    // 'origin'|'destination'|''
   searchQuery: '',
   searchCategory: '',   // SEARCH_CATEGORIES key or '' — active quick-filter chip
-  showOverview: false,
   modalNodeCode: '',    // legacy node-based detail sheet (LocationDetail)
   placeDetailId: '',    // rich business detail sheet (PlaceDetailSheet)
   placeRouteContext: null, // { text } when the card was opened from an active route
 
   floorMenuOpen: false,
   routeAnimating: false,
+
+  /**
+   * NAVIGATION — consultation, not progress.
+   * `focusedStepIndex` is the step the traveller tapped to see on the map
+   * (-1 = none). It is a viewing choice, never a claim about where they are,
+   * and it is deliberately not persisted.
+   * `sheetDetent` is the resting height of the step sheet: 'collapsed'
+   * (summary only) | 'half' | 'full'.
+   */
+  focusedStepIndex: -1,
+  sheetDetent: 'half',
 
   /**
    * The passenger ticked "entendo que posso perder o voo" for a route whose

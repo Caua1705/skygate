@@ -1,9 +1,6 @@
-import { mapState, navState, planState } from '../state/appState.js';
+import { mapState, navState, planState, uiState } from '../state/appState.js';
 import { findNode } from '../state/selectors.js';
-// MAP_H was used by both fit functions but never imported — every call to
-// fitStepToView/fitFullRoute threw ReferenceError, which silently killed the
-// recenter FAB and the auto-fit on step change.
-import { MAP_H, MAP_W, getFloorBounds, nodeToSvg } from './floorMapBuilder.js';
+import { MAP_H, MAP_W, floorRouteCodes, getFloorBounds, nodeToSvg } from './floorMapBuilder.js';
 import { clamp } from '../utils/format.js';
 import { MAX_SCALE, MIN_SCALE } from '../app/constants.js';
 import { setTransform } from './mapPanZoom.js';
@@ -24,73 +21,52 @@ import { prefersReducedMotion , $ } from '../utils/dom.js';
    To put a point at an arbitrary target (X,Y) we solve for tx,ty. That is
    the whole trick behind framing the route somewhere other than the dead
    centre of the map area.
+
+   WHAT GETS FRAMED. The app has no positioning, so the default frame is
+   the WHOLE route on the visible floor. Tapping a step in the sheet frames
+   that step's leg instead (uiState.focusedStepIndex); the recentre control
+   and every floor change go back through autoFitRoute(), which honours the
+   focused step when it has geometry on this floor and falls back to the
+   full route otherwise.
    ============================================================ */
 
-/* These four numbers decide how close the map opens, and they fight each
-   other: every unit of padding is a unit of the frame NOT spent on the
-   route.
-
-   RE-TUNED FOR THE REAL PLAN. They used to be measured in the old per-floor
-   normalised space, where the same constant meant a different distance on
-   every level: a 250-unit minimum frame was 155 m of terminal on floor 0,
-   347 m on floor 2 and 23 m on floor 3. Map units are physical now
-   (0.38 m/unit everywhere), so each value below is a real distance, and all
-   four are the old ones times MARK_SCALE (1.7) — the factor that reproduces
-   what floors 0 and 1 looked like before. Measured against the live API, a
-   walking leg on the reference route is 139-314 units (53-119 m), so the
-   min-span frame lands at ~430 units, about 165 m across. */
 /** Breathing room around the framed box, as a share of its own span. */
 const FIT_PAD_RATIO = 0.12;
-/** Floor for that padding in map units — clears a pin, which rises ~58. */
+/** Floor for that padding in map units — clears a badge and its label. */
 const FIT_PAD_MIN = 68;
 /** A leg shorter than this is grown, so a single node never zooms to 8x. */
 const MIN_SPAN = 289;
 /**
- * Room for an origin/destination caption, which is ~330 map units wide.
- * Not the full width: reserving all of it zooms the leg back out, and the
- * brief asked for close framing. Captions on markers OUTSIDE the current
- * leg (a destination two steps away) can still fall off-frame.
- */
-const CAPTION_PAD = 102;
-/**
  * Ceiling for the AUTO fit only — pinch-zoom still goes to MAX_SCALE.
- * Framing a short leg inside a large map area (desktop, where the map gets
- * ~1300px) otherwise solves to 6x, which blows the markers and the route up
- * to absurd sizes because they are drawn in map units.
+ * Framing a short leg inside a large map area (desktop) otherwise solves
+ * to 6x and the drawing turns into a handful of blurred walls.
  */
 const FIT_MAX_SCALE = 2.6;
 
 /**
  * The part of the map area the user can actually see.
  *
- * The header floats over the top of the map and the sheet covers the
+ * The banner floats over the top of the map and the sheet covers the
  * bottom, so the geometric centre of the map area is NOT the centre of what
  * is visible — framing there pushes the route under the sheet. Insets are
  * measured from the live elements rather than hardcoded, which keeps this
- * correct on desktop too, where the sheet is a right-hand panel instead.
+ * correct on desktop too, where the sheet is a right-hand column.
  */
 function safeViewport(wrapper) {
   const w = wrapper.getBoundingClientRect();
   let top = 0, bottom = 0, right = 0;
 
-  const header = document.querySelector('.sg-navhdr');
-  if (header) {
-    const h = header.getBoundingClientRect();
-    // The scrim fades out; only the solid upper part really occludes.
-    top = clamp(h.bottom - w.top, 0, w.height * 0.4) * 0.8;
-  }
-  const viewTabs = document.querySelector('.sg-nav-tabs--map');
-  if (viewTabs) {
-    const t = viewTabs.getBoundingClientRect();
-    top = Math.max(top, clamp(t.bottom - w.top + 8, 0, w.height * 0.45));
+  const banner = document.querySelector('.sg-navbar');
+  if (banner) {
+    const b = banner.getBoundingClientRect();
+    top = clamp(b.bottom - w.top + 8, 0, w.height * 0.4);
   }
 
-  const sheet = $('instruction-card');
+  const sheet = $('nav-sheet');
   if (sheet) {
     const s = sheet.getBoundingClientRect();
-    const overlapsHorizontally = s.left < w.right && s.right > w.left;
-    if (overlapsHorizontally) bottom = clamp(w.bottom - s.top, 0, w.height * 0.5);
-    else if (s.left >= w.right - 1) right = 0;   // desktop: wrapper already stops short
+    const overlapsHorizontally = s.left < w.right - 1 && s.right > w.left;
+    if (overlapsHorizontally) bottom = clamp(w.bottom - s.top, 0, w.height * 0.6);
   }
 
   const fabs = document.querySelector('.sg-map-fabs');
@@ -103,7 +79,6 @@ function safeViewport(wrapper) {
   const height = Math.max(40, w.height - top - bottom);
   return {
     wrapperW: w.width, wrapperH: w.height,
-    // Visible region as a box in wrapper-relative coordinates.
     left: 0, top,
     width, height,
     cx: width / 2,
@@ -114,13 +89,6 @@ function safeViewport(wrapper) {
 /**
  * Slide one axis so the plan keeps covering the visible region.
  * Positions come from the same screen(p) formula documented above.
- *
- * @param {number} t         translation on this axis
- * @param {number} scale
- * @param {number} mapSize   MAP_W or MAP_H
- * @param {number} wrapper   wrapper width or height
- * @param {number} safeMin   near edge of the visible region, wrapper-relative
- * @param {number} safeMax   far edge
  */
 function clampToContent(t, scale, mapSize, wrapper, safeMin, safeMax) {
   const half = (mapSize / 2) * scale;
@@ -139,11 +107,11 @@ function clampToContent(t, scale, mapSize, wrapper, safeMin, safeMax) {
 /**
  * Frame a set of map-space points inside the visible region.
  * @param {Array<{x:number,y:number}>} pts
- * @param {{ duration?: number, captionPad?: boolean }} opts
+ * @param {{ duration?: number }} opts
  */
-export function fitPointsToView(pts, { duration, captionPad = false } = {}) {
+export function fitPointsToView(pts, { duration } = {}) {
   if (!pts.length) return false;
-  const wrapper = document.querySelector('#navigation-panel.sg-map-wrapper');
+  const wrapper = document.querySelector('.sg-map-wrapper');
   if (!wrapper) return false;
   const view = safeViewport(wrapper);
   if (!view.wrapperW || !view.wrapperH) return false;
@@ -164,9 +132,8 @@ export function fitPointsToView(pts, { duration, captionPad = false } = {}) {
   [minY, maxY] = growTo(minY, maxY, MIN_SPAN * (view.height / view.width));
 
   const pad = Math.max(FIT_PAD_MIN, (maxX - minX) * FIT_PAD_RATIO);
-  const side = pad + (captionPad ? CAPTION_PAD : 0);
-  const bX1 = minX - side, bX2 = maxX + side;
-  const bY1 = minY - pad,  bY2 = maxY + pad;
+  const bX1 = minX - pad, bX2 = maxX + pad;
+  const bY1 = minY - pad, bY2 = maxY + pad;
 
   const scale = clamp(
     Math.min(view.width / (bX2 - bX1), view.height / (bY2 - bY1)),
@@ -180,8 +147,7 @@ export function fitPointsToView(pts, { duration, captionPad = false } = {}) {
   let ty = view.cy - view.wrapperH / 2 + (MAP_H / 2 - midY) * scale;
 
   // Keep the plan under the frame. A leg near the edge of the floor would
-  // otherwise be centred with half the screen showing the void beyond the
-  // plan — the "lost in a dark field" complaint in its other form.
+  // otherwise be centred with half the screen showing nothing.
   tx = clampToContent(tx, scale, MAP_W, view.wrapperW, view.left, view.left + view.width);
   ty = clampToContent(ty, scale, MAP_H, view.wrapperH, view.top,  view.top  + view.height);
 
@@ -199,10 +165,8 @@ function pointsFor(codes, floorId) {
 }
 
 /**
- * Frame the leg the traveller is walking right now: from this step's
- * position through the start of the next one. That is the close-up the
- * navigation opens with — the whole-route overview reads as "small route
- * lost in a dark field" on a phone.
+ * Frame one step's leg: from its own position through the start of the
+ * next step, so the stretch it describes is what fills the screen.
  */
 export function fitStepToView(stepIndex, duration) {
   if (!navState.route) return false;
@@ -210,42 +174,40 @@ export function fitStepToView(stepIndex, duration) {
   const step = steps[stepIndex];
   if (!step) return false;
 
-  const path = navState.route.path;
+  const path = navState.route.path ?? [];
+  if (!path.length) return false;
   const from = step.rawFrom ?? 0;
-  // Through the START of the next step, so the leg ahead is on screen too.
   const to = steps[stepIndex + 1]?.rawFrom ?? step.rawTo ?? path.length - 1;
   const codes = path.slice(from, Math.max(from, to) + 1);
+  if (step.landmarkCode && !codes.includes(step.landmarkCode)) codes.unshift(step.landmarkCode);
 
   const pts = pointsFor(codes, mapState.selectedFloorId);
   if (!pts.length) return false;
-
-  // Keep the origin/destination markers in frame when they belong to this
-  // leg, and reserve room for their captions.
-  const hasEndpoint = codes.includes(planState.originCode) || codes.includes(planState.destinationCode);
-  return fitPointsToView(pts, { duration, captionPad: hasEndpoint });
+  return fitPointsToView(pts, { duration });
 }
 
-/** Frame the whole route on the visible floor (used as a fallback). */
+/** Frame the whole route on the visible floor. */
 export function fitFullRoute(duration) {
   if (!navState.route) return false;
   const fid = mapState.selectedFloorId;
-  const segmentCodes = (navState.route.segments ?? [])
-    .filter(segment => segment.type === 'floor' && segment.floorId === fid)
-    .flatMap(segment => segment.nodeCodes ?? []);
-  const codes = [...new Set(segmentCodes.length
-    ? segmentCodes
-    : navState.route.path.filter(code => findNode(code)?.floorId === fid))];
+  const codes = floorRouteCodes(fid);
   const pts = pointsFor(codes, fid);
+  // Endpoints have labels; make sure they are inside the frame too.
+  [planState.originCode, planState.destinationCode].forEach(code => {
+    const n = findNode(code);
+    if (n && n.floorId === fid && !codes.includes(code)) pts.push(nodeToSvg(n, getFloorBounds(fid)));
+  });
   if (!pts.length) return false;
-  return fitPointsToView(pts, { duration, captionPad: true });
+  return fitPointsToView(pts, { duration });
 }
 
 /**
- * The one entry point callers should use: frame the current step, falling
- * back to the whole route when this step has nothing on the visible floor
- * (which is exactly what happens after a manual floor switch).
+ * The one entry point callers should use: the focused step when it has
+ * geometry on this floor, otherwise the whole route on this floor.
  */
 export function autoFitRoute(duration) {
   if (!navState.route) return false;
-  return fitStepToView(navState.activeStepIndex, duration) || fitFullRoute(duration);
+  const focused = uiState.focusedStepIndex;
+  if (focused >= 0 && fitStepToView(focused, duration)) return true;
+  return fitFullRoute(duration);
 }

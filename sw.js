@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'skygate-';
-const SHELL_CACHE_NAME = `${CACHE_PREFIX}shell-v6`;
+const SHELL_CACHE_NAME = `${CACHE_PREFIX}shell-v7`;
 const RUNTIME_CACHE_NAME = `${CACHE_PREFIX}runtime-v1`;
 const ACTIVE_CACHE_NAMES = new Set([SHELL_CACHE_NAME, RUNTIME_CACHE_NAME]);
 const TRUSTED_RUNTIME_ORIGINS = new Set([
@@ -42,8 +42,6 @@ const PRECACHE = [
   '/styles/screens/route-summary.css',
   '/styles/screens/navigation.css',
   '/styles/screens/navigation-sheet.css',
-  '/styles/screens/navigation-timeline.css',
-  '/styles/screens/navigation-route-map.css',
   '/styles/components/place-detail.css',
   '/src/main.js',
   '/src/app/bootstrap.js',
@@ -76,8 +74,8 @@ const PRECACHE = [
   '/src/screens/routeSummary/RouteSummaryScreen.js',
   '/src/screens/navigation/NavigationScreen.js',
   '/src/screens/navigation/NavigationShell.js',
-  '/src/screens/navigation/NavigationTimeline.js',
-  '/src/screens/navigation/NavigationRouteMap.js',
+  '/src/screens/navigation/NavigationSteps.js',
+  '/src/screens/navigation/stepsSheet.js',
   '/src/services/api/index.js',
   '/src/services/api/airportsApi.js',
   '/src/services/api/httpClient.js',

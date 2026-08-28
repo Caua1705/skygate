@@ -13,24 +13,7 @@
   }
   .sg-form-card { min-width: 440px; }
 
-  /* Navigation: map fills the viewport, sheet becomes a right-hand panel */
-  .sg-map-area {
-    height: 100%;
-    right: var(--nav-sheet-w);
-  }
-  .sg-map-area::after {
-    background: radial-gradient(120% 80% at 50% 35%, transparent 45%, rgba(6, 18, 33, .5) 100%);
-  }
-
-  .sg-instruction-card {
-    top: 0; left: auto; bottom: 0;
-    width: var(--nav-sheet-w);
-    border-radius: 0;
-    box-shadow: -14px 0 44px rgba(9, 25, 45, .16);
-    padding-top: 24px;
-  }
-
-  .sg-sheet-handle { display: none; }
+  /* Navigation's side-column layout lives in screens/navigation-sheet.css. */
 
   /* Overlay overlays: centered */
   .sg-search-overlay { justify-content: center; align-items: center; }

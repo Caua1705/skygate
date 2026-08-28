@@ -1,21 +1,20 @@
 import { $ } from '../utils/dom.js';
 import {
-  activateNavigationPrimary, addFlightFromChoice, advanceStep, clearFlightTime,
-  clearLocation, closeLocationDetail, closePlaceDetail, closeOverview, closeSearch,
-  editRoute, exitNavigation, goToStep, openCategorySearch, openLocationDetail,
-  openPlaceFromMap, openPlaceOrLocationDetail, openOverview, openSearch,
-  restartNavigation, returnToCurrentStep, selectLocation, selectRouteOption,
+  addFlightFromChoice, clearFlightTime,
+  clearLocation, closeLocationDetail, closePlaceDetail, closeSearch,
+  editRoute, exitNavigation, focusStep, onSheetSnap, openCategorySearch, openLocationDetail,
+  openPlaceFromMap, openPlaceOrLocationDetail, openSearch, recenterMap,
+  restartNavigation, selectLocation, selectRouteOption,
   setFlightDay, setFlightTime, setFlightType, setRouteMode, showHelp,
-  showRouteMap, showTimeline, startNavigation, swapLocations,
+  startNavigation, swapLocations,
   toggleAccessibleRoute, toggleRiskAck, traceRouteToLocation, tracePlaceRoute,
 } from './actions.js';
 import { handleCalculate } from './routeController.js';
 import { init } from './bootstrap.js';
-import { app, mapState, navState, uiState } from '../state/appState.js';
+import { app, uiState } from '../state/appState.js';
 import { render, updateSearchChips_, updateSearchResults_ } from './router.js';
-import { autoFitRoute } from '../map/mapFit.js';
-import { zoomAt } from '../map/mapPanZoom.js';
 import { renderFloorControl } from '../screens/navigation/NavigationScreen.js';
+import { bindStepsSheet, unbindStepsSheet } from '../screens/navigation/stepsSheet.js';
 import { switchFloor } from '../map/floorSwitch.js';
 import { DEBOUNCE_MS } from './constants.js';
 
@@ -41,8 +40,8 @@ export function bindEvents() {
   );
   $('calc-btn')?.addEventListener('click', handleCalculate);
   $('retry-route-btn')?.addEventListener('click', handleCalculate);
-  $('focus-view-tabs')?.addEventListener('click', () => {
-    document.querySelector('.sg-nav-tab[aria-selected="true"]')?.focus({ preventScroll: true });
+  $('focus-steps')?.addEventListener('click', () => {
+    $('sheet-grip')?.focus({ preventScroll: true });
   });
   $('help-btn')?.addEventListener('click', showHelp);
   $('retry-btn')?.addEventListener('click', init);
@@ -83,47 +82,19 @@ export function bindEvents() {
   bindRouteOptionEvents();
   bindChoiceFooterEvents();
 
-  // Navigation
+  // Navigation — one screen: map, banner, two controls, the step sheet.
   $('exit-nav-btn')?.addEventListener('click', exitNavigation);
-  // Timeline ⇄ trajeto. ONE control, rendered by NavigationShell and present
-  // in both views — clicking the tab that is already active re-renders the
-  // same view, which is the correct no-op.
-  bindNavigationTabs();
-  // The old top-down plan's own back button (see showFloorPlan).
-  $('back-to-timeline-btn')?.addEventListener('click', showTimeline);
-  bindTimelinePlaceEvents();
-  $('nav-prev')?.addEventListener('click', () => advanceStep(-1));
-  $('nav-next')?.addEventListener('click', activateNavigationPrimary);
-  $('fit-segment-btn')?.addEventListener('click', () => autoFitRoute());
-  // EXPERIMENT — flat / tilted camera. Flips the attribute in place instead of
-  // re-rendering: the whole point is to A/B the two on a phone, and rebuilding
-  // the map DOM between taps would hide the very difference being judged.
-  $('tilt-toggle-btn')?.addEventListener('click', event => {
-    mapState.tilt = !mapState.tilt;
-    $('map-area')?.setAttribute('data-map-tilt', mapState.tilt ? 'on' : 'off');
-    event.currentTarget.setAttribute('aria-pressed', mapState.tilt ? 'true' : 'false');
-  });
-  $('zoom-in-btn')?.addEventListener('click', () => zoomAt(0.4));
-  $('zoom-out-btn')?.addEventListener('click', () => zoomAt(-0.4));
-  $('overview-btn')?.addEventListener('click', openOverview);
-  $('instr-steps-btn')?.addEventListener('click', openOverview);
-  $('return-btn')?.addEventListener('click', returnToCurrentStep);
+  $('recenter-btn')?.addEventListener('click', recenterMap);
+  if (app.mode === 'navigation') bindStepsSheet({ onSnap: onSheetSnap });
+  else unbindStepsSheet();
+  bindStepListEvents();
+  bindMapStepEvents();
 
   // Floor control
   bindFloorControlEvents();
 
   // POIs on the map — same detail card as search, plus route context
   bindMapPoiEvents();
-
-  // Overview
-  $('close-overview')?.addEventListener('click', closeOverview);
-  $('overview-backdrop')?.addEventListener('click', closeOverview);
-  document.querySelectorAll('.sg-overview-item__btn').forEach(btn =>
-    btn.addEventListener('click', () => {
-      const idx = parseInt(btn.dataset.stepIndex, 10);
-      if (!isNaN(idx)) { closeOverview(); goToStep(idx); }
-    })
-  );
 
   // Search
   bindSearchOverlayEvents();
@@ -148,33 +119,42 @@ export function bindEvents() {
   bindFocusTrap(
     $('place-detail')
     ?? $('detail-overlay')
-    ?? $('route-overview')
     ?? $('search-overlay')
   );
 }
 
-/** Keyboard-complete two-view tablist: Etapas | Mapa. */
-export function bindNavigationTabs() {
-  const tabs = [$('tab-steps-btn'), $('tab-route-btn')].filter(Boolean);
-  if (tabs.length !== 2) return;
+/**
+ * The step list. Tapping a row centres the map on that step; the place
+ * chip beside a row (when the step goes through a business we have a
+ * record for) opens the same detail card as the map POIs and the search.
+ */
+export function bindStepListEvents() {
+  document.querySelectorAll('.sg-step__hit[data-step-index]').forEach(btn =>
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.stepIndex, 10);
+      if (!Number.isNaN(idx)) focusStep(idx);
+    })
+  );
+  document.querySelectorAll('.sg-step__place[data-place-code]').forEach(btn =>
+    btn.addEventListener('click', () => openPlaceFromMap(btn.dataset.placeCode))
+  );
+}
 
-  const activate = tab => {
-    if (tab.id === 'tab-route-btn') showRouteMap();
-    else showTimeline();
-  };
-
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => activate(tab));
-    tab.addEventListener('keydown', event => {
-      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const current = tabs.indexOf(event.currentTarget);
-      const target = event.key === 'Home' ? tabs[0]
-        : event.key === 'End' ? tabs.at(-1)
-        : tabs[(current + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
-      activate(target);
-    });
+/**
+ * Numbered badges on the map. Delegated to the layer container, which
+ * survives every innerHTML swap of its contents (floor changes, zoom
+ * relayouts), so nothing has to be re-bound.
+ */
+export function bindMapStepEvents() {
+  const layer = $('map-steps');
+  if (!layer || layer.dataset.bound) return;
+  layer.dataset.bound = 'true';
+  layer.addEventListener('click', e => {
+    const badge = e.target.closest('.sg-map-step[data-step-index]');
+    if (!badge) return;
+    e.stopPropagation();
+    const idx = parseInt(badge.dataset.stepIndex, 10);
+    if (!Number.isNaN(idx)) focusStep(idx, { fromMap: true });
   });
 }
 
@@ -227,21 +207,9 @@ export function bindChoiceFooterEvents() {
 }
 
 /**
- * POI markers live in their own layer that is re-rendered on every step and
- * floor change, so this is exported and called again after those updates.
+ * POI markers live in their own layer that is re-rendered on every floor
+ * change, so this is exported and called again after those updates.
  */
-/**
- * Timeline nodes that carry a business open the same rich card as the map
- * POIs and the search list — same action, so the "No seu caminho" context
- * line comes along for free. Exported because the list is re-rendered on
- * every step change.
- */
-export function bindTimelinePlaceEvents() {
-  document.querySelectorAll('.sg-tl__hit[data-place-code]').forEach(btn =>
-    btn.addEventListener('click', () => openPlaceFromMap(btn.dataset.placeCode))
-  );
-}
-
 export function bindMapPoiEvents() {
   document.querySelectorAll('.sg-poi').forEach(btn =>
     btn.addEventListener('click', e => {
@@ -416,7 +384,6 @@ document.addEventListener('keydown', e => {
     if ($('help-dialog')) return;
     if (uiState.placeDetailId) { closePlaceDetail(); return; }
     if (uiState.modalNodeCode) { closeLocationDetail(); return; }
-    if (uiState.showOverview)  { closeOverview(); return; }
     if (uiState.searchOpenFor) { e.preventDefault(); closeSearch(); return; }
     if (uiState.floorMenuOpen) { e.preventDefault(); setFloorMenuOpen(false, true); return; }
     if (app.mode === 'navigation') { exitNavigation(); return; }

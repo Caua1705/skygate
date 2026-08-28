@@ -2,7 +2,7 @@
    ACCESSIBILITY CONTRAST HELPERS
    ============================================================ */
 
-/* Direct keyboard access to the Map/Steps switch without traversing every
+/* Direct keyboard access to the step list without traversing every
    interactive landmark first. It enters the visual hierarchy only on focus. */
 .sg-skip-navview {
   position: fixed;
@@ -34,14 +34,14 @@
   }
   .sg-form-card { border-color: var(--navy-700); }
   .sg-route-field__value--ph { color: var(--slate-700); }
-  .sg-instr-head__title { color: #000000; }
-  .sg-metric__label, .sg-next-step__dist { color: #4a5b73; }
   .sg-map-fab,
-  .sg-navtop__btn,
-  .sg-nav-tabs,
+  .sg-navbar__btn,
+  .sg-sheet__head,
+  .sg-step,
   .sg-home__field,
   .sg-home__flight,
   .sg-rc-opt { border-width: 2px; }
+  .sg-map-fab, .sg-map-step__label, .sg-poi__label { border-color: var(--navy-900); }
   .sg-home__field,
   .sg-home__flight { border: 2px solid var(--border-strong); }
 }
@@ -49,9 +49,8 @@
 @media (prefers-contrast: high) {
   .sg-form-card { border-color: var(--navy-700); }
   .sg-route-field__value--ph { color: var(--slate-700); }
-  .sg-instr-head__title { color: #000000; }
-  .sg-metric__label, .sg-next-step__dist { color: #4a5b73; }
-  .sg-map-fab, .sg-navtop__btn { border: 1px solid rgba(255,255,255,.55); }
+  .sg-map-fab { border: 2px solid var(--navy-900); }
+  .sg-navbar__btn { border: 2px solid rgba(255,255,255,.7); }
 }
 
 /* Preserve selection and route meaning in Windows High Contrast and other
@@ -75,34 +74,25 @@
   .sg-home__flight,
   .sg-home__toggle,
   .sg-rc-opt,
-  .sg-nav-tab,
   .sg-map-fab,
-  .sg-navtop__btn {
+  .sg-navbar__btn,
+  .sg-step__hit,
+  .sg-sheet__grip {
     border: 1px solid ButtonText;
   }
 
   .sg-rc-opt.is-selected,
-  .sg-nav-tab.is-active,
+  .sg-step.is-focused,
   .sg-home__toggle.is-on {
     outline: 3px solid Highlight;
     outline-offset: 2px;
   }
 
-  .sg-route__halo,
-  .sg-route__halo2,
-  .sg-route__halo3,
-  .sg-route__flow {
-    display: none;
-  }
-
-  .sg-route__line { stroke: Highlight !important; opacity: 1; }
-  .sg-route__line.is-completed { stroke: GrayText !important; }
-  .sg-route__line.is-upcoming {
-    stroke: CanvasText !important;
-    stroke-dasharray: 10 8;
-  }
-  .sg-route__core { display: none; }
-  .sg-route__spot,
-  .sg-route-mark__core { fill: Highlight !important; }
-  .sg-route-mark__ring { stroke: Highlight !important; fill: Canvas !important; }
+  /* The route keeps its casing/line pair in system colours so it stays the
+     highest-contrast mark on the map. */
+  .sg-route__casing { stroke: CanvasText !important; }
+  .sg-route__line   { stroke: Highlight !important; }
+  .sg-route__spot   { fill: Highlight !important; stroke: CanvasText !important; }
+  .sg-map-step__badge { forced-color-adjust: none; background: Canvas; color: CanvasText; border-color: CanvasText; }
+  .sg-map-step.is-dest .sg-map-step__badge { background: Highlight; color: HighlightText; }
 }

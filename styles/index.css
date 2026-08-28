@@ -16,15 +16,9 @@
 @import url('./screens/home.css');
 /* Route CHOICE ("Escolha seu caminho") on the DS — own sg-rc* classes, tokens only. */
 @import url('./screens/route-summary.css');
-/* Navigation header + bottom sheet on the DS — own classes, tokens only. */
+/* Navigation banner + step sheet on the DS — own classes, tokens only. */
 @import url('./screens/navigation-sheet.css');
 /* Reusable place-detail card (business info) on the DS — tokens only. */
 @import url('./components/place-detail.css');
-/* Navigation instruction view: the vertical timeline (dark). Own sg-tl* classes.
-   The real map is the default; this companion view stays one tap away. */
-@import url('./screens/navigation-timeline.css');
-/* Compatibility-only schematic route view. Own sg-rt* classes; it reuses the
-   timeline shell, so it must come after it in the cascade. */
-@import url('./screens/navigation-route-map.css');
 /* Load assistive overrides last so later screen borders cannot undo them. */
 @import url('./a11y.css');
