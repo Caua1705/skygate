@@ -116,7 +116,9 @@
    it, and the slab is pure white so the units read as rooms cut into it:
 
      stage #EFEDE7 · outside #D3D2CC · facade #C9CCD6 · SLAB #FFFFFF
-     units #E2–#F1 (grey, barely tinted by kind) · edges navy @ .16
+     units: each kind its own light tint (lavender shops, sand food, blue
+     gates, mint restrooms, turquoise circulation, rose security) — the way
+     a city map tells a park from a block — all of them lighter than L .78
      ·············   ROUTE casing #0E2A6B / line #29ABE2   ·············
 
    Nothing in the plan is allowed to be darker than the route casing or
@@ -133,25 +135,26 @@
   --plan-floor:          #FFFFFF;
 
   /* Interior structure: walls, floor areas, seating decks. */
-  --plan-structure:      #D8DBE3;
-  --plan-seating:        #F1F2F6;
+  --plan-structure:      #D0D5DF;
+  --plan-seating:        #F3F0EA;
 
-  /* Units, by what they are: light grey, hue nudged just enough to tell a
-     gate from a shop from a café. Lightness stays within a narrow band so
-     no unit competes with the route. */
-  --plan-retail:         #EAECF2;
-  --plan-food:           #F0ECE4;
-  --plan-gate:           #E1E9F5;
-  --plan-restroom:       #E7ECF2;
-  --plan-circulation:    #D6E7F2;   /* lifts, stairs: the most turquoise, after the route */
-  --plan-security:       #E8E5EE;
-  --plan-airline:        #E3EAF4;
-  --plan-mobility:       #E5ECF3;
+  /* Units, by what they are. Each category gets a HUE of its own at a
+     similar, light lightness, so a shop, a café and a gate read as three
+     different kinds of room at a glance while none of them gets anywhere
+     near the route's darkness or saturation. */
+  --plan-retail:         #E6E1F4;   /* lavender — shops */
+  --plan-food:           #F8E6D0;   /* sand — cafés, restaurants */
+  --plan-gate:           #D5E4F8;   /* blue — gates */
+  --plan-restroom:       #DAEEEA;   /* mint — restrooms */
+  --plan-circulation:    #C4E2F3;   /* turquoise — lifts, stairs: closest to the route */
+  --plan-security:       #F4DFE3;   /* rose — security, passport control */
+  --plan-airline:        #DCE4F3;   /* steel blue — airline desks */
+  --plan-mobility:       #E1ECF1;   /* pale cyan-grey — assistance */
   --plan-vacant:         #F5F5F7;   /* lighter than an occupied unit: empty space */
 
   /* One hairline for every unit, so the map reads as drawn rather than as
      flat blocks of colour. */
-  --plan-edge:           rgba(14, 42, 107, .16);
+  --plan-edge:           rgba(14, 42, 107, .22);
 
   /* Everything the categories do not claim — see the catch-all below. */
   --plan-unclaimed:      #E8E9EE;
@@ -174,6 +177,17 @@
 .sg-map__plan .sg-artboard {
   fill: transparent;
   stroke: none;
+}
+
+/* The building OUTLINE ("contorno_N" in every export) is a filled shape that
+   sits ABOVE the slab and the unit groups. Left to the catch-all it paints
+   the whole interior one flat grey and buries every category tint under it
+   — the "terminal inteiro parece um cinza só" symptom. An outline is a line:
+   no fill, one hairline, and the rooms beneath show through. */
+.sg-map__plan [id^="contorno"] {
+  fill: none;
+  stroke: var(--plan-edge);
+  stroke-width: 2;
 }
 
 /* ── 1. EXTERIOR ─────────────────────────────────────────*/

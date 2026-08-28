@@ -74,7 +74,7 @@ assert.match(baseFloorPlaceholderSvg('1'), /viewBox="0 0 3740 1800"/);
 assert.match(baseFloorPlaceholderSvg('1'), /Piso 1/);
 
 const steps = [
-  { text: 'Comece no Portão A3.',    landmarkCode: 'a', floorId: '1', toFloor: '1', rawFrom: 0, rawTo: 0, nodeType: 'gate',     icon: 'solar:map-point-bold', distanceMeters: 10 },
+  { text: 'Saia de Portão A3 em direção ao corredor.', landmarkCode: 'a', floorId: '1', toFloor: '1', rawFrom: 0, rawTo: 0, nodeType: 'gate',     icon: 'solar:map-point-bold', distanceMeters: 10 },
   { text: 'Passe por Rituais.',      landmarkCode: 'b', floorId: '1', toFloor: '1', rawFrom: 1, rawTo: 1, nodeType: 'shop',     icon: 'solar:shop-2-bold',    distanceMeters: 20 },
   { text: 'Use o elevador até o Piso 2.', landmarkCode: 'c', floorId: '1', toFloor: '2', rawFrom: 2, rawTo: 2, nodeType: 'elevator', icon: 'solar:round-transfer-vertical-bold', isTransition: true, distanceMeters: 0 },
   { text: 'Passe por Dufry Shopping.', landmarkCode: 'd', floorId: '2', toFloor: '2', rawFrom: 3, rawTo: 3, nodeType: 'shop',   icon: 'solar:shop-2-bold',    distanceMeters: 30 },
@@ -165,9 +165,10 @@ assert.ok(changesFloor(steps[2], steps[3]));
 assert.ok(!changesFloor(steps[0], steps[1]));
 
 const meta = stepMeta(steps[1]);
-assert.match(meta, /~\d+ m/, 'a leg states its distance');
-assert.match(meta, /~\d+ min/, 'and its share of the total time');
+assert.equal(meta, '20 m · 2 min', 'a leg states its distance and its share of the total time, no tilde');
+assert.equal(stepMeta(steps[0]), '10 m · 1 min', 'a short leg still takes at least a minute');
 assert.equal(stepMeta(steps[4]), '', 'a zero-length arrival states nothing');
+assert.ok(!renderStepsList().includes('~'), 'the list never hedges its numbers');
 
 const rituais = stepEstablishment(steps[1]);
 assert.equal(rituais.name, 'Rituais');
@@ -191,7 +192,7 @@ assert.equal(getDestinationLabel(), 'Chilli Beans');
 assert.deepEqual(getRouteTotals(), { minutes: 7, meters: 60, steps: 5 });
 const summary = bannerSummary();
 assert.ok(summary.visible.includes('7 min'));
-assert.ok(summary.visible.some(part => /^~\d+ m$/.test(part)));
+assert.ok(summary.visible.includes('60 m'), 'total distance, rounded to 10 m, no tilde');
 assert.equal(summary.gate, '', 'no flight, no gate clock');
 const banner = renderNavigationBanner();
 assert.match(banner, /<h1[^>]*>Chilli Beans<\/h1>/);

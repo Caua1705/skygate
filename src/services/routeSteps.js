@@ -260,6 +260,20 @@ function buildWalkingSteps(path, runStart, runEnd, floorId) {
   });
 }
 
+/**
+ * The first step is DEPARTURE guidance, not the origin restated: the banner
+ * already names the destination, so step 1 says where to leave from and
+ * which way to head — towards the corridor, or towards the lift / shop /
+ * gate that comes next when the route starts straight at one.
+ */
+export function departureText(originLabel, nextNode) {
+  if (!nextNode) return `Saia de ${originLabel}.`;
+  const toward = classifyNode(nextNode) === 'internal'
+    ? 'ao corredor'
+    : `a ${getPublicNodeLabel(nextNode)}`;
+  return `Saia de ${originLabel} em direção ${toward}.`;
+}
+
 export function buildFromPath(path) {
   const semantic = [];
   let i = 0;
@@ -297,7 +311,7 @@ export function buildFromPath(path) {
       semantic.push({
         text: isDest
           ? `Chegue a ${poiLabel}.`
-          : isOrigin ? `Comece em ${poiLabel}.` : `Passe por ${poiLabel}.`,
+          : isOrigin ? departureText(poiLabel, findNode(path[i + 1])) : `Passe por ${poiLabel}.`,
         isTransition: false, floorId: node.floorId, toFloor: node.floorId,
         icon: getNodeMeta(node.type).icon, nodeType: node.type,
         rawFrom: i, rawTo: i,
@@ -452,6 +466,14 @@ export function formatMeters(m) {
   const r = roundMeters(m);
   if (!r) return '';
   return r >= 1000 ? `~${(r / 1000).toFixed(1).replace('.', ',')} km` : `~${r} m`;
+}
+
+/**
+ * The navigation screen's distance: same 10 m grid, no tilde. "60 m" reads
+ * as a fact the traveller can act on; "~60 m" reads as a shrug.
+ */
+export function formatDistance(m) {
+  return formatMeters(m).replace(/^~/, '');
 }
 
 /**

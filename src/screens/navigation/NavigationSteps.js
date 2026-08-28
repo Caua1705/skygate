@@ -27,26 +27,31 @@ import { esc } from '../../utils/format.js';
 import { findNode, getFloorLabel } from '../../state/selectors.js';
 import { getPlaceDetails, getOpenStatus } from '../../services/placesMock.js';
 import { getPublicNodeCategory, getPublicNodeLabel, POI_TYPES, VERTICAL_TYPES } from '../../services/nodePresentation.js';
-import { formatMeters } from '../../services/routeSteps.js';
+import { formatDistance } from '../../services/routeSteps.js';
 import { getNodeMeta } from '../../app/constants.js';
 import { dsIcon } from '../../components/ds/index.js';
 
-/** Per-step walking minutes: the backend total, split by measured distance. */
+/**
+ * Per-step walking minutes: the backend total, split by measured distance,
+ * as a whole number with a floor of 1 — a leg you walk takes at least a
+ * minute to say, and "0 min" is noise.
+ */
 export function stepMinutes(step) {
   const total = navState.route?.estimatedMinutes ?? 0;
-  if (!total) return 0;
+  const meters = step.distanceMeters ?? 0;
+  if (!total || !(meters > 0)) return 0;
   const all = navState.semanticSteps.reduce((sum, s) => sum + (s.distanceMeters ?? 0), 0);
   if (!all) return 0;
-  return Math.round(total * ((step.distanceMeters ?? 0) / all));
+  return Math.max(1, Math.round(total * (meters / all)));
 }
 
-/** "~120 m · ~2 min" — whichever halves are actually known. */
+/** "120 m · 2 min" — whichever halves are actually known. */
 export function stepMeta(step) {
   const parts = [];
-  const dist = formatMeters(step.distanceMeters ?? 0);
+  const dist = formatDistance(step.distanceMeters ?? 0);
   if (dist) parts.push(dist);
   const mins = stepMinutes(step);
-  if (mins >= 1) parts.push(`~${mins} min`);
+  if (mins >= 1) parts.push(`${mins} min`);
   return parts.join(' · ');
 }
 

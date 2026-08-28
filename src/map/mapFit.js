@@ -30,10 +30,17 @@ import { prefersReducedMotion , $ } from '../utils/dom.js';
    full route otherwise.
    ============================================================ */
 
-/** Breathing room around the framed box, as a share of its own span. */
-const FIT_PAD_RATIO = 0.12;
-/** Floor for that padding in map units — clears a badge and its label. */
-const FIT_PAD_MIN = 68;
+/**
+ * Breathing room around the framed route, in SCREEN px. It used to be a
+ * share of the route's own span in map units, which at the zoomed-out
+ * full-route frame left the line floating in a third of the screen. The
+ * marks that need clearance — badges (28px) and their labels — are screen
+ * sized, so the margin is too: enough to keep a badge off the edge and the
+ * destination's name off the sheet, and no more.
+ */
+const PAD_PX = 36;
+/** Extra room under the box for the label that hangs below the last badge. */
+const LABEL_PAD_PX = 26;
 /** A leg shorter than this is grown, so a single node never zooms to 8x. */
 const MIN_SPAN = 289;
 /**
@@ -131,20 +138,21 @@ export function fitPointsToView(pts, { duration } = {}) {
   [minX, maxX] = growTo(minX, maxX, MIN_SPAN);
   [minY, maxY] = growTo(minY, maxY, MIN_SPAN * (view.height / view.width));
 
-  const pad = Math.max(FIT_PAD_MIN, (maxX - minX) * FIT_PAD_RATIO);
-  const bX1 = minX - pad, bX2 = maxX + pad;
-  const bY1 = minY - pad, bY2 = maxY + pad;
-
+  // The route fills the visible region minus the screen-px margins.
+  const usableW = Math.max(40, view.width - PAD_PX * 2);
+  const usableH = Math.max(40, view.height - PAD_PX * 2 - LABEL_PAD_PX);
   const scale = clamp(
-    Math.min(view.width / (bX2 - bX1), view.height / (bY2 - bY1)),
+    Math.min(usableW / (maxX - minX), usableH / (maxY - minY)),
     MIN_SCALE, Math.min(FIT_MAX_SCALE, MAX_SCALE),
   );
 
   // Solve the two equations above for tx,ty so the box centre lands on the
-  // centre of the VISIBLE region rather than the centre of the map area.
-  const midX = (bX1 + bX2) / 2, midY = (bY1 + bY2) / 2;
+  // centre of the VISIBLE region (nudged up by half the label allowance)
+  // rather than the centre of the map area.
+  const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
+  const cy = view.top + PAD_PX + (view.height - PAD_PX * 2 - LABEL_PAD_PX) / 2;
   let tx = view.cx - view.wrapperW / 2 + (MAP_W / 2 - midX) * scale;
-  let ty = view.cy - view.wrapperH / 2 + (MAP_H / 2 - midY) * scale;
+  let ty = cy - view.wrapperH / 2 + (MAP_H / 2 - midY) * scale;
 
   // Keep the plan under the frame. A leg near the edge of the floor would
   // otherwise be centred with half the screen showing nothing.

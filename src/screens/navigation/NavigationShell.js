@@ -17,7 +17,7 @@ import { esc } from '../../utils/format.js';
 import { findNode } from '../../state/selectors.js';
 import { getPublicNodeLabel } from '../../services/nodePresentation.js';
 import { gateCloseClock, hasFlight } from '../../services/flightSlack.js';
-import { formatMeters } from '../../services/routeSteps.js';
+import { formatDistance } from '../../services/routeSteps.js';
 import { dsIcon } from '../../components/ds/index.js';
 
 /**
@@ -41,7 +41,7 @@ export function getDestinationLabel() {
 }
 
 /**
- * "12 min · ~450 m · Portão ~14:05" — the parts that are actually known.
+ * "12 min · 450 m · Portão ~14:05" — the parts that are actually known.
  * The gate clock is an estimate derived from the flight time and stays
  * labelled as such in the accessible name.
  */
@@ -53,10 +53,10 @@ export function bannerSummary() {
     visible.push(`${totals.minutes} min`);
     spoken.push(`Tempo total estimado: ${totals.minutes} ${totals.minutes === 1 ? 'minuto' : 'minutos'}`);
   }
-  const distance = formatMeters(totals.meters);
+  const distance = formatDistance(totals.meters);
   if (distance) {
     visible.push(distance);
-    spoken.push(`Distância aproximada: ${distance.replace('~', '')}`);
+    spoken.push(`Distância: ${distance}`);
   }
   const gate = hasFlight() ? gateCloseClock() : '';
   if (gate) {

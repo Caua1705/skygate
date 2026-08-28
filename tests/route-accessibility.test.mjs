@@ -202,7 +202,7 @@ assert.deepEqual(
 // Rendering is a truthful fallback even if a caller bypasses the guard: the
 // journey starts at its origin and an unsafe transition is never hidden.
 const preservedPath = buildSemanticSteps({ path: ['A', 'S', 'D'], steps: [] });
-assert.equal(preservedPath[0].text, 'Comece em Entrada.');
+assert.match(preservedPath[0].text, /^Saia de Entrada em direção a /, 'step 1 is departure guidance towards what comes next');
 assert.ok(
   preservedPath.some(step => step.nodeType === 'stairs'),
   'a rejected staircase remains visible if its path is rendered',
@@ -236,7 +236,7 @@ const rightTurn = rightSteps.find(step => step.text.startsWith('Vire à direita'
 assert.ok(rightTurn, 'east to south is a right turn in SVG coordinates');
 assert.equal(rightTurn.rawFrom, 2, 'the turn starts at the real bend node');
 assert.equal(rightSteps.filter(step => /^Vire à/.test(step.text)).length, 1);
-assert.equal(rightSteps[0].text, 'Comece em Entrada.');
+assert.equal(rightSteps[0].text, 'Saia de Entrada em direção ao corredor.');
 assert.equal(rightSteps.at(-1).text, 'Chegue a Portão 8.');
 
 const measuredRightSteps = attachStepDistances(rightSteps, rightPath);
